@@ -8,7 +8,7 @@ TODAY_DATE=$(date -u +"%Y-%m-%d")
 
 # 运行 prepare_geoname_data.sh
 echo "运行 prepare_geoname_data.sh..."
-# bash prepare_geoname_data.sh
+bash prepare_geoname_data.sh
 if [[ $? -ne 0 ]]; then
     echo "运行 prepare_geoname_data.sh 失败！退出。"
     exit 1
