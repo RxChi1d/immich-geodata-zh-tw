@@ -34,7 +34,7 @@ jobs:
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          name: ${{ format('Release {0}', $TODAY) }}
+          name: ${{ format('Release {0}', ${{ env.Today }}) }}
           artifacts: "output/*"
           draft: false
           generateReleaseNotes: false
