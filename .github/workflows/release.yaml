@@ -39,3 +39,4 @@ jobs:
           draft: false
           generateReleaseNotes: false
           commit: main
+          tag: release
