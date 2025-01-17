@@ -1,0 +1,39 @@
+# Simple workflow for deploying static content to GitHub Pages
+name: Release
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          pip3 install -r requirements.txt
+      - name: Set current date as env variable
+        run: echo "TODAY=$(date +'%Y-%m-%dT%H:%M:%S')" >> $GITHUB_ENV
+      - name: Build
+        run: bash release.sh
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          name: ${{ format('Release {0}', $TODAY) }}
+          artifacts: "output/*"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          draft: false
+          generateReleaseNotes: false
+          commit: main
