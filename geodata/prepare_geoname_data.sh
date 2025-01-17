@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # 定义目标文件夹和URL
 TARGET_DIR="geoname_data"
 ZIP_FILE="$TARGET_DIR/cities500.zip"

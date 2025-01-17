@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 rm -rf output
 mkdir -p output
 

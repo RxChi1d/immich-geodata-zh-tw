@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # 设置时间格式和文件名
 CURRENT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%S+00:00")
 TODAY_DATE=$(date -u +"%Y-%m-%d")
