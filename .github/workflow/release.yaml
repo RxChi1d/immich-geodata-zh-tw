@@ -27,13 +27,15 @@ jobs:
       - name: Set current date as env variable
         run: echo "TODAY=$(date +'%Y-%m-%dT%H:%M:%S')" >> $GITHUB_ENV
       - name: Build
+        env: # Or as an environment variable
+          AMAP_API_KEY: ${{ secrets.AMAP_API_KEY }}
+          LOCATIONIQ_API_KEY: ${{ secrets.LOCATIONIQ_API_KEY }}
         run: bash release.sh
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
           name: ${{ format('Release {0}', $TODAY) }}
           artifacts: "output/*"
-          token: ${{ secrets.GITHUB_TOKEN }}
           draft: false
           generateReleaseNotes: false
           commit: main
