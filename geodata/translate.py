@@ -147,5 +147,5 @@ def translate_admin1():
 
 
 if __name__ == "__main__":
-    # translate_cities500()
+    translate_cities500()
     translate_admin1()
