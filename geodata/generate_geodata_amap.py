@@ -100,9 +100,9 @@ def query_and_store(coordinates_batch, output_file):
                 writer.writerows(records)
                 logger.info(f"新增 {len(records)} 条记录")
 
-        else:
-            # 打印失败的坐标
-            logger.error(f"查询失败，坐标: {coordinates_batch}，响应：{response}")
+    else:
+        # 打印失败的坐标
+        logger.error(f"查询失败，坐标: {coordinates_batch}，响应：{response}")
 
 
 def main():
