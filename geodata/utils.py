@@ -65,18 +65,23 @@ def load_alternate_name(file_path):
         for line in f:
             count += 1
             if count % 1000000 == 0:
-                logger.info(f"{count} 条 alternateName 数据已处理")
-            parts = line.strip().split("\t")
-            if len(parts) < 4:
+                logger.info(f"{count} 条 alternateName 数据已加载")
+            parts = line.split("\t")
+            if len(parts) < 5:
                 continue  # 忽略格式不正确的行
 
-            _, number, lang, name = parts[:4]  # 提取第二个数字、语言代码和中文名
+            _, number, lang, name, prefer = parts[:5]  # 提取第二个数字、语言代码和中文名
 
             # 检查是否符合优先级并更新映射关系
             if lang in priority:
                 current_priority = priority.index(lang)
-                if number not in mapping or current_priority < mapping[number][1]:
+                if (
+                    number not in mapping
+                    or current_priority < mapping[number][1]
+                    or (current_priority == mapping[number][1] and prefer == "1")
+                ):
                     mapping[number] = (name, current_priority)
 
+    logger.info(f"共加载 {len(mapping)} 条中文 alternateName 数据")
     # 返回最终映射字典，仅保留数字到中文名的映射
     return {key: value[0] for key, value in mapping.items()}

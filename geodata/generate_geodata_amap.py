@@ -13,10 +13,8 @@ GEONAME_DATA_FILE = "./geoname_data/cities500.txt"
 
 
 def get_loc_from_amap(loc_list):
-    # 示例：获取坐标的真实路径（假设已有实现）
     loc = "|".join([f"{loc['lon']},{loc['lat']}" for loc in loc_list])
     r = f"https://restapi.amap.com/v3/geocode/regeo?output=json&location={loc}&key={AMAP_API_KEY}&radius=1000&extensions=all&batch=true"
-    # print(r)
     resp = requests.get(r)
     time.sleep(1.02 / AMAP_QPS)
     return resp.json()
@@ -26,7 +24,6 @@ def process_file(file_path, country_code, output_file, existing_data={}):
     batch_size = AMAP_BATCH_SIZE
     coordinates_batch = []
 
-    # 打开并读取文件
     with open(file_path, "r", encoding="utf-8") as file:
         for line in file:
             fields = line.strip().split("\t")
@@ -49,7 +46,6 @@ def process_file(file_path, country_code, output_file, existing_data={}):
 
 
 def query_and_store(coordinates_batch, output_file):
-    # 调用 get_loc() 获取结果
     response = get_loc_from_amap(coordinates_batch)
 
     if response.get("status") == "1":
@@ -67,22 +63,19 @@ def query_and_store(coordinates_batch, output_file):
         if results:
             records = []
             for item in results:
-                # if item["address_component"]["province"] == []:
-                #     continue
+                address = item["address_component"]
                 x = {
                     "latitude": item["latitude"],
                     "longitude": item["longitude"],
-                    "country": item["address_component"]["country"],
-                    "admin_1": item["address_component"]["province"],
+                    "country": address["country"],
+                    "admin_1": address["province"],
                     "admin_2": (
-                        item["address_component"]["city"]
-                        if item["address_component"]["city"]
-                        else item["address_component"]["district"]
+                        address["city"] if address["city"] else address["district"]
                     ),
-                    "admin_3": item["address_component"]["district"]
-                    if item["address_component"]["district"]
-                    else item["address_component"]["city"],
-                    "admin_4": item["address_component"]["township"],
+                    "admin_3": address["district"]
+                    if address["district"]
+                    else address["city"],
+                    "admin_4": address["township"],
                 }
                 for k in x:
                     if x[k] == []:

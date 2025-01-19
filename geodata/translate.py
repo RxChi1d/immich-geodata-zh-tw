@@ -4,6 +4,11 @@ import os
 import opencc
 from zhconv import convert
 
+alternate_name_folder = "./geoname_data"
+alternate_name = load_alternate_name(
+    os.path.join(alternate_name_folder, "alternateNamesV2.txt")
+)
+
 # 初始化 OpenCC 转换器，繁体转简体
 converter_t2s = opencc.OpenCC("t2s")  # 繁体转简体
 converter_s2t = opencc.OpenCC("s2t")  # 简体转繁体
@@ -84,6 +89,12 @@ def translate_cities500():
                     row[1] = res
                     row[2] = res
 
+            elif row[0] in alternate_name:
+                name = alternate_name[row[0]]
+                name = convert(name, "zh-cn")
+                row[1] = name
+                row[2] = name
+
             else:
                 candidates = row[3].split(",")
                 simplified_word = next(
@@ -106,8 +117,6 @@ def translate_cities500():
 
 
 def translate_admin1():
-    geodata_folder = "./geoname_data"
-    geodata = load_alternate_name(os.path.join(geodata_folder, "alternateNamesV2.txt"))
     logger.info("加载 alternateNamesV2 完成")
 
     # input_file = './geoname_data/admin1CodesASCII.txt'
@@ -128,8 +137,8 @@ def translate_admin1():
             for row in reader:
                 code = row[3]
 
-                if code in geodata:
-                    res = geodata[code]
+                if code in alternate_name:
+                    res = alternate_name[code]
                     res = convert(res, "zh-cn")
 
                     if res:

@@ -4,15 +4,13 @@ import os
 import sys
 import csv
 from utils import logger, GEODATA_HEADER, load_geo_data
+from requests.adapters import HTTPAdapter, Retry
+
 
 LOCATIONIQ_API_KEY = os.environ["LOCATIONIQ_API_KEY"]
 LOCATIONIQ_QPS = int(os.environ.get("LOCATIONIQ_QPS", "1"))
 
 GEONAME_DATA_FILE = "./geoname_data/cities500.txt"
-
-count = 0
-
-from requests.adapters import HTTPAdapter, Retry
 
 s = requests.Session()
 
@@ -22,7 +20,6 @@ s.mount("https://", HTTPAdapter(max_retries=retries))
 
 
 def get_loc_from_locationiq(lat, lon):
-    # 示例：获取坐标的真实路径（假设已有实现）
     url = "https://us1.locationiq.com/v1/reverse"
 
     params = {
@@ -55,19 +52,13 @@ def process_file(file_path, country_code, output_file, existing_data={}):
 
             # 检查国家码
             if len(fields) > 17 and fields[8] == country_code:
-                # print(hello)
                 loc = {"lon": str(fields[5]), "lat": str(fields[4])}
                 if (loc["lon"], loc["lat"]) in existing_data:
                     continue
                 query_and_store(loc, output_file)
-                global count
-                count += 1
-                # if count > 20:
-                # break
 
 
 def query_and_store(coordinate, output_file):
-    # 调用 get_loc() 获取结果
     response = get_loc_from_locationiq(coordinate["lat"], coordinate["lon"])
 
     if response:
@@ -82,9 +73,6 @@ def query_and_store(coordinate, output_file):
             "admin_4": address.get("neighbourhood", ""),
         }
 
-        if record["admin_2"] == "":
-            print(coordinate)
-
         with open(output_file, mode="a", newline="", encoding="utf-8") as file:
             writer = csv.DictWriter(file, fieldnames=GEODATA_HEADER)
 
@@ -94,7 +82,6 @@ def query_and_store(coordinate, output_file):
 
             # 写入数据
             writer.writerows([record])
-            # logger.info(f"新增 {len(records)} 条记录")
 
     else:
         # 打印失败的坐标
