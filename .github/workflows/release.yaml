@@ -11,6 +11,7 @@ defaults:
 
 jobs:
   release:
+    environment: Action Env
     permissions:
       contents: write
     runs-on: ubuntu-latest
