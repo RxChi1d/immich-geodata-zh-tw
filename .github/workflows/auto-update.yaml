@@ -1,9 +1,11 @@
 # Simple workflow for deploying static content to GitHub Pages
-name: Release
+name: Auto Update
 
 on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+  schedule:
+    - cron: "3 33 * * 5"
 
 defaults:
   run:
@@ -36,12 +38,14 @@ jobs:
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          name: Release ${{ env.TODAY }}
+          name: Auto Release
           artifacts: "output/*"
+          body: 生成日期：${{ env.TODAY }}
           draft: false
           generateReleaseNotes: false
           commit: main
-          tag: release
+          tag: auto-release
+          allowUpdates: true
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
