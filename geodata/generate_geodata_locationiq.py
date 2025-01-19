@@ -98,7 +98,7 @@ def query_and_store(coordinate, output_file):
 
     else:
         # 打印失败的坐标
-        logger.error(f"查询失败，坐标: {coordinates_batch}")
+        logger.error(f"查询失败，坐标: {coordinate}")
 
 
 def main():

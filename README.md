@@ -10,7 +10,7 @@
 
 # 如何使用
 
-1. 在 [Release](https://github.com/ZingLix/immich-geodata-cn/releases/tag/release) 中下载 geodata.zip 和 i18n-iso-countries.zip 两个文件并解压
+1. 在 [Release](https://github.com/ZingLix/immich-geodata-cn/releases) 中下载 geodata.zip 和 i18n-iso-countries.zip 两个文件并解压
 2. 调整你的 docker-compose.yaml，volumes 中增加如下两行（或者根据不同部署方式任意方式替换掉这两个文件夹）
 
 ```
