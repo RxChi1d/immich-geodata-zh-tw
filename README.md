@@ -21,7 +21,7 @@ volumes:
   - ./i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs
 ```
 
-3. 运行 `docker compose restart` 重启 Immich
+3. 运行 `docker compose down && docker compose up` 重启 Immich
   - 可以检查一下日志，启动时候会出现 `10000 geodata records imported` 类似的日志，这表明 geodata 更新了
   - 如果没有更新，可以尝试修改 geodata/geodata-date.txt，修改成一个更新的时间，如果旧于 Immich 曾经加载过的时间 Immich 就不会更新
     ![](./image/importlog.jpg)
