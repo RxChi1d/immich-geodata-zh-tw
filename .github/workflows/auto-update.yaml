@@ -47,6 +47,7 @@ jobs:
           commit: main
           tag: auto-release
           allowUpdates: true
+          makeLatest: true
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
