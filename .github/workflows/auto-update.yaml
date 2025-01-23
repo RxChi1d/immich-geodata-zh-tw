@@ -39,9 +39,9 @@ jobs:
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          name: Auto Release
+          name: Auto Release ${{ env.TODAY }}
           artifacts: "output/*"
-          body: 生成日期：${{ env.TODAY }}
+          body: 这是定期自动生成的 Release，如果发现问题请提 issue 并暂时选择到 [此处](https://github.com/ZingLix/immich-geodata-cn/releases) 选择手动发布的 Release 文件。如果遇到 Immich 没有更新数据，请手动修改 geodata-date.txt 文件，将其内容中的时间修改为更新的时间（比如当前时间）。
           draft: false
           generateReleaseNotes: false
           commit: main
