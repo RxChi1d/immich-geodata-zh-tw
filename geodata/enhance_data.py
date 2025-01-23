@@ -10,7 +10,7 @@ extra_data_folder = os.path.join(data_base_dir, "extra_data/")
 
 # 读取 cities500.txt 中的所有 id
 with open(cities_file, "r") as f:
-    existing_ids = set(line.split(",")[0] for line in f)
+    existing_ids = set(line.split("\t")[0] for line in f)
 
 with open(cities_file, "a") as append_f:
     # 遍历 extra_data 文件夹中的所有 txt 文件
