@@ -17,10 +17,6 @@ need_finer_admin_2_list = [
 
 
 def need_finer_data(data):
-    feature_class = data[6]
-    if feature_class not in ["P", "A"]:
-        return False
-
     country_code = data[8]
     admin1_code = data[10]
     admin2_code = data[11]
