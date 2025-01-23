@@ -4,6 +4,7 @@ import os
 import sys
 import csv
 from utils import logger, GEODATA_HEADER, load_geo_data
+from requests.adapters import HTTPAdapter, Retry
 
 AMAP_API_KEY = os.environ["AMAP_API_KEY"]
 AMAP_QPS = int(os.environ.get("AMAP_QPS", "3"))
@@ -11,11 +12,17 @@ AMAP_BATCH_SIZE = int(os.environ.get("AMAP_BATCH_SIZE", "20"))
 
 GEONAME_DATA_FILE = "./geoname_data/cities500.txt"
 
+s = requests.Session()
+
+retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[403, 500, 502, 503, 504])
+
+s.mount("https://", HTTPAdapter(max_retries=retries))
+
 
 def get_loc_from_amap(loc_list):
     loc = "|".join([f"{loc['lon']},{loc['lat']}" for loc in loc_list])
     r = f"https://restapi.amap.com/v3/geocode/regeo?output=json&location={loc}&key={AMAP_API_KEY}&radius=1000&extensions=all&batch=true"
-    resp = requests.get(r)
+    resp = s.get(r)
     time.sleep(1.02 / AMAP_QPS)
     return resp.json()
 
