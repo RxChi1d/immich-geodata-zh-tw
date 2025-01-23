@@ -9,6 +9,7 @@ TXT_FILE="$TARGET_DIR/cities500.txt"
 ADMIN1_FILE="$TARGET_DIR/admin1CodesASCII.txt"
 ADMIN2_FILE="$TARGET_DIR/admin2Codes.txt"
 GEOJESON_FILE="$TARGET_DIR/ne_10m_admin_0_countries.geojson"
+EXTRA_DATA_DIR="$TARGET_DIR/extra_data"
 DOWNLOAD_URL="https://download.geonames.org/export/dump/cities500.zip"
 
 if [[ "$1" == "--update" ]]; then
@@ -34,6 +35,32 @@ if [[ $? -ne 0 ]]; then
   echo "下载失败，请检查网络连接或URL是否正确。"
   exit 1
 fi
+
+mkdir -p "$EXTRA_DATA_DIR"
+
+LIST=("CN")
+for item in "${LIST[@]}"; do
+    echo "下载额外数据 $item..."
+    curl -o "$EXTRA_DATA_DIR/$item.zip" "https://download.geonames.org/export/dump/$item.zip"
+    if [[ $? -ne 0 ]]; then
+        echo "下载 $item.zip 失败！退出。"
+        exit 1
+    fi
+    unzip -o "$EXTRA_DATA_DIR/$item.zip" -d "$EXTRA_DATA_DIR"
+
+    # 移动解压后的文件
+    if [[ -f "$EXTRA_DATA_DIR/$item.txt" ]]; then
+      echo "解压 $item.zip 成功"
+    else
+      echo "未找到 $item.txt，请检查解压结果。"
+      exit 1
+    fi
+
+    # 删除中间文件
+    rm -f "$EXTRA_DATA_DIR/$item.zip"
+done
+
+rm -f "$EXTRA_DATA_DIR/readme.txt"
 
 echo "正在下载 $ADMIN1_FILE..."
 curl -o "$ADMIN1_FILE" "https://download.geonames.org/export/dump/admin1CodesASCII.txt"

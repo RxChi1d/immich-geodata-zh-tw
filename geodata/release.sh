@@ -14,6 +14,14 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
+# 运行 python enhance_data.py
+echo "运行 python enhance_data.py..."
+python enhance_data.py
+if [[ $? -ne 0 ]]; then
+    echo "运行 python enhance_data.py 失败！退出。"
+    exit 1
+fi
+
 # 运行 python generate_geodata_amap.py
 echo "运行 python generate_geodata_amap.py..."
 python generate_geodata_amap.py
