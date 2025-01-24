@@ -3,6 +3,8 @@
 # 启用调试模式
 set -e
 
+cd "$(dirname "$0")"
+
 # 获取当前脚本文件名
 script_name=$(basename "$0")
 
@@ -67,3 +69,6 @@ else
 fi
 
 echo "操作完成，所有 geodata 文件已放置到当前目录！请重启 Immich！"
+
+# 替换成你的重启 Immich 的命令，即可更新完数据后自动重启 Immich
+# docker restart immich_server
