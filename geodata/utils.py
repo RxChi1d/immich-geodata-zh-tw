@@ -47,7 +47,19 @@ CITIES_HEADER = [
     "elevation",
     "dem",
     "timezone",
-    "modification_date"
+    "modification_date",
+]
+
+MUNICIPALITIES = [
+    "臺北市"
+    "新北市",
+    "桃園市",
+    "臺中市",
+    "臺南市",
+    "高雄市",
+    "基隆市",
+    "新竹市",
+    "嘉義市",
 ]
 
 
@@ -99,23 +111,28 @@ def create_alternate_map(alternate_file, output_folder):
         names=["geonameid", "lang", "name", "is_preferred_name"],
         na_values=["\\N"],
     )
-    data = data.dropna(subset=["lang"])           # 丟棄lang為空的項目
-    data = data[data["lang"].isin(priority)]      # 僅保留中文名稱
+    data = data.dropna(subset=["lang"])  # 丟棄lang為空的項目
+    data = data[data["lang"].isin(priority)]  # 僅保留中文名稱
 
     # 創建priority，作為優先級判斷
     # 如果is_preferred_name為1，則優先級為0
     # 如果is_preferred_name為0，則優先級為priority中的index+1
     data["is_preferred_name"] = data["is_preferred_name"].fillna(0)
     data["priority"] = data["lang"].map(lambda x: priority.index(x) + 1)
-    data["priority"] = data.apply(lambda row: 0 if row["is_preferred_name"] == 1 else priority.index(row["lang"]) + 1, axis=1)
-    
+    data["priority"] = data.apply(
+        lambda row: (
+            0 if row["is_preferred_name"] == 1 else priority.index(row["lang"]) + 1
+        ),
+        axis=1,
+    )
+
     # 相同的geonameid，僅保留優先級最高的（數字越小越高，0為最高）
     data = data.sort_values("priority")
     data = data.drop_duplicates(subset="geonameid", keep="first")
-    
+
     # 轉換成字典，geonameid為key，name為value
     mapping = dict(zip(data["geonameid"], data["name"]))
-    
+
     # 更新地名
     update_name = {
         "桃園縣": "桃園市",
