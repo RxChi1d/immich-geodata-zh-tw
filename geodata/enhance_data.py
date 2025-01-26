@@ -1,32 +1,12 @@
 import os
 import pandas as pd
-from utils import logger
-
-NAME_LIST = [
-    "ID",
-    "Name",
-    "Name_ASCII",
-    "Geoname_ID",
-    "Latitude",
-    "Longitude",
-    "Feature Class",
-    "Feature Code",
-    "Country Code",
-    "CC2",
-    "Admin1 Code",
-    "Admin2 Code",
-    "Admin3 Code",
-    "Admin4 Code",
-    "Population",
-    "Elevation",
-    "Dem",
-    "Timezone",
-    "Modification Date",
-]
+from utils import logger, CITIES_HEADER
 
 
 def update_admin1():
-    pass
+    """
+    1. 將admin2取代為admin1
+    """
 
 
 def update_cities500(cities_file, extra_file, output_file):
@@ -37,7 +17,7 @@ def update_cities500(cities_file, extra_file, output_file):
         cities_file,
         sep="\t",
         header=None,
-        names=NAME_LIST,
+        names=CITIES_HEADER,
         low_memory=False
     )
 
@@ -46,7 +26,7 @@ def update_cities500(cities_file, extra_file, output_file):
         extra_file,
         sep="\t",
         header=None,
-        names=NAME_LIST,
+        names=CITIES_HEADER,
         low_memory=False
     )
 
@@ -65,18 +45,14 @@ def update_cities500(cities_file, extra_file, output_file):
             cites500_df = cites500_df._append(row, ignore_index=True)
             count += 1
 
-    logger.info(f"共 {count} 筆資料被追加")
+    logger.info(f"共 {count} 筆資料被追加，目前總共 {len(cites500_df)} 筆資料")
 
-    # 檢查cites500_df中所有country code是TW的資料，他們的admin2 code是否在new_admin1_map.csv的old_id欄位中
-    admin1_map = pd.read_csv("output/new_admin1_map.csv", sep="\t", low_memory=False)
-    cites500_df = cites500_df[cites500_df["Country Code"] == "TW"]
-
-    # 將"Admin2 Code"為空的資料刪除
-    cites500_df = cites500_df.dropna(subset=["Admin2 Code"])
+    # 將country是TW，且"Admin2 Code"為空的資料刪除
+    cites500_df = cites500_df[(cites500_df["Country Code"] != "TW") | (cites500_df["Admin2 Code"].notnull())]
     
     cites500_df.to_csv(output_file, sep="\t", header=False, index=False)
     
-    logger.info(f"移除 Admin2 Code 為空的資料，剩餘 {len(cites500_df)} 筆資料")
+    logger.info(f"移除台灣資料中 Admin2 Code 為空的資料，剩餘 {len(cites500_df)} 筆資料")
     logger.info("cites500.txt 更新完成")
 
 
