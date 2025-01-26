@@ -1,16 +1,17 @@
-import requests
-import time
 import os
-import sys
+import time
+from tqdm import tqdm
+
 import csv
-from utils import logger, GEODATA_HEADER, load_geo_data
+from utils import logger, load_geo_data, CITIES_HEADER, GEODATA_HEADER, MUNICIPALITIES
+import requests
 from requests.adapters import HTTPAdapter, Retry
+import pandas as pd
 
 
 LOCATIONIQ_API_KEY = os.environ["LOCATIONIQ_API_KEY"]
 LOCATIONIQ_QPS = int(os.environ.get("LOCATIONIQ_QPS", "1"))
 
-GEONAME_DATA_FILE = "./geoname_data/cities500.txt"
 
 s = requests.Session()
 
@@ -44,21 +45,60 @@ def get_loc_from_locationiq(lat, lon):
     return None
 
 
-def process_file(file_path, country_code, output_file, existing_data={}):
-    # 打开并读取文件
-    with open(file_path, "r", encoding="utf-8") as file:
-        for line in file:
-            fields = line.strip().split("\t")
+def process_file(cities500_file, output_file, country_code, overwrite=False):
+    existing_data = load_geo_data(output_file) if not overwrite else {}
 
-            # 检查国家码
-            if len(fields) > 17 and fields[8] == country_code:
-                loc = {"lon": str(fields[5]), "lat": str(fields[4])}
-                if (loc["lon"], loc["lat"]) in existing_data:
-                    continue
-                query_and_store(loc, output_file)
+    cities_df = pd.read_csv(
+        cities500_file, sep="\t", header=None, names=CITIES_HEADER, low_memory=False
+    )
+
+    admin1_map = pd.read_csv("output/new_admin1_map.csv", sep=",", low_memory=False)
+
+    # 用 append 模式，避免超過 api 限制
+    write_mode = "w" if overwrite else "a"
+    with open(output_file, mode=write_mode, newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=GEODATA_HEADER)
+
+        # 如果文件是空的，寫入 header
+        if file.tell() == 0:
+            writer.writeheader()
+            file.flush()
+
+        specific_country_df = cities_df[cities_df["country_code"] == country_code]
+
+        pbar = tqdm(specific_country_df.iterrows(), total=len(specific_country_df))
+        for index, row in pbar:
+            pbar.set_description(f"[City: {row['name']}]")
+
+            loc = {"lon": str(row["longitude"]), "lat": str(row["latitude"])}
+
+            if (loc["lon"], loc["lat"]) in existing_data:
+                continue
+
+            record = reverse_query(loc)
+
+            # 臺灣特殊處理，調整行政區層級
+            if country_code == "TW":
+                if record["admin_2"] in MUNICIPALITIES:
+                    record["admin_1"] = record["admin_2"]
+                    record["admin_2"] = record["admin_3"]
+                    record["admin_3"] = record["admin_4"]
+                    record["admin_4"] = ""
+                else:
+                    admin_1 = f"TW.{row['admin1_code']}"
+                    record["admin_1"] = admin1_map[admin1_map["new_id"] == admin_1][
+                        "name"
+                    ].values[0]
+
+            # 如果查詢成功，寫入文件
+            if record:
+                writer.writerows([record])
+                file.flush()
+            else:
+                logger.error(f"查詢失敗，座標: {loc}")
 
 
-def query_and_store(coordinate, output_file):
+def reverse_query(coordinate):
     response = get_loc_from_locationiq(coordinate["lat"], coordinate["lon"])
 
     if response:
@@ -73,32 +113,24 @@ def query_and_store(coordinate, output_file):
             "admin_4": address.get("neighbourhood", ""),
         }
 
-        with open(output_file, mode="a", newline="", encoding="utf-8") as file:
-            writer = csv.DictWriter(file, fieldnames=GEODATA_HEADER)
-
-            # 如果文件为空，写入表头
-            if file.tell() == 0:
-                writer.writeheader()
-
-            # 写入数据
-            writer.writerows([record])
+        return record
 
     else:
-        # 打印失败的坐标
-        logger.error(f"查询失败，坐标: {coordinate}")
-
-
-def main():
-    country_code = sys.argv[1]
-    logger.info(f"待处理国家码：{country_code}")
-    if not os.path.isfile(GEONAME_DATA_FILE):
-        raise Exception(f"文件 '{GEONAME_DATA_FILE}' 不存在，请下载后重试。")
-    output_file = os.path.join("data", f"{country_code}.csv")
-    existing_data = load_geo_data(output_file)
-    process_file(
-        GEONAME_DATA_FILE, country_code, output_file, existing_data=existing_data
-    )
+        return None
 
 
 if __name__ == "__main__":
-    main()
+    overwrite = False
+    country_code = "TW"
+    data_base_folder = "./geoname_data"
+    output_folder = "./output"
+    cities500_file = os.path.join(output_folder, "cities500_en.txt")
+
+    logger.info(f"通過 LocationIQ 生成 {country_code} 的 metadata")
+
+    if not os.path.exists(cities500_file):
+        raise FileExistsError(f"{cities500_file} 不存在，請先下載。")
+
+    output_file = os.path.join(output_folder, f"{country_code}.csv")
+
+    process_file(cities500_file, output_file, country_code, overwrite)
