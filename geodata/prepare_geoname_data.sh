@@ -38,7 +38,7 @@ fi
 
 mkdir -p "$EXTRA_DATA_DIR"
 
-LIST=("CN")
+LIST=("TW")
 for item in "${LIST[@]}"; do
     echo "下载额外数据 $item..."
     curl -o "$EXTRA_DATA_DIR/$item.zip" "https://download.geonames.org/export/dump/$item.zip"
