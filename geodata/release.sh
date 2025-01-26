@@ -2,75 +2,83 @@
 
 set -e
 
-# 设置时间格式和文件名
+# 設定時間格式和檔案名稱
 CURRENT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%S+00:00")
 TODAY_DATE=$(date -u +"%Y-%m-%d")
 
-# 运行 prepare_geoname_data.sh
-echo "运行 prepare_geoname_data.sh..."
+# 下載 geoname_data 資料
+echo "執行 prepare_geoname_data.sh..."
 bash prepare_geoname_data.sh
 if [[ $? -ne 0 ]]; then
-    echo "运行 prepare_geoname_data.sh 失败！退出。"
+    echo "執行 prepare_geoname_data.sh 失敗！退出。"
     exit 1
 fi
 
-# 运行 python enhance_data.py
-echo "运行 python enhance_data.py..."
+# 修改 admin1CodesASCII.txt 檔案以符合台灣慣用格式
+echo "執行 python modify_admin1.py..."
+python modify_admin1.py
+if [[ $? -ne 0 ]]; then
+    echo "執行 python modify_admin1.py 失敗！退出。"
+    exit 1
+fi
+
+# 執行 python enhance_data.py
+echo "執行 python enhance_data.py..."
 python enhance_data.py
 if [[ $? -ne 0 ]]; then
-    echo "运行 python enhance_data.py 失败！退出。"
+    echo "執行 python enhance_data.py 失敗！退出。"
     exit 1
 fi
 
-# 运行 python generate_geodata_amap.py
-echo "运行 python generate_geodata_amap.py..."
+# 執行 python generate_geodata_amap.py
+echo "執行 python generate_geodata_amap.py..."
 python generate_geodata_amap.py
 if [[ $? -ne 0 ]]; then
-    echo "运行 python generate_geodata_amap.py 失败！退出。"
+    echo "執行 python generate_geodata_amap.py 失敗！退出。"
     exit 1
 fi
 
-# 准备列表并运行 generate_geodata_locationiq.py
+# 準備列表並執行 generate_geodata_locationiq.py
 LIST=("JP")
 for item in "${LIST[@]}"; do
-    echo "运行 python generate_geodata_locationiq.py $item..."
+    echo "執行 python generate_geodata_locationiq.py $item..."
     python generate_geodata_locationiq.py "$item"
     if [[ $? -ne 0 ]]; then
-        echo "运行 python generate_geodata_locationiq.py $item 失败！退出。"
+        echo "執行 python generate_geodata_locationiq.py $item 失敗！退出。"
         exit 1
     fi
 done
 
-# 运行 python translate.py
-echo "运行 python translate.py..."
+# 執行 python translate.py
+echo "執行 python translate.py..."
 python translate.py
 if [[ $? -ne 0 ]]; then
-    echo "运行 python translate.py 失败！退出。"
+    echo "執行 python translate.py 失敗！退出。"
     exit 1
 fi
 
-# 复制 geojson 文件到 output 文件夹
-echo "复制 geoname_data/ne_10m_admin_0_countries.geojson 到 output 文件夹..."
+# 複製 geojson 檔案到 output 資料夾
+echo "複製 geoname_data/ne_10m_admin_0_countries.geojson 到 output 資料夾..."
 mkdir -p output
 cp geoname_data/ne_10m_admin_0_countries.geojson output/
 if [[ $? -ne 0 ]]; then
-    echo "复制 geojson 文件失败！退出。"
+    echo "複製 geojson 檔案失敗！退出。"
     exit 1
 fi
 
-# 创建 geodata-date.txt 文件
-echo "创建 geodata-date.txt 文件..."
+# 建立 geodata-date.txt 檔案
+echo "建立 geodata-date.txt 檔案..."
 echo "$CURRENT_DATE" > output/geodata-date.txt
 
-# 打包 output 文件夹
+# 打包 output 資料夾
 ZIP_FILE="geodata.zip"
-echo "打包 output 文件夹为 $ZIP_FILE..."
+echo "打包 output 資料夾為 $ZIP_FILE..."
 mv output geodata
 zip -r "$ZIP_FILE" geodata/
 mv geodata output
 if [[ $? -ne 0 ]]; then
-    echo "打包文件失败！退出。"
+    echo "打包檔案失敗！退出。"
     exit 1
 fi
 
-echo "脚本执行完成！打包文件：$ZIP_FILE"
+echo "腳本執行完成！打包檔案：$ZIP_FILE"
