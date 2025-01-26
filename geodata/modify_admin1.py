@@ -88,7 +88,7 @@ def get_taiwan_admin1(admin1_path, admin2_path, output_path):
     # 依照 new_id 排序
     new_admin1_df = new_admin1_df.sort_values(by="new_id")
 
-    new_admin1_df.to_csv(output_path, sep="\t", index=False)
+    new_admin1_df.to_csv(output_path, sep=",", index=False)
 
 
 def update_taiwan_admin1(admin1_path, new_admin1_map_path, output_path):
@@ -108,7 +108,7 @@ def update_taiwan_admin1(admin1_path, new_admin1_map_path, output_path):
         names=["ID", "Name", "Name_ASCII", "Geoname_ID"],
     )
 
-    new_admin1_map = pd.read_csv(new_admin1_map_path, sep="\t")
+    new_admin1_map = pd.read_csv(new_admin1_map_path, sep=",")
     
     # 移除 admin1CodesASCII.txt 中 ID 開頭為 "TW." 的行政區劃資料
     admin1_data = admin1_data[~admin1_data["ID"].str.startswith("TW.")]

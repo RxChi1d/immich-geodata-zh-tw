@@ -17,7 +17,7 @@ def update_taiwan_admin1(cities500_df):
     # 讀取 new_admin1_map.csv
     admin1_map = pd.read_csv(
         os.path.join("output", "new_admin1_map.csv"),
-        sep="\t",
+        sep=",",
         low_memory=False
     )
 
