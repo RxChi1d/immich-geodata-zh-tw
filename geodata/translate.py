@@ -1,5 +1,5 @@
 import csv
-from utils import load_geo_data, ensure_folder_exists, logger, load_alternate_name
+from utils import load_geo_data, ensure_folder_exists, logger, load_alternate_names
 import os
 import sys
 import pandas as pd
@@ -11,7 +11,7 @@ source_folder = "./geoname_data"
 output_folder = "./output"
 
 # load alternate chinese name mapping
-alternate_name = load_alternate_name(
+alternate_name = load_alternate_names(
     os.path.join(output_folder, "alternate_chinese_name.json")
 )
 

@@ -73,19 +73,35 @@ def create_alternate_map(alternate_file, output_folder):
         alternate_file,
         sep="\t",
         header=None,
-        usecols=[1, 2, 3],
-        names=["geonameid", "lang", "name"],
+        usecols=[1, 2, 3, 4],
+        names=["geonameid", "lang", "name", "is_preferred_name"],
         na_values=["\\N"],
     )
-    data = data.dropna(subset=["lang"])
-    data = data[data["lang"].isin(priority)]
+    data = data.dropna(subset=["lang"])           # 丟棄lang為空的項目
+    data = data[data["lang"].isin(priority)]      # 僅保留中文名稱
 
-    # 相同的geonameid，只保留lang欄位優先級最高的
-    data = data.sort_values("lang", key=lambda x: x.map(lambda x: priority.index(x)))
+    # 創建priority，作為優先級判斷
+    # 如果is_preferred_name為1，則優先級為0
+    # 如果is_preferred_name為0，則優先級為priority中的index+1
+    data["is_preferred_name"] = data["is_preferred_name"].fillna(0)
+    data["priority"] = data["lang"].map(lambda x: priority.index(x) + 1)
+    data["priority"] = data.apply(lambda row: 0 if row["is_preferred_name"] == 1 else priority.index(row["lang"]) + 1, axis=1)
+    
+    # 相同的geonameid，僅保留優先級最高的（數字越小越高，0為最高）
+    data = data.sort_values("priority")
     data = data.drop_duplicates(subset="geonameid", keep="first")
-
+    
     # 轉換成字典，geonameid為key，name為value
     mapping = dict(zip(data["geonameid"], data["name"]))
+    
+    # 更新地名
+    update_name = {
+        "桃園縣": "桃園市",
+    }
+    for key, value in mapping.items():
+        for k, v in update_name.items():
+            if k in value:
+                mapping[key] = value.replace(k, v)
 
     output_file = os.path.join(output_folder, "alternate_chinese_name.json")
     ensure_folder_exists(output_file)
@@ -98,7 +114,7 @@ def create_alternate_map(alternate_file, output_folder):
     return mapping
 
 
-def load_alternate_name(file_path):
+def load_alternate_names(file_path):
     if not os.path.exists(file_path):
         logger.info(f"Alternate file {file_path} does not exist")
 
