@@ -1,6 +1,10 @@
 import logging
 import os
 import csv
+import json
+import sys
+import pandas as pd
+
 
 logger = logging.getLogger("logger")
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))  # 设置最低日志级别
@@ -57,31 +61,62 @@ def ensure_folder_exists(file_path):
         os.makedirs(folder, exist_ok=True)
 
 
+def create_alternate_map(alternate_file, output_folder):
+    logger.info(f"Creating alternate name mapping from {alternate_file}")
+
+    priority = ["zh-Hant", "zh-TW", "zh-HK", "zh", "zh-Hans", "zh-CN", "zh-SG"]
+
+    # 使用pandas讀取檔案
+    # 需要處理NaN值，因為lang可能為空
+    # 如果lang欄位包含priority中的任何一個值，就保留
+    data = pd.read_csv(
+        alternate_file,
+        sep="\t",
+        header=None,
+        usecols=[1, 2, 3],
+        names=["geonameid", "lang", "name"],
+        na_values=["\\N"],
+    )
+    data = data.dropna(subset=["lang"])
+    data = data[data["lang"].isin(priority)]
+
+    # 相同的geonameid，只保留lang欄位優先級最高的
+    data = data.sort_values("lang", key=lambda x: x.map(lambda x: priority.index(x)))
+    data = data.drop_duplicates(subset="geonameid", keep="first")
+
+    # 轉換成字典，geonameid為key，name為value
+    mapping = dict(zip(data["geonameid"], data["name"]))
+
+    output_file = os.path.join(output_folder, "alternate_chinese_name.json")
+    ensure_folder_exists(output_file)
+
+    with open(output_file, mode="w", encoding="utf-8") as file:
+        json.dump(mapping, file, ensure_ascii=False, indent=4)
+
+    logger.info(f"Alternate name mapping saved to {output_file}")
+
+    return mapping
+
+
 def load_alternate_name(file_path):
-    priority = ["zh", "zh-Hans", "zh-SG", "zh-Hant", "zh-HK"]
-    mapping = {}
-    count = 0
-    with open(file_path, "r", encoding="utf-8") as f:
-        for line in f:
-            count += 1
-            if count % 1000000 == 0:
-                logger.info(f"{count} 条 alternateName 数据已加载")
-            parts = line.split("\t")
-            if len(parts) < 5:
-                continue  # 忽略格式不正确的行
+    if not os.path.exists(file_path):
+        logger.info(f"Alternate file {file_path} does not exist")
 
-            _, number, lang, name, prefer = parts[:5]  # 提取第二个数字、语言代码和中文名
+        alternate_file = "./geoname_data/alternateNamesV2.txt"
 
-            # 检查是否符合优先级并更新映射关系
-            if lang in priority:
-                current_priority = priority.index(lang)
-                if (
-                    number not in mapping
-                    or current_priority < mapping[number][1]
-                    or (current_priority == mapping[number][1] and prefer == "1")
-                ):
-                    mapping[number] = (name, current_priority)
+        if not os.path.exists(alternate_file):
+            logger.error(f"The alternate file {alternate_file} does not exist")
+            sys.exit(1)
 
-    logger.info(f"共加载 {len(mapping)} 条中文 alternateName 数据")
-    # 返回最终映射字典，仅保留数字到中文名的映射
-    return {key: value[0] for key, value in mapping.items()}
+        return create_alternate_map(alternate_file, os.path.dirname(file_path))
+    else:
+        with open(file_path, mode="r", encoding="utf-8") as file:
+            data = json.load(file)
+
+            logger.info(f"Alternate name mapping loaded from {file_path}")
+
+            return data
+
+
+if __name__ == "__main__":
+    pass

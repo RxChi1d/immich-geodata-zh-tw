@@ -174,3 +174,4 @@ geodata/output
 geodata/geoname_data
 geodata/*.zip
 output/
+geoname_data
