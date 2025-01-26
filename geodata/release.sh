@@ -22,7 +22,7 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
-# 執行 python enhance_data.py
+# 根據 extra_data/TW.txt 優化 cities500.txt
 echo "執行 python enhance_data.py..."
 python enhance_data.py
 if [[ $? -ne 0 ]]; then
