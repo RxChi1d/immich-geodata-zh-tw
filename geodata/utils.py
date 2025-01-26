@@ -28,6 +28,28 @@ GEODATA_HEADER = [
     "admin_4",
 ]
 
+CITIES_HEADER = [
+    "ID",
+    "Name",
+    "Name_ASCII",
+    "Geoname_ID",
+    "Latitude",
+    "Longitude",
+    "Feature Class",
+    "Feature Code",
+    "Country Code",
+    "CC2",
+    "Admin1 Code",
+    "Admin2 Code",
+    "Admin3 Code",
+    "Admin4 Code",
+    "Population",
+    "Elevation",
+    "Dem",
+    "Timezone",
+    "Modification Date",
+]
+
 
 def load_geo_data(file_path):
     result = {}
