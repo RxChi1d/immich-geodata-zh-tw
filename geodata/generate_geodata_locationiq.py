@@ -1,7 +1,7 @@
 import os
 import time
 from tqdm import tqdm
-
+import sys
 import csv
 from utils import logger, load_geo_data, CITIES_HEADER, GEODATA_HEADER, MUNICIPALITIES
 import requests
@@ -77,13 +77,30 @@ def process_file(cities500_file, output_file, country_code, overwrite=False):
 
             record = reverse_query(loc)
 
+            """
+            1. 直轄市/省轄市
+                1.1. admin_2 在列表中
+                1.2. 根據 row 的 admin1_code ，在 admin1_map 的 new_id 中找到對應的中文名 (TW.{admin1_code})，填入 admin_1
+                1.3. admin_3 的數值填入 admin_2
+                1.4. admin_4 的數值填入 admin_3
+                1.5. 空值填入 admin_4
+            
+            2. 省轄縣
+                2.1. admin_2 不會在列表中
+                2.2. 根據 row 的 admin1_code ，在 admin1_map 的 new_id 中找到對應的中文名 (TW.{admin1_code})，填入 admin_1
+                
+            """
             # 臺灣特殊處理，調整行政區層級
             if country_code == "TW":
                 if record["admin_2"] in MUNICIPALITIES:
-                    record["admin_1"] = record["admin_2"]
+                    admin_1 = f"TW.{row['admin1_code']}"
+                    record["admin_1"] = admin1_map[admin1_map["new_id"] == admin_1][
+                        "name"
+                    ].values[0]
                     record["admin_2"] = record["admin_3"]
                     record["admin_3"] = record["admin_4"]
                     record["admin_4"] = ""
+
                 else:
                     admin_1 = f"TW.{row['admin1_code']}"
                     record["admin_1"] = admin1_map[admin1_map["new_id"] == admin_1][
@@ -103,6 +120,7 @@ def reverse_query(coordinate):
 
     if response:
         address = response["address"]
+
         record = {
             "latitude": coordinate["lat"],
             "longitude": coordinate["lon"],
@@ -120,7 +138,7 @@ def reverse_query(coordinate):
 
 
 if __name__ == "__main__":
-    overwrite = False
+    overwrite = True
     country_code = "TW"
     data_base_folder = "./geoname_data"
     output_folder = "./output"
