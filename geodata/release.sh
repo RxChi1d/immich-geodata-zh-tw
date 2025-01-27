@@ -31,10 +31,10 @@ if [[ $? -ne 0 ]]; then
 fi
 
 # 利用 locationiq API 取得 metadata
-LIST=("TW")
+LIST=("TW", "JP")
 for item in "${LIST[@]}"; do
-    echo "執行 python generate_geodata_locationiq.py $item..."
-    python generate_geodata_locationiq.py "$item"
+    echo "執行 python generate_geodata_locationiq.py --country_code $item..."
+    python generate_geodata_locationiq.py --country_code "$item"
     if [[ $? -ne 0 ]]; then
         echo "執行 python generate_geodata_locationiq.py $item 失敗！退出。"
         exit 1

@@ -1,12 +1,12 @@
 import os
 import time
 from tqdm import tqdm
-import sys
 import csv
 from utils import logger, load_geo_data, CITIES_HEADER, GEODATA_HEADER, MUNICIPALITIES
 import requests
 from requests.adapters import HTTPAdapter, Retry
 import pandas as pd
+import argparse
 
 
 LOCATIONIQ_API_KEY = os.environ["LOCATIONIQ_API_KEY"]
@@ -142,18 +142,21 @@ def reverse_query(coordinate):
 
 
 if __name__ == "__main__":
-    overwrite = False
-    country_code = "TW"
-    data_base_folder = "./geoname_data"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--country_code", type=str, default="TW")
+    parser.add_argument("--output_folder", type=str, default="./output")
+    args = parser.parse_args()
+    
     output_folder = "./output"
-    meta_data_folder = os.path.join(output_folder, "meta_data")
-    cities500_file = os.path.join(output_folder, "cities500_en.txt")
+    meta_data_folder = os.path.join(args.output_folder, "meta_data")
+    cities500_file = os.path.join(args.output_folder, "cities500_en.txt")
 
-    logger.info(f"通過 LocationIQ 生成 {country_code} 的 metadata")
+    logger.info(f"通過 LocationIQ 生成 {args.country_code} 的 metadata")
 
     if not os.path.exists(cities500_file):
         raise FileExistsError(f"{cities500_file} 不存在，請先下載。")
 
-    output_file = os.path.join(meta_data_folder, f"{country_code}.csv")
+    output_file = os.path.join(meta_data_folder, f"{args.country_code}.csv")
 
-    process_file(cities500_file, output_file, country_code, overwrite)
+    process_file(cities500_file, output_file, args.country_code, args.overwrite)
