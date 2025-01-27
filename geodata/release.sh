@@ -41,7 +41,7 @@ for item in "${LIST[@]}"; do
     fi
 done
 
-# 執行 python translate.py
+# 翻譯 cities500_en.txt, admin1CodesASCII_en.txt, admin2Codes_en.txt
 echo "執行 python translate.py..."
 python translate.py
 if [[ $? -ne 0 ]]; then
