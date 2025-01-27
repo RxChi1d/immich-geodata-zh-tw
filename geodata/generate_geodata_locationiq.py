@@ -2,7 +2,7 @@ import os
 import time
 from tqdm import tqdm
 import csv
-from utils import logger, load_geo_data, CITIES_HEADER, GEODATA_HEADER, MUNICIPALITIES
+from utils import logger, load_meta_data, CITIES_HEADER, GEODATA_HEADER, MUNICIPALITIES
 import requests
 from requests.adapters import HTTPAdapter, Retry
 import pandas as pd
@@ -46,14 +46,16 @@ def get_loc_from_locationiq(lat, lon):
 
 
 def process_file(cities500_file, output_file, country_code, overwrite=False):
-    existing_data = load_geo_data(output_file) if not overwrite else {}
+    existing_data = load_meta_data(output_file) if not overwrite else {}
 
     cities_df = pd.read_csv(
         cities500_file, sep="\t", header=None, names=CITIES_HEADER, low_memory=False
     )
 
     admin1_map = pd.read_csv(
-        os.path.join(os.path.dirname(os.path.dirname(output_file)), "new_admin1_map.csv"),
+        os.path.join(
+            os.path.dirname(os.path.dirname(output_file)), "new_admin1_map.csv"
+        ),
         sep=",",
         low_memory=False,
     )
@@ -141,13 +143,13 @@ def reverse_query(coordinate):
         return None
 
 
-if __name__ == "__main__":
+def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--country_code", type=str, default="TW")
     parser.add_argument("--output_folder", type=str, default="./output")
     args = parser.parse_args()
-    
+
     output_folder = "./output"
     meta_data_folder = os.path.join(args.output_folder, "meta_data")
     cities500_file = os.path.join(args.output_folder, "cities500_en.txt")
@@ -160,3 +162,7 @@ if __name__ == "__main__":
     output_file = os.path.join(meta_data_folder, f"{args.country_code}.csv")
 
     process_file(cities500_file, output_file, args.country_code, args.overwrite)
+
+
+if __name__ == "__main__":
+    run()

@@ -4,18 +4,29 @@ import csv
 import json
 import sys
 import pandas as pd
+from tqdm import tqdm
+
+
+class TqdmLoggingHandler(logging.StreamHandler):
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            tqdm.write(msg)
+            self.flush()
+        except Exception:
+            self.handleError(record)
 
 
 logger = logging.getLogger("logger")
-logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))  # 设置最低日志级别
+logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))  # 設置最低日誌級別
 
-console_handler = logging.StreamHandler()
+console_handler = TqdmLoggingHandler()
 
-# 设置日志格式
+# 設置日誌格式
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 console_handler.setFormatter(formatter)
 
-# 添加处理器到 logger
+# 添加處理器到 logger
 logger.addHandler(console_handler)
 
 GEODATA_HEADER = [
@@ -63,28 +74,34 @@ MUNICIPALITIES = [
 ]
 
 
-def load_geo_data(file_path):
+def load_meta_data(file_path):
+    """
+    從指定的 CSV 檔案中載入地理數據，將 (longitude, latitude) 作為鍵，
+    其他欄位組成的字典作為值，返回一個字典。
+
+    :param file_path: CSV 檔案路徑
+    :return: 包含地理數據的字典
+    """
     result = {}
+
+    # 確認檔案是否存在
     if os.path.exists(file_path):
-        # 读取 CSV 文件
         with open(file_path, mode="r", encoding="utf-8") as file:
             reader = csv.DictReader(file)
 
-            # 遍历每行数据
+            # 逐行讀取資料並構建字典
             for row in reader:
-                # 获取 (lon, lat) 作为键
-                key = (str(row["longitude"]), str(row["latitude"]))
+                # 使用 (longitude, latitude) 作為鍵
+                key = (row["longitude"].strip(), row["latitude"].strip())
 
-                # 将其他字段作为值存入字典
-                value = {
-                    "country": row["country"],
-                    "admin_1": row["admin_1"],
-                    "admin_2": row["admin_2"],
-                    "admin_3": row["admin_3"],
-                    "admin_4": row["admin_4"],
+                # 組合其他相關欄位作為值
+                result[key] = {
+                    "country": row["country"].strip(),
+                    "admin_1": row["admin_1"].strip(),
+                    "admin_2": row["admin_2"].strip(),
+                    "admin_3": row["admin_3"].strip(),
+                    "admin_4": row["admin_4"].strip(),
                 }
-
-                result[key] = value
 
     return result
 
@@ -96,7 +113,7 @@ def ensure_folder_exists(file_path):
 
 
 def create_alternate_map(alternate_file, output_folder):
-    logger.info(f"Creating alternate name mapping from {alternate_file}")
+    logger.info(f"正在從 {alternate_file} 建立替代名稱對照表")
 
     priority = ["zh-Hant", "zh-TW", "zh-HK", "zh", "zh-Hans", "zh-CN", "zh-SG"]
 
@@ -148,19 +165,19 @@ def create_alternate_map(alternate_file, output_folder):
     with open(output_file, mode="w", encoding="utf-8") as file:
         json.dump(mapping, file, ensure_ascii=False, indent=4)
 
-    logger.info(f"Alternate name mapping saved to {output_file}")
+    logger.info(f"替代名稱對照表已儲存至 {output_file}")
 
     return mapping
 
 
 def load_alternate_names(file_path):
     if not os.path.exists(file_path):
-        logger.info(f"Alternate file {file_path} does not exist")
+        logger.info(f"替代名稱檔案 {file_path} 不存在")
 
         alternate_file = "./geoname_data/alternateNamesV2.txt"
 
         if not os.path.exists(alternate_file):
-            logger.error(f"The alternate file {alternate_file} does not exist")
+            logger.error(f"替代名稱檔案 {alternate_file} 不存在")
             sys.exit(1)
 
         return create_alternate_map(alternate_file, os.path.dirname(file_path))
@@ -168,7 +185,7 @@ def load_alternate_names(file_path):
         with open(file_path, mode="r", encoding="utf-8") as file:
             data = json.load(file)
 
-            logger.info(f"Alternate name mapping loaded from {file_path}")
+            logger.info(f"已從 {file_path} 載入替代名稱對照表")
 
             return data
 
