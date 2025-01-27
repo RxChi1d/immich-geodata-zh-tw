@@ -16,10 +16,6 @@ from tqdm import tqdm
 import opencc
 from zhconv import convert
 
-source_folder = "./geoname_data"
-output_folder = "./output"
-
-
 # 初始化簡繁轉換器
 converter_t2s = opencc.OpenCC("t2s")
 converter_s2t = opencc.OpenCC("s2t")
@@ -94,7 +90,8 @@ def process_multiple_names(row, res):
 def translate_cities500(
     metadata_folder, cities500_file, output_file, alternate_name_file
 ):
-    """將城市資料檔案轉換為繁體中文格式。
+    """
+    將城市資料檔案轉換為繁體中文格式。
 
     這個函數會讀取城市資料檔案，並將城市名稱轉換為繁體中文。轉換過程會優先使用元數據文件中的對應，
     其次使用備用名稱文件，最後嘗試從現有的替代名稱中尋找中文名稱。
@@ -190,7 +187,7 @@ def translate_cities500(
     cities500_df.to_csv(output_file, sep="\t", index=False, header=False)
 
 
-def translate_admin1(input_file, alternate_name_file):
+def translate_admin1(input_file, alternate_name_file, output_folder):
     """
     將行政區域名稱從簡體中文轉換為繁體中文。
 
@@ -200,6 +197,7 @@ def translate_admin1(input_file, alternate_name_file):
     參數:
         input_file (str): 輸入文件的路徑，預期為以tab分隔的文本文件
         alternate_name_file (str): 包含替代名稱映射的文件路徑
+        output_folder (str): 輸出文件的資料夾路徑
 
     返回:
         None
@@ -216,7 +214,7 @@ def translate_admin1(input_file, alternate_name_file):
         - 如果輸入文件不存在，程序將終止並記錄錯誤
 
     注意:
-        輸出文件將保存在預設的輸出資料夾中，檔名會加上"_processed"後綴
+        輸出文件將保存在預設的輸出資料夾中，檔名會加上"_translated"後綴
     """
 
     logger.info(f"正在處理 {input_file}")
@@ -228,7 +226,7 @@ def translate_admin1(input_file, alternate_name_file):
     alternate_name = load_alternate_names(alternate_name_file)
 
     basename = os.path.splitext(os.path.basename(input_file))
-    new_filename = basename[0] + "_processed" + basename[1]
+    new_filename = basename[0] + "_translated" + basename[1]
     output_file = os.path.join(output_folder, new_filename)
     ensure_folder_exists(output_file)
 
@@ -261,12 +259,13 @@ def translate_admin1(input_file, alternate_name_file):
 
 
 def run():
+    source_folder = "./geoname_data"
     output_fodler = "./output"
     metadata_folder = os.path.join(output_fodler, "meta_data")
 
     # 翻譯 cities500
     cities500_file = os.path.join(output_fodler, "cities500_en.txt")
-    output_file = os.path.join(output_fodler, "cities500_processed.txt")
+    output_file = os.path.join(output_fodler, "cities500_translated.txt")
     alternate_name_file = os.path.join(output_fodler, "alternate_chinese_name.json")
 
     translate_cities500(
@@ -274,11 +273,11 @@ def run():
     )
 
     # 翻譯 admin1 和 admin2
-    admin1_file = os.path.join(source_folder, "admin1CodesASCII.txt")
+    admin1_file = os.path.join(output_fodler, "admin1CodesASCII_optimized.txt")
     admin2_file = os.path.join(source_folder, "admin2Codes.txt")
 
-    translate_admin1(admin1_file, alternate_name_file)
-    translate_admin1(admin2_file, alternate_name_file)
+    translate_admin1(admin1_file, alternate_name_file, output_fodler)
+    translate_admin1(admin2_file, alternate_name_file, output_fodler)
 
 
 if __name__ == "__main__":
