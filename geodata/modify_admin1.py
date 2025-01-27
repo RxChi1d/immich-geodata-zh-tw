@@ -140,7 +140,7 @@ if __name__ == "__main__":
 
     admin1_path = os.path.join(data_folder, "admin1CodesASCII.txt")
     admin2_path = os.path.join(data_folder, "admin2Codes.txt")
-    new_admin1_path = os.path.join(output_folder, "admin1CodesASCII_en.txt")
+    new_admin1_path = os.path.join(output_folder, "admin1CodesASCII_optimized.txt")
     new_admin1_map_path = os.path.join(output_folder, "new_admin1_map.csv")
 
     get_taiwan_admin1(admin1_path, admin2_path, new_admin1_map_path)

@@ -2,7 +2,7 @@ import os
 import time
 from tqdm import tqdm
 import csv
-from utils import logger, load_meta_data, CITIES_HEADER, GEODATA_HEADER, MUNICIPALITIES
+from utils import logger, load_meta_data, CITIES_HEADER, GEODATA_HEADER, MUNICIPALITIES, ensure_folder_exists
 import requests
 from requests.adapters import HTTPAdapter, Retry
 import pandas as pd
@@ -62,6 +62,7 @@ def process_file(cities500_file, output_file, country_code, overwrite=False):
 
     # 用 append 模式，避免超過 api 限制
     write_mode = "w" if overwrite else "a"
+    ensure_folder_exists(output_file)
     with open(output_file, mode=write_mode, newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(file, fieldnames=GEODATA_HEADER)
 

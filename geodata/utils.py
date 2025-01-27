@@ -167,8 +167,6 @@ def create_alternate_map(alternate_file, output_folder):
 
     logger.info(f"替代名稱對照表已儲存至 {output_file}")
 
-    return mapping
-
 
 def load_alternate_names(file_path):
     if not os.path.exists(file_path):
@@ -180,7 +178,9 @@ def load_alternate_names(file_path):
             logger.error(f"替代名稱檔案 {alternate_file} 不存在")
             sys.exit(1)
 
-        return create_alternate_map(alternate_file, os.path.dirname(file_path))
+        create_alternate_map(alternate_file, os.path.dirname(file_path))
+        
+        return load_alternate_names(file_path)
     else:
         with open(file_path, mode="r", encoding="utf-8") as file:
             data = json.load(file)
