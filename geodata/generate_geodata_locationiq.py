@@ -52,7 +52,11 @@ def process_file(cities500_file, output_file, country_code, overwrite=False):
         cities500_file, sep="\t", header=None, names=CITIES_HEADER, low_memory=False
     )
 
-    admin1_map = pd.read_csv("output/new_admin1_map.csv", sep=",", low_memory=False)
+    admin1_map = pd.read_csv(
+        os.path.join(os.path.dirname(output_file), "new_admin1_map.csv"),
+        sep=",",
+        low_memory=False,
+    )
 
     # 用 append 模式，避免超過 api 限制
     write_mode = "w" if overwrite else "a"
