@@ -53,7 +53,7 @@ def process_file(cities500_file, output_file, country_code, overwrite=False):
     )
 
     admin1_map = pd.read_csv(
-        os.path.join(os.path.dirname(output_file), "new_admin1_map.csv"),
+        os.path.join(os.path.dirname(os.path.dirname(output_file)), "new_admin1_map.csv"),
         sep=",",
         low_memory=False,
     )
@@ -142,10 +142,11 @@ def reverse_query(coordinate):
 
 
 if __name__ == "__main__":
-    overwrite = True
+    overwrite = False
     country_code = "TW"
     data_base_folder = "./geoname_data"
     output_folder = "./output"
+    meta_data_folder = os.path.join(output_folder, "meta_data")
     cities500_file = os.path.join(output_folder, "cities500_en.txt")
 
     logger.info(f"通過 LocationIQ 生成 {country_code} 的 metadata")
@@ -153,6 +154,6 @@ if __name__ == "__main__":
     if not os.path.exists(cities500_file):
         raise FileExistsError(f"{cities500_file} 不存在，請先下載。")
 
-    output_file = os.path.join(output_folder, f"{country_code}.csv")
+    output_file = os.path.join(meta_data_folder, f"{country_code}.csv")
 
     process_file(cities500_file, output_file, country_code, overwrite)
