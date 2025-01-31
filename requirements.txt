@@ -2,4 +2,4 @@ opencc
 zhconv
 requests
 tqdm
-pandas
+polars

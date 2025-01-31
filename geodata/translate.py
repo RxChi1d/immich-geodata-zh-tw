@@ -264,7 +264,7 @@ def run():
     metadata_folder = os.path.join(output_fodler, "meta_data")
 
     # 翻譯 cities500
-    cities500_file = os.path.join(output_fodler, "cities500_en.txt")
+    cities500_file = os.path.join(output_fodler, "cities500_optimized.txt")
     output_file = os.path.join(output_fodler, "cities500_translated.txt")
     alternate_name_file = os.path.join(output_fodler, "alternate_chinese_name.json")
 
