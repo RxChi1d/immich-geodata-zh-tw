@@ -152,7 +152,7 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
 
     # 建立已查詢座標的 Hash Set，加快查找速度
     existing_coords = set(
-        zip(existing_data["longitude"].cast(str), existing_data["latitude"].cast(str))
+        zip(existing_data["longitude"], existing_data["latitude"])
     )
 
     # 讀取 cities500.txt
@@ -181,7 +181,7 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
     for row in pbar:
         pbar.set_description(f"查詢城市: {row['name']}")
 
-        loc = {"lon": str(row["longitude"]), "lat": str(row["latitude"])}
+        loc = {"lon": row["longitude"], "lat": row["latitude"]}
 
         # 如果座標已經存在，跳過查詢
         if (loc["lon"], loc["lat"]) in existing_coords:
