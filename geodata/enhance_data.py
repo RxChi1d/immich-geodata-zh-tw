@@ -6,7 +6,7 @@ from utils import logger, CITIES_HEADER
 def update_taiwan_admin1(cities500_df):
     """
     以下操作針對 country code 是 TW 的資料進行：
-    1. 讀取 new_admin1_map.csv
+    1. 讀取 tw_admin1_map.csv
     2. 將 admin1_code 以 new_id 取代
     3. admin2_code 以 admin3_code 取代
     4. admin3_code 以 admin4_code 取代
@@ -14,9 +14,9 @@ def update_taiwan_admin1(cities500_df):
     """
     logger.info("開始調整台灣的 Admin Code")
 
-    # 讀取 new_admin1_map.csv
+    # 讀取 tw_admin1_map.csv
     admin1_map = pd.read_csv(
-        os.path.join("output", "new_admin1_map.csv"),
+        os.path.join("output", "tw_admin1_map.csv"),
         sep=",",
         low_memory=False
     )

@@ -1,3 +1,5 @@
 opencc
 zhconv
 requests
+tqdm
+pandas

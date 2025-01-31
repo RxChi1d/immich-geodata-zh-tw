@@ -13,12 +13,12 @@
 1. **下載檔案**  
    前往 [Release 頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases/tag/release) 下載 `immich-geodata-zh-tw.zip`，並將其解壓縮。
 
-2. **修改 `docker-compose.yaml` 配置**  
-   在 `volumes` 中新增以下映射：
+2. **修改 `docker-compose.yml` 配置**  
+   在 `volumes` 中新增以下映射 (路徑請按需求調整)：
    ```yaml
    volumes:
-     - ./geodata:/build/geodata
-     - ./i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs
+     - ./geodata:/build/geodata:ro
+     - ./i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs:ro
    ```
    或根據不同部署方式，自行替換上述文件夾。
 

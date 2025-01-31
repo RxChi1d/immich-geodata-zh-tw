@@ -1,10 +1,10 @@
 import logging
 import os
 import csv
-import json
 import sys
 import pandas as pd
 from tqdm import tqdm
+import polars as pl
 
 
 class TqdmLoggingHandler(logging.StreamHandler):
@@ -29,6 +29,15 @@ console_handler.setFormatter(formatter)
 # 添加處理器到 logger
 logger.addHandler(console_handler)
 
+ADMIN1_SCHEMA = pl.Schema(
+    {
+        "ID": pl.String(),
+        "Name": pl.String(),
+        "Name_ASCII": pl.String(),
+        "Geoname_ID": pl.String(),
+    }
+)
+
 GEODATA_HEADER = [
     "longitude",
     "latitude",
@@ -40,7 +49,7 @@ GEODATA_HEADER = [
 ]
 
 CITIES_HEADER = [
-    "geonameid",
+    "geoname_id",
     "name",
     "asciiname",
     "alternatenames",
@@ -72,6 +81,8 @@ MUNICIPALITIES = [
     "新竹市",
     "嘉義市",
 ]
+
+CHINESE_PRIORITY = ["zh-Hant", "zh-TW", "zh-HK", "zh", "zh-Hans", "zh-CN", "zh-SG"]
 
 
 def load_meta_data(file_path):
@@ -112,60 +123,67 @@ def ensure_folder_exists(file_path):
         os.makedirs(folder, exist_ok=True)
 
 
-def create_alternate_map(alternate_file, output_folder):
+def create_alternate_map(alternate_file, output_path):
     logger.info(f"正在從 {alternate_file} 建立替代名稱對照表")
+    
+    output_folder = os.path.dirname(output_path)
+    ensure_folder_exists(output_path)
 
-    priority = ["zh-Hant", "zh-TW", "zh-HK", "zh", "zh-Hans", "zh-CN", "zh-SG"]
-
-    # 使用pandas讀取檔案
-    # 需要處理NaN值，因為lang可能為空
-    # 如果lang欄位包含priority中的任何一個值，就保留
-    data = pd.read_csv(
+    data = pl.read_csv(
         alternate_file,
-        sep="\t",
-        header=None,
-        usecols=[1, 2, 3, 4],
-        names=["geonameid", "lang", "name", "is_preferred_name"],
-        na_values=["\\N"],
-    )
-    data = data.dropna(subset=["lang"])  # 丟棄lang為空的項目
-    data = data[data["lang"].isin(priority)]  # 僅保留中文名稱
-
-    # 創建priority，作為優先級判斷
-    # 如果is_preferred_name為1，則優先級為0
-    # 如果is_preferred_name為0，則優先級為priority中的index+1
-    data["is_preferred_name"] = data["is_preferred_name"].fillna(0)
-    data["priority"] = data["lang"].map(lambda x: priority.index(x) + 1)
-    data["priority"] = data.apply(
-        lambda row: (
-            0 if row["is_preferred_name"] == 1 else priority.index(row["lang"]) + 1
-        ),
-        axis=1,
+        separator="\t",  # 設定 Tab 為分隔符號
+        has_header=False,  # 表示檔案沒有標題列
+        columns=[1, 2, 3, 4],  # 只讀取第 1, 2, 3, 4 欄
+        new_columns=["geoname_id", "lang", "name", "is_preferred_name"],  # 重新命名欄位
+        null_values="\\N",  # 把 "\N" 視為空值 (null)
+        dtypes={
+            "geoname_id": pl.String,
+            "lang": pl.String,
+            "name": pl.String,
+            "is_preferred_name": pl.UInt8,
+        },  # 指定所有欄位為 String
     )
 
-    # 相同的geonameid，僅保留優先級最高的（數字越小越高，0為最高）
-    data = data.sort_values("priority")
-    data = data.drop_duplicates(subset="geonameid", keep="first")
+    data = data.filter(data["lang"].is_in(CHINESE_PRIORITY))  # 僅保留中文名稱
 
-    # 轉換成字典，geonameid為key，name為value
-    mapping = dict(zip(data["geonameid"], data["name"]))
+    # 創建 `priority` 欄位，作為優先級判斷
+    # - 如果 `is_preferred_name` 為 1，則優先級為 0
+    # - 如果 `is_preferred_name` 為 0，則優先級為 CHINESE_PRIORITY 中 key 的 index + 1
+    data = data.with_columns(
+        pl.when(pl.col("is_preferred_name") == 1)
+        .then(pl.lit(0))  # is_preferred_name == "1"，則優先級為 0
+        .otherwise(
+            pl.col("lang")
+            .fill_null("")
+            .map_elements(
+                lambda x: (
+                    CHINESE_PRIORITY.index(x) + 1
+                    if x in CHINESE_PRIORITY
+                    else len(CHINESE_PRIORITY) + 1
+                ),
+                return_dtype=pl.UInt8,  # 明確指定回傳型別
+            )
+        )
+        .alias("priority")
+    )
+
+    # 相同的geoname_id，僅保留優先級最高的（數字越小越高，0為最高）
+    data = (
+        data.sort("priority")  # 按 `priority` 排序（越小越優先）
+        .group_by("geoname_id")
+        .first()  # 只保留 `geoname_id` 相同的第一筆資料（優先級最高的）
+        .select(["geoname_id", "name"])  # 只保留指定的兩個欄位
+    )
 
     # 更新地名
-    update_name = {
-        "桃園縣": "桃園市",
-    }
-    for key, value in mapping.items():
-        for k, v in update_name.items():
-            if k in value:
-                mapping[key] = value.replace(k, v)
+    data = data.with_columns(
+        pl.col("name").str.replace("桃園縣", "桃園市").alias("name")
+    )
+    
+    # 儲存為 alternate_chinese_name.csv
+    data.write_csv(output_path)
 
-    output_file = os.path.join(output_folder, "alternate_chinese_name.json")
-    ensure_folder_exists(output_file)
-
-    with open(output_file, mode="w", encoding="utf-8") as file:
-        json.dump(mapping, file, ensure_ascii=False, indent=4)
-
-    logger.info(f"替代名稱對照表已儲存至 {output_file}")
+    logger.info(f"替代名稱對照表已儲存至 {output_path}")
 
 
 def load_alternate_names(file_path):
@@ -178,16 +196,24 @@ def load_alternate_names(file_path):
             logger.error(f"替代名稱檔案 {alternate_file} 不存在")
             sys.exit(1)
 
-        create_alternate_map(alternate_file, os.path.dirname(file_path))
-        
+        create_alternate_map(alternate_file, file_path)
+
         return load_alternate_names(file_path)
     else:
-        with open(file_path, mode="r", encoding="utf-8") as file:
-            data = json.load(file)
+        data = pl.read_csv(
+            file_path,
+            has_header=True,
+            schema=pl.Schema(
+                {
+                    "geoname_id": pl.String,
+                    "name": pl.String,
+                }
+            ),
+        )       
+        
+        logger.info(f"已從 {file_path} 載入替代名稱對照表")
 
-            logger.info(f"已從 {file_path} 載入替代名稱對照表")
-
-            return data
+        return data
 
 
 if __name__ == "__main__":
