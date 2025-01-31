@@ -1,12 +1,18 @@
 import os
 import time
 from tqdm import tqdm
-import csv
-from utils import logger, load_meta_data, CITIES_HEADER, GEODATA_HEADER, MUNICIPALITIES, ensure_folder_exists
+from utils import (
+    logger,
+    CITIES_SCHEMA,
+    GEODATA_SCHEMA,
+    MUNICIPALITIES,
+    ensure_folder_exists,
+)
 import requests
 from requests.adapters import HTTPAdapter, Retry
-import pandas as pd
 import argparse
+import sys
+import polars as pl
 
 
 LOCATIONIQ_API_KEY = os.environ["LOCATIONIQ_API_KEY"]
@@ -21,6 +27,17 @@ s.mount("https://", HTTPAdapter(max_retries=retries))
 
 
 def get_loc_from_locationiq(lat, lon):
+    """
+    使用 LocationIQ API 根據經緯度取得地理位置資訊。
+
+    Args:
+        lat (float): 經度
+        lon (float): 緯度
+
+    Returns:
+        dict: 包含地理位置資訊的字典，如果查詢失敗則返回 None。
+    """
+
     url = "https://us1.locationiq.com/v1/reverse"
 
     params = {
@@ -40,49 +57,144 @@ def get_loc_from_locationiq(lat, lon):
         if response.status_code == 200:
             return response.json()
     except:
-        logger.error(f"{lat},{lon} failed to get location")
+        logger.error(f"{lat},{lon} 查詢失敗")
         pass
     return None
 
 
-def process_file(cities500_file, output_file, country_code, overwrite=False):
-    existing_data = load_meta_data(output_file) if not overwrite else {}
+def save_to_csv(data: pl.DataFrame, output_file: str):
+    """
+    將資料儲存到CSV檔案中。
 
-    cities_df = pd.read_csv(
-        cities500_file, sep="\t", header=None, names=CITIES_HEADER, low_memory=False
+    Args:
+        data (pl.DataFrame): 要儲存的資料框。
+        output_file (str): 輸出的CSV檔案路徑。
+
+    Returns:
+        None: 此函數沒有回傳值。
+
+    注意:
+        - 如果資料框是空的，函數會直接返回，避免寫入空檔案。
+        - 如果輸出的CSV檔案已經存在，會先讀取現有的資料並與新資料合併，然後一次性寫入（覆蓋舊檔案）。
+    """
+
+    if data.is_empty():
+        return  # 避免寫入空檔案
+
+    if os.path.exists(output_file):
+        existing_data = pl.read_csv(output_file, schema=GEODATA_SCHEMA)
+        data = existing_data.vstack(data)
+
+    # 一次性寫入（覆蓋舊檔案）
+    data.write_csv(output_file, include_header=True)
+
+
+def reverse_query(coordinate):
+    """
+    根據提供的座標進行反向地理編碼查詢，並返回包含地理資訊的資料框。
+
+    Args:
+        coordinate (dict): 包含 "lat" 和 "lon" 的字典，分別代表緯度和經度。
+
+    Returns:
+        pl.DataFrame: 包含地理資訊的資料框，包括國家、省、市、區、鄰里等資訊。
+        如果查詢失敗，返回 None。
+    """
+
+    response = get_loc_from_locationiq(coordinate["lat"], coordinate["lon"])
+
+    if response:
+        address = response["address"]
+
+        return pl.DataFrame(
+            {
+                "latitude": [coordinate["lat"]],
+                "longitude": [coordinate["lon"]],
+                "country": [address["country"]],
+                "admin_1": [address.get("state", "")],
+                "admin_2": [address.get("city", address.get("county", ""))],
+                "admin_3": [address.get("suburb", "")],
+                "admin_4": [address.get("neighbourhood", "")],
+            },
+            schema=GEODATA_SCHEMA,
+            strict=False,
+        )
+
+    else:
+        return None
+
+
+def process_file(cities500_file, output_file, country_code, batch_size=100):
+    """
+    處理 cities500.txt 檔案，通過 LocationIQ 生成指定國家的 metadata，並將結果儲存到指定的輸出檔案。
+
+    Args:
+        cities500_file (str): cities500.txt 檔案的路徑。
+        output_file (str): 輸出 metadata 的 CSV 檔案路徑。
+        country_code (str): 指定國家的 ISO 3166-1 alpha-2 國家代碼。
+        batch_size (int, optional): 每次寫入 CSV 的批次大小，預設為 100。
+
+    Returns:
+        None
+    """
+
+    logger.info(f"通過 LocationIQ 生成 {country_code} 的 metadata")
+
+    # 嘗試讀取已存在的 meta_data (恢復進度)
+    existing_data = (
+        pl.read_csv(
+            output_file,
+            schema=GEODATA_SCHEMA,
+        )
+        if os.path.exists(output_file)
+        else pl.DataFrame(schema=GEODATA_SCHEMA)
     )
 
-    admin1_map = pd.read_csv(
+    # 建立已查詢座標的 Hash Set，加快查找速度
+    existing_coords = set(
+        zip(existing_data["longitude"].cast(str), existing_data["latitude"].cast(str))
+    )
+
+    # 讀取 cities500.txt
+    cities_df = pl.read_csv(
+        cities500_file,
+        separator="\t",
+        has_header=False,
+        schema=CITIES_SCHEMA,
+    )
+
+    # 讀取臺灣行政區對照表
+    admin1_map = pl.read_csv(
         os.path.join(
             os.path.dirname(os.path.dirname(output_file)), "tw_admin1_map.csv"
         ),
-        sep=",",
-        low_memory=False,
     )
 
-    # 用 append 模式，避免超過 api 限制
-    write_mode = "w" if overwrite else "a"
-    ensure_folder_exists(output_file)
-    with open(output_file, mode=write_mode, newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=GEODATA_HEADER)
+    # 篩選指定國家
+    specific_country_df = cities_df.filter(pl.col("country_code") == country_code)
 
-        # 如果文件是空的，寫入 header
-        if file.tell() == 0:
-            writer.writeheader()
-            file.flush()
+    # 初始化空 DataFrame 來儲存 API 查詢結果
+    result_df = pl.DataFrame(schema=GEODATA_SCHEMA)
+    pbar = tqdm(
+        specific_country_df.iter_rows(named=True), total=specific_country_df.height
+    )
+    for row in pbar:
+        pbar.set_description(f"查詢城市: {row['name']}")
 
-        specific_country_df = cities_df[cities_df["country_code"] == country_code]
+        loc = {"lon": str(row["longitude"]), "lat": str(row["latitude"])}
 
-        pbar = tqdm(specific_country_df.iterrows(), total=len(specific_country_df))
-        for index, row in pbar:
-            pbar.set_description(f"[City: {row['name']}]")
+        # 如果座標已經存在，跳過查詢
+        if (loc["lon"], loc["lat"]) in existing_coords:
+            continue
 
-            loc = {"lon": str(row["longitude"]), "lat": str(row["latitude"])}
+        try:
+            # 執行 API 查詢，返回 Polars DataFrame
+            record_df = reverse_query(loc)
 
-            if (loc["lon"], loc["lat"]) in existing_data:
+            # 如果 API 返回 None，則記錄錯誤並跳過
+            if record_df is None or record_df.is_empty():
+                logger.warning(f"查詢失敗，座標: {loc}")
                 continue
-
-            record = reverse_query(loc)
 
             """
             1. 直轄市/省轄市
@@ -97,51 +209,54 @@ def process_file(cities500_file, output_file, country_code, overwrite=False):
                 2.2. 根據 row 的 admin1_code ，在 admin1_map 的 new_id 中找到對應的中文名 (TW.{admin1_code})，填入 admin_1
                 
             """
-            # 臺灣特殊處理，調整行政區層級
+
+            # 臺灣特殊處理
             if country_code == "TW":
-                if record["admin_2"] in MUNICIPALITIES:
-                    admin_1 = f"TW.{row['admin1_code']}"
-                    record["admin_1"] = admin1_map[admin1_map["new_id"] == admin_1][
-                        "name"
-                    ].values[0]
-                    record["admin_2"] = record["admin_3"]
-                    record["admin_3"] = record["admin_4"]
-                    record["admin_4"] = ""
+                admin_1 = f"TW.{row['admin1_code']}"
 
+                # 直轄市/省轄市
+                if record_df["admin_2"].item() in MUNICIPALITIES:
+                    record_df = record_df.with_columns(
+                        pl.lit(
+                            admin1_map.filter(pl.col("new_id") == admin_1)[
+                                "name"
+                            ].item()
+                        ).alias("admin_1"),
+                        pl.col("admin_3").alias("admin_2"),
+                        pl.col("admin_4").alias("admin_3"),
+                        pl.lit("").alias("admin_4"),
+                    )
+
+                # 省轄縣
                 else:
-                    admin_1 = f"TW.{row['admin1_code']}"
-                    record["admin_1"] = admin1_map[admin1_map["new_id"] == admin_1][
-                        "name"
-                    ].values[0]
+                    record_df = record_df.with_columns(
+                        pl.lit(
+                            admin1_map.filter(pl.col("new_id") == admin_1)[
+                                "name"
+                            ].item()
+                        ).alias("admin_1")
+                    )
 
-            # 如果查詢成功，寫入文件
-            if record:
-                writer.writerows([record])
-                file.flush()
-            else:
-                logger.error(f"查詢失敗，座標: {loc}")
+            # 合併結果
+            result_df = result_df.vstack(record_df)
 
+            # 當 `batch_size` 達到指定值時，寫入 CSV
+            if result_df.height >= batch_size:
+                save_to_csv(result_df, output_file)
+                result_df = pl.DataFrame(schema=GEODATA_SCHEMA)  # 清空 DataFrame
 
-def reverse_query(coordinate):
-    response = get_loc_from_locationiq(coordinate["lat"], coordinate["lon"])
+        except Exception as e:
+            # API 出錯時，立即寫入當前累積的數據
+            save_to_csv(result_df, output_file)
 
-    if response:
-        address = response["address"]
+            logger.error(f"API 錯誤: {e}，座標: {loc}")
+            sys.exit(1)
 
-        record = {
-            "latitude": coordinate["lat"],
-            "longitude": coordinate["lon"],
-            "country": address["country"],
-            "admin_1": address.get("state", ""),
-            "admin_2": address.get("city", address.get("county", "")),
-            "admin_3": address.get("suburb", ""),
-            "admin_4": address.get("neighbourhood", ""),
-        }
+    # 最後一次儲存剩餘的結果，確保剩餘資料被儲存
+    if result_df.height > 0:
+        save_to_csv(result_df, output_file)
 
-        return record
-
-    else:
-        return None
+    logger.info(f"已生成 {country_code} 的 metadata")
 
 
 def run():
@@ -155,12 +270,12 @@ def run():
     meta_data_folder = os.path.join(args.output_folder, "meta_data")
     cities500_file = os.path.join(args.output_folder, "cities500_optimized.txt")
 
-    logger.info(f"通過 LocationIQ 生成 {args.country_code} 的 metadata")
-
     if not os.path.exists(cities500_file):
-        raise FileExistsError(f"{cities500_file} 不存在，請先下載。")
+        logger.error(f"{cities500_file} 不存在，請先下載。")
+        sys.exit(1)
 
     output_file = os.path.join(meta_data_folder, f"{args.country_code}.csv")
+    ensure_folder_exists(output_file)
 
     process_file(cities500_file, output_file, args.country_code, args.overwrite)
 

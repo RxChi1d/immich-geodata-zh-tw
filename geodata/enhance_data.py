@@ -7,13 +7,23 @@ import sys
 
 def update_taiwan_admin1(cities500_df):
     """
-    以下操作針對 country code 是 TW 的資料進行：
-    1. 讀取 tw_admin1_map.csv
-    2. 將 admin1_code 以 new_id 取代
-    3. admin2_code 以 admin3_code 取代
-    4. admin3_code 以 admin4_code 取代
-    5. admin4_code 清空
+    更新臺灣的行政區代碼。
+    
+    Args:
+        cities500_df (pl.DataFrame): 包含城市資料的 DataFrame。
+        
+    Returns:
+        pl.DataFrame: 更新後的城市資料 DataFrame。
+        
+    Description:
+        以下操作針對 country code 是 TW 的資料進行：
+        1. 讀取 tw_admin1_map.csv
+        2. 將 admin1_code 以 new_id 取代
+        3. admin2_code 以 admin3_code 取代
+        4. admin3_code 以 admin4_code 取代
+        5. admin4_code 清空
     """
+    
     logger.info("開始調整臺灣的 Admin Code")
 
     # 讀取 tw_admin1_map.csv
@@ -66,6 +76,24 @@ def update_taiwan_admin1(cities500_df):
 
 
 def update_cities500(cities_file, extra_file, output_file):
+    """
+    更新 cities500.txt 檔案，將新的城市資料合併進去，並進行資料清理和調整。
+    
+    Args:
+        cities_file (str): 原始的 cities500.txt 檔案路徑。
+        extra_file (str): 額外的城市資料檔案路徑。
+        output_file (str): 更新後的 cities500.txt 檔案儲存路徑。
+    Returns:
+        None
+    功能描述:
+        1. 讀取 cities500.txt 和額外的城市資料檔案。
+        2. 篩選出 geoname_id 不在 cities500.txt 中且人口數大於等於 MIN_POPULATION 的資料。
+        3. 將篩選出的新資料合併到 cities500.txt 中。
+        4. 刪除 country_code 是 TW 且 admin2_code 為空的資料。
+        5. 調整臺灣的 Admin Code。
+        6. 將更新後的資料寫入指定的輸出檔案中。
+    """
+    
     logger.info("開始更新 cites500.txt")
 
     # 讀取 cites500.txt
