@@ -48,27 +48,29 @@ GEODATA_HEADER = [
     "admin_4",
 ]
 
-CITIES_HEADER = [
-    "geoname_id",
-    "name",
-    "asciiname",
-    "alternatenames",
-    "latitude",
-    "longitude",
-    "feature_class",
-    "feature_code",
-    "country_code",
-    "cc2",
-    "admin1_code",
-    "admin2_code",
-    "admin3_code",
-    "admin4_code",
-    "population",
-    "elevation",
-    "dem",
-    "timezone",
-    "modification_date",
-]
+CITIES_SCHEMA = pl.Schema(
+    {
+        "geoname_id": pl.String,
+        "name": pl.String,
+        "asciiname": pl.String,
+        "alternatenames": pl.String,
+        "latitude": pl.Float32,
+        "longitude": pl.Float32,
+        "feature_class": pl.String,
+        "feature_code": pl.String,
+        "country_code": pl.String,
+        "cc2": pl.String,
+        "admin1_code": pl.String,
+        "admin2_code": pl.String,
+        "admin3_code": pl.String,
+        "admin4_code": pl.String,
+        "population": pl.UInt32,
+        "elevation": pl.String,
+        "dem": pl.Int32,
+        "timezone": pl.String,
+        "modification_date": pl.Date,
+    }
+)
 
 MUNICIPALITIES = [
     "臺北市",
@@ -187,6 +189,8 @@ def create_alternate_map(alternate_file, output_path):
 
 
 def load_alternate_names(file_path):
+    logger.info(f"正在從 {file_path} 載入替代名稱對照表")
+    
     if not os.path.exists(file_path):
         logger.info(f"替代名稱檔案 {file_path} 不存在")
 

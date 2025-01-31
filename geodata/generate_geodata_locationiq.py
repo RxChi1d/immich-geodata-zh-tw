@@ -153,7 +153,7 @@ def run():
 
     output_folder = "./output"
     meta_data_folder = os.path.join(args.output_folder, "meta_data")
-    cities500_file = os.path.join(args.output_folder, "cities500_en.txt")
+    cities500_file = os.path.join(args.output_folder, "cities500_optimized.txt")
 
     logger.info(f"通過 LocationIQ 生成 {args.country_code} 的 metadata")
 
