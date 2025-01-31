@@ -1,7 +1,9 @@
 import os
 import pandas as pd
+import polars as pl
+import sys
 
-from utils import load_alternate_names
+from utils import load_alternate_names, ADMIN1_SCHEMA
 
 TAIWAN_ADMIN1 = {
     # 直轄市 (Special Municipalities)
@@ -43,57 +45,56 @@ def get_taiwan_admin1(admin1_path, admin2_path, output_path):
     """
     output_folder = os.path.dirname(output_path)
 
-    amdin1_data = pd.read_csv(
+    admin1_df = pl.read_csv(
         admin1_path,
-        sep="\t",
-        header=None,
-        names=["ID", "Name", "Name_ASCII", "Geoname_ID"],
+        separator="\t",
+        has_header=False,
+        schema=ADMIN1_SCHEMA,
     )
 
-    admin2_data = pd.read_csv(
+    admin2_df = pl.read_csv(
         admin2_path,
-        sep="\t",
-        header=None,
-        names=["ID", "Name", "Name_ASCII", "Geoname_ID"],
+        separator="\t",
+        has_header=False,
+        schema=ADMIN1_SCHEMA,
     )
 
-    alternate_names = load_alternate_names(
-        os.path.join(output_folder, "alternate_chinese_name.json")
-    )  # (key, value) = (Geoname_ID, Name)
+    alternate_names_df = load_alternate_names(
+        os.path.join(output_folder, "alternate_chinese_name.csv")
+    )  # pl.DataFrame: geonameid, name
 
     # 從 admin2Codes.txt 中獲取臺灣的行政區的 geoname_id 和編號 (e.g. TW.03.TPQ)
-    admin1_df = admin2_data[admin2_data["ID"].str.startswith("TW.")]
-    admin1_df = admin1_df.reset_index(drop=True)
+    tw_admin1_df = admin2_df.filter(pl.col("ID").str.starts_with("TW."))
 
-    # 創建 new_admin1_df (header = ["name", "new_id", "old_id", "geoname_id"])
-    new_admin1_df = pd.DataFrame(columns=["name", "en_name", "new_id", "old_id", "geoname_id"])
-    for i in range(len(admin1_df)):
-        geoname_id = admin1_df.loc[i, "Geoname_ID"]
-        old_id = admin1_df.loc[i, "ID"]
-        en_name = admin1_df.loc[i, "Name"]
-        name = alternate_names[str(geoname_id)]
-        new_id = TAIWAN_ADMIN1[name]
+    # 1️. 先 Join `alternate_names_df` 來獲取中文名稱
+    merged_df = tw_admin1_df.join(
+        alternate_names_df, left_on="Geoname_ID", right_on="geoname_id", how="left"
+    )
 
-        new_admin1_df = new_admin1_df._append(
-            {
-                "name": name,
-                "en_name": en_name,
-                "new_id": new_id,
-                "old_id": old_id,
-                "geoname_id": geoname_id,
-            },
-            ignore_index=True,
-        )
+    # 2️. 根據 `name` 轉換為 `new_id`
+    merged_df = merged_df.with_columns(
+        pl.col("name")
+        .map_elements(lambda x: TAIWAN_ADMIN1.get(x, None), return_dtype=pl.String)
+        .alias("new_id")
+    )
 
-    # 依照 new_id 排序
-    new_admin1_df = new_admin1_df.sort_values(by="new_id")
+    # 3️. 選擇需要的欄位，並重新命名
+    new_admin1_df = merged_df.select(
+        [
+            "name",
+            pl.col("Name").alias("name_en"),
+            "new_id",
+            pl.col("ID").alias("old_id"),
+            pl.col("Geoname_ID").alias("geoname_id"),
+        ]
+    ).sort("new_id")
 
-    new_admin1_df.to_csv(output_path, sep=",", index=False)
+    new_admin1_df.write_csv(output_path, include_header=True)
 
 
-def update_taiwan_admin1(admin1_path, new_admin1_map_path, output_path):
+def update_taiwan_admin1(admin1_path, tw_admin1_map_path, output_path):
     """
-    1. 讀取 admin1CodesASCII.txt 和 new_admin1_map.csv
+    1. 讀取 admin1CodesASCII.txt 和 tw_admin1_map.csv
     2. 將台灣的行政區劃資料更新到 admin1CodesASCII.txt
         3.1. 移除 admin1CodesASCII.txt 中 ID 開頭為 "TW." 的行政區劃資料
         3.2. 依照 new_admin1_map ，將新的行政區劃資料插入到 admin1CodesASCII.txt
@@ -101,37 +102,40 @@ def update_taiwan_admin1(admin1_path, new_admin1_map_path, output_path):
     """
 
     # ID, Name, Name_ASCII, Geoname_ID
-    admin1_data = pd.read_csv(
+    admin1_df = pl.read_csv(
         admin1_path,
-        sep="\t",
-        header=None,
-        names=["ID", "Name", "Name_ASCII", "Geoname_ID"],
+        separator="\t",
+        has_header=False,
+        schema=ADMIN1_SCHEMA,
     )
 
-    new_admin1_map = pd.read_csv(new_admin1_map_path, sep=",")
-    
+    tw_admin_map = pl.read_csv(
+        tw_admin1_map_path,
+        schema_overrides={
+            "name": pl.String,
+            "name_en": pl.String,
+            "new_id": pl.String,
+            "old_id": pl.String,
+            "geoname_id": pl.String,
+        },
+    )
+
+    # 準備要插入的新資料，確保欄位一致
+    new_rows = tw_admin_map.select(
+        [
+            pl.col("new_id").alias("ID"),
+            pl.col("name_en").alias("Name"),
+            pl.col("name_en").alias("Name_ASCII"),
+            pl.col("geoname_id").alias("Geoname_ID"),
+        ]
+    )
+
     # 移除 admin1CodesASCII.txt 中 ID 開頭為 "TW." 的行政區劃資料
-    admin1_data = admin1_data[~admin1_data["ID"].str.startswith("TW.")]
+    # 使用 vstack 合併
+    admin1_df = admin1_df.filter(~pl.col("ID").str.starts_with("TW.")).vstack(new_rows)
 
-    # 依照 new_admin1_map ，將新的行政區劃資料插入到 admin1CodesASCII.txt
-    for i in range(len(new_admin1_map)):
-        new_id = new_admin1_map.loc[i, "new_id"]
-        name = new_admin1_map.loc[i, "en_name"]
-        name_ascii = new_admin1_map.loc[i, "en_name"]
-        geoname_id = new_admin1_map.loc[i, "geoname_id"]
-
-        admin1_data = admin1_data._append(
-            {
-                "ID": new_id,
-                "Name": name,
-                "Name_ASCII": name_ascii,
-                "Geoname_ID": geoname_id,
-            },
-            ignore_index=True,
-        )
-
-    # save the new dataframe to the output path
-    admin1_data.to_csv(output_path, sep="\t", index=False)
+    # 儲存新的 admin1CodesASCII.txt
+    admin1_df.write_csv(output_path, include_header=True)
 
 
 if __name__ == "__main__":
@@ -141,7 +145,7 @@ if __name__ == "__main__":
     admin1_path = os.path.join(data_folder, "admin1CodesASCII.txt")
     admin2_path = os.path.join(data_folder, "admin2Codes.txt")
     new_admin1_path = os.path.join(output_folder, "admin1CodesASCII_optimized.txt")
-    new_admin1_map_path = os.path.join(output_folder, "new_admin1_map.csv")
+    tw_admin1_map_path = os.path.join(output_folder, "tw_admin1_map.csv")
 
-    get_taiwan_admin1(admin1_path, admin2_path, new_admin1_map_path)
-    update_taiwan_admin1(admin1_path, new_admin1_map_path, new_admin1_path)
+    get_taiwan_admin1(admin1_path, admin2_path, tw_admin1_map_path)
+    update_taiwan_admin1(admin1_path, tw_admin1_map_path, new_admin1_path)

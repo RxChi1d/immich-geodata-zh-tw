@@ -54,7 +54,7 @@ def process_file(cities500_file, output_file, country_code, overwrite=False):
 
     admin1_map = pd.read_csv(
         os.path.join(
-            os.path.dirname(os.path.dirname(output_file)), "new_admin1_map.csv"
+            os.path.dirname(os.path.dirname(output_file)), "tw_admin1_map.csv"
         ),
         sep=",",
         low_memory=False,
