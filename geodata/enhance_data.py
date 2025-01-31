@@ -129,6 +129,23 @@ def update_cities500(cities_file, extra_file, output_file):
     logger.info(
         f"移除臺灣資料中 {filter_condition.sum()} 筆 admin2_code 為空的資料，剩餘 {cities500_df.height} 筆資料"
     )
+    
+    # 檢查是否有重複座標的資料
+    # 如果有則保留最大人口數的資料
+    # 如果人口數一樣，則保留最小的 geoname_id
+    filter_condition = cities500_df.group_by(["latitude", "longitude"]).agg(
+        pl.max("population").alias("population_max"),
+        pl.min("geoname_id").alias("geoname_id_min"),
+    )
+    
+    cities500_df = cities500_df.join(
+        filter_condition,
+        on=["latitude", "longitude"],
+        how="inner",
+    ).filter(
+        (pl.col("population") == pl.col("population_max")) &
+        (pl.col("geoname_id") == pl.col("geoname_id_min"))
+    ).select(cities500_df.columns[:-2])
 
     # 調整臺灣的 Admin Code
     cities500_df = update_taiwan_admin1(cities500_df)

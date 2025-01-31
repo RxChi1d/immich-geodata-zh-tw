@@ -40,8 +40,8 @@ ADMIN1_SCHEMA = pl.Schema(
 
 GEODATA_SCHEMA = pl.Schema(
     {
-        "longitude": pl.Float32,
-        "latitude": pl.Float32,
+        "longitude": pl.String,
+        "latitude": pl.String,
         "country": pl.String,
         "admin_1": pl.String,
         "admin_2": pl.String,
@@ -56,8 +56,8 @@ CITIES_SCHEMA = pl.Schema(
         "name": pl.String,
         "asciiname": pl.String,
         "alternatenames": pl.String,
-        "latitude": pl.Float32,
-        "longitude": pl.Float32,
+        "latitude": pl.String,
+        "longitude": pl.String,
         "feature_class": pl.String,
         "feature_code": pl.String,
         "country_code": pl.String,
@@ -117,7 +117,7 @@ def create_alternate_map(alternate_file, output_path):
     )
 
     data = data.filter(data["lang"].is_in(CHINESE_PRIORITY))  # 僅保留中文名稱
-
+    
     # 創建 `priority` 欄位，作為優先級判斷
     # - 如果 `is_preferred_name` 為 1，則優先級為 0
     # - 如果 `is_preferred_name` 為 0，則優先級為 CHINESE_PRIORITY 中 key 的 index + 1
