@@ -34,12 +34,22 @@ TAIWAN_ADMIN1 = {
 
 def create_new_taiwan_admin1(admin2_path, output_path):
     """
-    1. 讀取 admin1CodesASCII.txt 和 admin2Codes.txt
-    2. 讀取 alternate_chinese_name.json (中文地名對照表)
-    3. 從 admin2Codes.txt 中獲取臺灣的行政區的 geoname_id 和編號 (e.g. TW.03.TPQ)
-    4. 根據 geoname_id 在 alternate_chinese_name.json 中找到對應的中文名稱
-    5. 根據找到的中文名稱，在 TAIWAN_ADMIN1 找到新的 ID
-    6. 將新的臺灣 admin1 對應表存檔到 output_path (header = ["name", "new_id", "old_id", "geoname_id"])
+    建立新的臺灣一級行政區對應表
+    
+    Args:
+        admin2_path (str): admin2Codes.txt 的檔案路徑
+        output_path (str): 輸出新的臺灣一級行政區對應表的檔案路徑
+        
+    Description:
+        1. 讀取 admin1CodesASCII.txt 和 admin2Codes.txt
+        2. 讀取 alternate_chinese_name.json (中文地名對照表)
+        3. 從 admin2Codes.txt 中獲取臺灣的行政區的 geoname_id 和編號 (e.g. TW.03.TPQ)
+        4. 根據 geoname_id 在 alternate_chinese_name.json 中找到對應的中文名稱
+        5. 根據找到的中文名稱，在 TAIWAN_ADMIN1 找到新的 ID
+        6. 將新的臺灣 admin1 對應表存檔到 output_path (header = ["name", "new_id", "old_id", "geoname_id"])
+        
+    Returns:
+        None   
     """
     logger.info("開始建立新的臺灣一級行政區對應表")
 
@@ -90,11 +100,22 @@ def create_new_taiwan_admin1(admin2_path, output_path):
 
 def update_taiwan_admin1(admin1_path, tw_admin1_map_path, output_path):
     """
-    1. 讀取 admin1CodesASCII.txt 和 tw_admin1_map.csv
-    2. 將臺灣的行政區劃資料更新到 admin1CodesASCII.txt
-        3.1. 移除 admin1CodesASCII.txt 中 ID 開頭為 "TW." 的行政區劃資料
-        3.2. 依照 new_admin1_map ，將新的行政區劃資料插入到 admin1CodesASCII.txt
-        3.4. 將新的行政區劃資料存檔到 output_path
+    更新臺灣的行政區劃資料到 admin1CodesASCII.txt
+    
+    Args:
+        admin1_path (str): admin1CodesASCII.txt 的檔案路徑
+        tw_admin1_map_path (str): tw_admin1_map.csv 的檔案路徑
+        output_path (str): 更新後的 admin1CodesASCII.txt 儲存路徑
+        
+    Returns:
+        None
+        
+    Description:
+        1. 讀取 admin1CodesASCII.txt 和 tw_admin1_map.csv
+        2. 將臺灣的行政區劃資料更新到 admin1CodesASCII.txt
+            2.1. 移除 admin1CodesASCII.txt 中 ID 開頭為 "TW." 的行政區劃資料
+            2.2. 依照 new_admin1_map ，將新的行政區劃資料插入到 admin1CodesASCII.txt
+            2.4. 將新的行政區劃資料存檔到 output_path
     """
     logger.info("開始更新 admin1CodesASCII.txt 中的臺灣資料")
 

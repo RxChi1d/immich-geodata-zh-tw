@@ -38,15 +38,17 @@ ADMIN1_SCHEMA = pl.Schema(
     }
 )
 
-GEODATA_HEADER = [
-    "longitude",
-    "latitude",
-    "country",
-    "admin_1",
-    "admin_2",
-    "admin_3",
-    "admin_4",
-]
+GEODATA_SCHEMA = pl.Schema(
+    {
+        "longitude": pl.Float32,
+        "latitude": pl.Float32,
+        "country": pl.String,
+        "admin_1": pl.String,
+        "admin_2": pl.String,
+        "admin_3": pl.String,
+        "admin_4": pl.String,
+    }
+)
 
 CITIES_SCHEMA = pl.Schema(
     {
@@ -87,38 +89,6 @@ MUNICIPALITIES = [
 CHINESE_PRIORITY = ["zh-Hant", "zh-TW", "zh-HK", "zh", "zh-Hans", "zh-CN", "zh-SG"]
 
 
-def load_meta_data(file_path):
-    """
-    從指定的 CSV 檔案中載入地理數據，將 (longitude, latitude) 作為鍵，
-    其他欄位組成的字典作為值，返回一個字典。
-
-    :param file_path: CSV 檔案路徑
-    :return: 包含地理數據的字典
-    """
-    result = {}
-
-    # 確認檔案是否存在
-    if os.path.exists(file_path):
-        with open(file_path, mode="r", encoding="utf-8") as file:
-            reader = csv.DictReader(file)
-
-            # 逐行讀取資料並構建字典
-            for row in reader:
-                # 使用 (longitude, latitude) 作為鍵
-                key = (row["longitude"].strip(), row["latitude"].strip())
-
-                # 組合其他相關欄位作為值
-                result[key] = {
-                    "country": row["country"].strip(),
-                    "admin_1": row["admin_1"].strip(),
-                    "admin_2": row["admin_2"].strip(),
-                    "admin_3": row["admin_3"].strip(),
-                    "admin_4": row["admin_4"].strip(),
-                }
-
-    return result
-
-
 def ensure_folder_exists(file_path):
     folder = os.path.dirname(file_path)
     if folder:
@@ -127,7 +97,7 @@ def ensure_folder_exists(file_path):
 
 def create_alternate_map(alternate_file, output_path):
     logger.info(f"正在從 {alternate_file} 建立替代名稱對照表")
-    
+
     output_folder = os.path.dirname(output_path)
     ensure_folder_exists(output_path)
 
@@ -181,7 +151,7 @@ def create_alternate_map(alternate_file, output_path):
     data = data.with_columns(
         pl.col("name").str.replace("桃園縣", "桃園市").alias("name")
     )
-    
+
     # 儲存為 alternate_chinese_name.csv
     data.write_csv(output_path)
 
@@ -190,7 +160,7 @@ def create_alternate_map(alternate_file, output_path):
 
 def load_alternate_names(file_path):
     logger.info(f"正在從 {file_path} 載入替代名稱對照表")
-    
+
     if not os.path.exists(file_path):
         logger.info(f"替代名稱檔案 {file_path} 不存在")
 
@@ -213,8 +183,8 @@ def load_alternate_names(file_path):
                     "name": pl.String,
                 }
             ),
-        )       
-        
+        )
+
         logger.info(f"已從 {file_path} 載入替代名稱對照表")
 
         return data
