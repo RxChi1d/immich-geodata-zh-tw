@@ -8,13 +8,13 @@ import sys
 def update_taiwan_admin1(cities500_df):
     """
     更新臺灣的行政區代碼。
-    
+
     Args:
         cities500_df (pl.DataFrame): 包含城市資料的 DataFrame。
-        
+
     Returns:
         pl.DataFrame: 更新後的城市資料 DataFrame。
-        
+
     Description:
         以下操作針對 country code 是 TW 的資料進行：
         1. 讀取 tw_admin1_map.csv
@@ -23,7 +23,7 @@ def update_taiwan_admin1(cities500_df):
         4. admin3_code 以 admin4_code 取代
         5. admin4_code 清空
     """
-    
+
     logger.info("開始調整臺灣的 Admin Code")
 
     # 讀取 tw_admin1_map.csv
@@ -78,7 +78,7 @@ def update_taiwan_admin1(cities500_df):
 def update_cities500(cities_file, extra_file, output_file):
     """
     更新 cities500.txt 檔案，將新的城市資料合併進去，並進行資料清理和調整。
-    
+
     Args:
         cities_file (str): 原始的 cities500.txt 檔案路徑。
         extra_file (str): 額外的城市資料檔案路徑。
@@ -93,7 +93,7 @@ def update_cities500(cities_file, extra_file, output_file):
         5. 調整臺灣的 Admin Code。
         6. 將更新後的資料寫入指定的輸出檔案中。
     """
-    
+
     logger.info("開始更新 cites500.txt")
 
     # 讀取 cites500.txt
@@ -110,7 +110,7 @@ def update_cities500(cities_file, extra_file, output_file):
     #   - `geoname_id` 不在 `cities500_df` 的 `geoname_id` 中
     #   - `population` 大於等於 `MIN_POPULATION`
     filtered_extra_df = extra_df.filter(
-        ~pl.col("geoname_id").is_in(cities500_df["geoname_id"])  # geonameid 不能已存在
+        ~pl.col("geoname_id").is_in(cities500_df["geoname_id"])  # geoname_id 不能已存在
         & (pl.col("population") >= MIN_POPULATION)  # 人口數須 >= MIN_POPULATION
     )
 
@@ -129,7 +129,7 @@ def update_cities500(cities_file, extra_file, output_file):
     logger.info(
         f"移除臺灣資料中 {filter_condition.sum()} 筆 admin2_code 為空的資料，剩餘 {cities500_df.height} 筆資料"
     )
-    
+
     # 檢查是否有重複座標的資料
     # 如果有則保留最大人口數的資料
     # 如果人口數一樣，則保留最小的 geoname_id
@@ -137,24 +137,25 @@ def update_cities500(cities_file, extra_file, output_file):
         pl.max("population").alias("population_max"),
         pl.min("geoname_id").alias("geoname_id_min"),
     )
-    
-    cities500_df = cities500_df.join(
-        filter_condition,
-        on=["latitude", "longitude"],
-        how="inner",
-    ).filter(
-        (pl.col("population") == pl.col("population_max")) &
-        (pl.col("geoname_id") == pl.col("geoname_id_min"))
-    ).select(cities500_df.columns[:-2])
+
+    cities500_df = (
+        cities500_df.join(
+            filter_condition,
+            on=["latitude", "longitude"],
+            how="inner",
+        )
+        .filter(
+            (pl.col("population") == pl.col("population_max"))
+            & (pl.col("geoname_id") == pl.col("geoname_id_min"))
+        )
+        .select(cities500_df.columns)
+        
+    )
 
     # 調整臺灣的 Admin Code
     cities500_df = update_taiwan_admin1(cities500_df)
 
-    cities500_df.write_csv(
-        output_file,
-        separator="\t",
-        include_header=False
-    )
+    cities500_df.write_csv(output_file, separator="\t", include_header=False)
 
     logger.info(f"cites500.txt 更新完成，儲存至 {output_file}")
 
