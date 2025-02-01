@@ -3,7 +3,6 @@
 set -e
 
 OUTPUT_DIR="output"
-ZIP_FILENAME="immich-geodata-zh-tw"
 
 ############################################
 # 設定時間格式和檔案名稱
@@ -77,63 +76,9 @@ fi
 # 產生 release 檔案
 ############################################
 
-RELEASE_DIR="$OUTPUT_DIR/release"
-GEODATA_DIR="$RELEASE_DIR/geodata"
-ZIP_FILE="$ZIP_FILENAME.zip"
-
-# release 資料夾初始化
-rm -rf $RELEASE_DIR
-rm -rf $OUTPUT_DIR/$ZIP_FILENAME
-rm -rf $OUTPUT_DIR/$ZIP_FILE
-mkdir -p $RELEASE_DIR
-mkdir -p $GEODATA_DIR
-
-echo "複製 geoname_data/ne_10m_admin_0_countries.geojson 到 geodata 資料夾..."
-cp geoname_data/ne_10m_admin_0_countries.geojson $GEODATA_DIR
+echo "執行 python geodata/generate_release.py..."
+python geodata/generate_release.py
 if [[ $? -ne 0 ]]; then
-    echo "複製 geojson 檔案失敗！退出。"
+    echo "執行 python geodata/generate_release.py 失敗！退出。"
     exit 1
 fi
-
-echo "複製 output/admin1CodesASCII_translated.txt 到 geodata 資料夾..."
-cp output/admin1CodesASCII_translated.txt $GEODATA_DIR/admin1CodesASCII.txt
-if [[ $? -ne 0 ]]; then
-    echo "複製 admin1CodesASCII.txt 檔案失敗！退出。"
-    exit 1
-fi
-
-echo "複製 output/admin2Codes_translated.txt 到 geodata 資料夾..."
-cp output/admin2Codes_translated.txt $GEODATA_DIR/admin2Codes.txt
-if [[ $? -ne 0 ]]; then
-    echo "複製 admin2Codes.txt 檔案失敗！退出。"
-    exit 1
-fi
-
-echo "複製 output/cities500_translated.txt 到 geodata 資料夾..."
-cp output/cities500_translated.txt $GEODATA_DIR/cities500.txt
-if [[ $? -ne 0 ]]; then
-    echo "複製 cities500.txt 檔案失敗！退出。"
-    exit 1
-fi
-
-# 建立 geodata-date.txt 檔案
-echo "建立 geodata-date.txt 檔案..."
-echo "$CURRENT_DATE" > $GEODATA_DIR/geodata-date.txt
-
-# 複製 i18n-iso-countries 到 release 資料夾
-echo "複製 i18n-iso-countries 到 release 資料夾..."
-cp -r i18n-iso-countries $RELEASE_DIR
-
-# 打包 release 資料夾
-cd $OUTPUT_DIR
-echo "打包 release 資料夾為 $ZIP_FILE..."
-mv release $ZIP_FILENAME
-zip -r "$ZIP_FILE" $ZIP_FILENAME
-mv $ZIP_FILENAME release
-cd ..
-if [[ $? -ne 0 ]]; then
-    echo "打包檔案失敗！退出。"
-    exit 1
-fi
-
-echo "腳本執行完成！打包檔案：$ZIP_FILE"
