@@ -188,8 +188,11 @@ def translate_cities500(
 
         # 如果有匹配的行，取出 admin_2
         if not result.is_empty():
-            return result["admin_2"].item()
-
+            item = result["admin_2"].item()
+            if is_simplified_chinese(item):
+                return converter_s2t.convert(item)
+            return item
+        
         return None  # 若無匹配則回傳 None
 
     cities500_df = cities500_df.with_columns(
@@ -199,11 +202,11 @@ def translate_cities500(
     )
 
     # 2. 透過 alternate_name 進行翻譯
-    cities500_df = (
-        cities500_df.join(alternate_name, on="geoname_id", how="left")
-        .with_columns(pl.col("name_right").alias("alternate_translated_name"))
-        .drop("name_right")
-    )
+    cities500_df = cities500_df.join(alternate_name, on="geoname_id", how="left").with_columns(
+        pl.col("name_right")
+        .map_elements(lambda x: x if is_traditional_chinese(x) else converter_s2t.convert(x), return_dtype=pl.String)
+        .alias("alternate_translated_name")
+    ).drop("name_right")
 
     # 3. 如果 `alternatenames` 存在，則檢查是否有簡體或繁體的名稱
     def extract_chinese_names(alt_names):
@@ -273,7 +276,7 @@ def translate_cities500(
     )
     if not empty_names.is_empty():
         logger.error(f"空地名數量: {empty_names.height}")
-
+        
     # 8. 儲存
     cities500_df.write_csv(output_file, separator="\t", include_header=False)
 
