@@ -71,7 +71,7 @@ def cmd_locationiq(args):
     
     output_folder = args.output_folder
     batch_size = args.batch_size
-    meta_data_folder = os.path.join(output_folder, "meta_data")
+    meta_data_folder = "./meta_data"
     os.makedirs(meta_data_folder, exist_ok=True)
     cities_file = os.path.join(output_folder, "cities500_optimized.txt")
     
@@ -174,7 +174,7 @@ def cmd_release(args):
         qps = args.locationiq_qps if args.locationiq_qps is not None else int(os.environ.get("LOCATIONIQ_QPS", "1"))
         generate_geodata_locationiq.set_locationiq_config(api_key, qps)
         
-        meta_data_folder = os.path.join(output_folder, "meta_data")
+        meta_data_folder = "./meta_data"
         os.makedirs(meta_data_folder, exist_ok=True)
         for cc in args.country_code:
             locationiq_output = os.path.join(meta_data_folder, f"{cc}.csv")
@@ -239,7 +239,7 @@ def main():
     parser_locationiq = subparsers.add_parser("locationiq", help="使用 LocationIQ 取得 metadata")
     parser_locationiq.add_argument("--country-code", type=str, nargs="+", default=["TW"],
                                   help="國家代碼，可提供多個代碼，如: TW JP")
-    parser_locationiq.add_argument("--output-folder", type=str, default="./output", help="輸出資料夾")
+    parser_locationiq.add_argument("--output-folder", type=str, default="./", help="輸出資料夾")
     parser_locationiq.add_argument("--overwrite", action="store_true", help="覆蓋已存在的資料")
     parser_locationiq.add_argument("--batch-size", type=int, default=100, help="每批次寫入數量")
     parser_locationiq.add_argument("--locationiq-api-key", type=str, help="LocationIQ API Key")

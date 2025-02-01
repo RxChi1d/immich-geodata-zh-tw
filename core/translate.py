@@ -27,11 +27,15 @@ def find_duplicate_in_meta(meta_data):
             .filter(pl.col("count") > 1)  # 只保留重複的組合
             .select(["longitude", "latitude"])
         )
-        
+
         # 如果有重複的 (longitude, latitude)，將完整資訊加入結果
         if not duplicate_locs.is_empty():
-            duplicate_rows = df.join(duplicate_locs, on=["longitude", "latitude"], how="inner")
-            duplicate_rows = duplicate_rows.with_columns(pl.lit(country).alias("country_code"))
+            duplicate_rows = df.join(
+                duplicate_locs, on=["longitude", "latitude"], how="inner"
+            )
+            duplicate_rows = duplicate_rows.with_columns(
+                pl.lit(country).alias("country_code")
+            )
             duplicated_entries.append(duplicate_rows)
 
     # 合併結果並顯示
@@ -188,9 +192,6 @@ def translate_cities500(
 
         return None  # 若無匹配則回傳 None
 
-
-    # TODO: 1. JP不應該讀到, 2. JP中的重複值沒有處理
-    find_duplicate_in_meta(meta_data)
     cities500_df = cities500_df.with_columns(
         pl.struct(["country_code", "longitude", "latitude"])
         .map_elements(translate_from_metadata, return_dtype=pl.String)
@@ -358,7 +359,7 @@ def translate_admin1(input_file, alternate_name_file, output_folder):
 def test():
     source_folder = "./geoname_data"
     output_folder = "./output"
-    metadata_folder = os.path.join(output_folder, "meta_data")
+    metadata_folder = "./meta_data"
 
     # 翻譯 cities500
     cities500_file = os.path.join(output_folder, "cities500_optimized.txt")

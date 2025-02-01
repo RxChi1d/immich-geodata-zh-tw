@@ -178,7 +178,7 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
     # 讀取臺灣行政區對照表
     admin1_map = pl.read_csv(
         os.path.join(
-            os.path.dirname(os.path.dirname(output_file)), "tw_admin1_map.csv"
+            "output", "tw_admin1_map.csv"
         ),
     )
 
@@ -289,8 +289,7 @@ def test():
     # 使用參數設定 LocationIQ 配置
     set_locationiq_config(args.locationiq_api_key, args.locationiq_qps)
 
-    output_folder = "./output"
-    meta_data_folder = os.path.join(args.output_folder, "meta_data")
+    meta_data_folder = "./meta_data"
     cities500_file = os.path.join(args.output_folder, "cities500_optimized.txt")
 
     if not os.path.exists(cities500_file):
