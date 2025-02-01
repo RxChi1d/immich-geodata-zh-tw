@@ -1,16 +1,22 @@
 import os
 import sys
+import shutil
 from loguru import logger
 
 from tqdm import tqdm
 import polars as pl
 
-from define import CHINESE_PRIORITY
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
+from core.define import CHINESE_PRIORITY
+
 
 class TqdmLogSink:
     """使用 tqdm.write 來輸出 log，避免影響 tqdm 進度條"""
+
     def write(self, message):
         tqdm.write(message.strip())
+
 
 # 確保 logger 只被設定一次
 if not logger._core.handlers:
@@ -19,16 +25,24 @@ if not logger._core.handlers:
     logger.add(
         TqdmLogSink(),  # 改用 tqdm.write() 避免影響 tqdm 進度條
         format="<green>{time:HH:mm:ss}</green> | "
-               "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-               "<level>{level}</level> - <level>{message}</level>",
+        "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
+        "<level>{level}</level> - <level>{message}</level>",
         level=os.environ.get("LOG_LEVEL", "INFO"),  # 從環境變數讀取等級
         colorize=True,
         backtrace=True,  # 美化 Traceback
-        diagnose=True    # 顯示變數資訊
+        diagnose=True,  # 顯示變數資訊
     )
 
 # 讓其他模組可以直接 `from utils import logger`
 __all__ = ["logger"]
+
+
+def rebuild_folder(folder="output"):
+    if os.path.exists(folder):
+        logger.info(f"正在刪除資料夾 {folder}")
+        shutil.rmtree(folder, ignore_errors=True)
+        os.makedirs(folder, exist_ok=True)
+        logger.info(f"已重建資料夾 {folder}")
 
 
 def ensure_folder_exists(file_path):
