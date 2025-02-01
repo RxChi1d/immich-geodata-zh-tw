@@ -30,15 +30,12 @@ jobs:
       - name: Set current date as env variable
         run: echo "TODAY=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
       - name: Build
-        env: # Or as an environment variable
-          AMAP_API_KEY: ${{ secrets.AMAP_API_KEY }}
-          LOCATIONIQ_API_KEY: ${{ secrets.LOCATIONIQ_API_KEY }}
-        run: bash release.sh
+        run: python main.py release --locationiq-api-key "${{ secrets.LOCATIONIQ_API_KEY }}" --country-code "TW" "JP"
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
           name: Release ${{ env.TODAY }}
-          artifacts: "output/*"
+          artifacts: "output/release.zip"
           draft: false
           generateReleaseNotes: false
           commit: main
@@ -46,4 +43,4 @@ jobs:
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
-          file_pattern: geodata/data/*
+          file_pattern: meta_data/*
