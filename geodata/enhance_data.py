@@ -1,8 +1,10 @@
 import os
-import polars as pl
-from utils import logger, CITIES_SCHEMA
-
 import sys
+
+import polars as pl
+
+from utils import logger
+from define import CITIES_SCHEMA
 
 
 def update_taiwan_admin1(cities500_df):
@@ -40,7 +42,7 @@ def update_taiwan_admin1(cities500_df):
 
     # 如果唯一值數量 < 總數，表示有重複值
     if unique_count < total_count:
-        logger.error(
+        logger.critical(
             f"`admin2_code_match` 有重複值！唯一值數量: {unique_count}, 總數: {total_count}"
         )
         sys.exit(1)

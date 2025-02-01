@@ -1,92 +1,34 @@
-import logging
 import os
-import csv
 import sys
-import pandas as pd
+from loguru import logger
+
 from tqdm import tqdm
 import polars as pl
 
+from define import CHINESE_PRIORITY
 
-class TqdmLoggingHandler(logging.StreamHandler):
-    def emit(self, record):
-        try:
-            msg = self.format(record)
-            tqdm.write(msg)
-            self.flush()
-        except Exception:
-            self.handleError(record)
+class TqdmLogSink:
+    """使用 tqdm.write 來輸出 log，避免影響 tqdm 進度條"""
+    def write(self, message):
+        tqdm.write(message.strip())
 
+# 確保 logger 只被設定一次
+if not logger._core.handlers:
+    logger.remove()  # 移除預設 handlers
 
-logger = logging.getLogger("logger")
-logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))  # 設置最低日誌級別
+    logger.add(
+        TqdmLogSink(),  # 改用 tqdm.write() 避免影響 tqdm 進度條
+        format="<green>{time:HH:mm:ss}</green> | "
+               "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
+               "<level>{level}</level> - <level>{message}</level>",
+        level=os.environ.get("LOG_LEVEL", "INFO"),  # 從環境變數讀取等級
+        colorize=True,
+        backtrace=True,  # 美化 Traceback
+        diagnose=True    # 顯示變數資訊
+    )
 
-console_handler = TqdmLoggingHandler()
-
-# 設置日誌格式
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-console_handler.setFormatter(formatter)
-
-# 添加處理器到 logger
-logger.addHandler(console_handler)
-
-ADMIN1_SCHEMA = pl.Schema(
-    {
-        "ID": pl.String(),
-        "Name": pl.String(),
-        "Name_ASCII": pl.String(),
-        "Geoname_ID": pl.String(),
-    }
-)
-
-GEODATA_SCHEMA = pl.Schema(
-    {
-        "longitude": pl.String,
-        "latitude": pl.String,
-        "country": pl.String,
-        "admin_1": pl.String,
-        "admin_2": pl.String,
-        "admin_3": pl.String,
-        "admin_4": pl.String,
-    }
-)
-
-CITIES_SCHEMA = pl.Schema(
-    {
-        "geoname_id": pl.String,
-        "name": pl.String,
-        "asciiname": pl.String,
-        "alternatenames": pl.String,
-        "latitude": pl.String,
-        "longitude": pl.String,
-        "feature_class": pl.String,
-        "feature_code": pl.String,
-        "country_code": pl.String,
-        "cc2": pl.String,
-        "admin1_code": pl.String,
-        "admin2_code": pl.String,
-        "admin3_code": pl.String,
-        "admin4_code": pl.String,
-        "population": pl.UInt32,
-        "elevation": pl.String,
-        "dem": pl.Int32,
-        "timezone": pl.String,
-        "modification_date": pl.Date,
-    }
-)
-
-MUNICIPALITIES = [
-    "臺北市",
-    "新北市",
-    "桃園市",
-    "臺中市",
-    "臺南市",
-    "高雄市",
-    "基隆市",
-    "新竹市",
-    "嘉義市",
-]
-
-CHINESE_PRIORITY = ["zh-Hant", "zh-TW", "zh-HK", "zh", "zh-Hans", "zh-CN", "zh-SG"]
+# 讓其他模組可以直接 `from utils import logger`
+__all__ = ["logger"]
 
 
 def ensure_folder_exists(file_path):
@@ -117,7 +59,7 @@ def create_alternate_map(alternate_file, output_path):
     )
 
     data = data.filter(data["lang"].is_in(CHINESE_PRIORITY))  # 僅保留中文名稱
-    
+
     # 創建 `priority` 欄位，作為優先級判斷
     # - 如果 `is_preferred_name` 為 1，則優先級為 0
     # - 如果 `is_preferred_name` 為 0，則優先級為 CHINESE_PRIORITY 中 key 的 index + 1
@@ -159,7 +101,7 @@ def create_alternate_map(alternate_file, output_path):
 
 
 def load_alternate_names(file_path):
-    logger.info(f"正在從 {file_path} 載入替代名稱對照表")
+    # logger.info(f"正在從 {file_path} 載入替代名稱對照表")
 
     if not os.path.exists(file_path):
         logger.info(f"替代名稱檔案 {file_path} 不存在")
@@ -167,7 +109,7 @@ def load_alternate_names(file_path):
         alternate_file = "./geoname_data/alternateNamesV2.txt"
 
         if not os.path.exists(alternate_file):
-            logger.error(f"替代名稱檔案 {alternate_file} 不存在")
+            logger.critical(f"替代名稱檔案 {alternate_file} 不存在")
             sys.exit(1)
 
         create_alternate_map(alternate_file, file_path)
@@ -185,7 +127,7 @@ def load_alternate_names(file_path):
             ),
         )
 
-        logger.info(f"已從 {file_path} 載入替代名稱對照表")
+        # logger.info(f"已從 {file_path} 載入替代名稱對照表")
 
         return data
 
