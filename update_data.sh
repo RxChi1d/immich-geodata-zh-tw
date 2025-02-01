@@ -41,3 +41,5 @@ unzip -o $TARGET_DIR/release.zip -d $TARGET_DIR
 # 刪除檔案/資料夾
 echo "刪除 release.zip..."
 rm -rf $TARGET_DIR/release.zip
+
+echo "更新完成"
