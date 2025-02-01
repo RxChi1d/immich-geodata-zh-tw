@@ -71,7 +71,7 @@ def pack(output_dir):
 
 def test():
     output_folder = "output"
-    create_release(output_folder)
+    pack(output_folder)
 
 if __name__ == "__main__":
     logger.error("請使用 main.py 作為主要接口，而非直接執行 generate_release.py")
