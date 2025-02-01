@@ -1,18 +1,15 @@
 import os
 import time
-from tqdm import tqdm
-from utils import (
-    logger,
-    CITIES_SCHEMA,
-    GEODATA_SCHEMA,
-    MUNICIPALITIES,
-    ensure_folder_exists,
-)
+import sys
+import argparse
+
 import requests
 from requests.adapters import HTTPAdapter, Retry
-import argparse
-import sys
 import polars as pl
+from tqdm import tqdm
+
+from utils import logger, ensure_folder_exists
+from define import CITIES_SCHEMA, GEODATA_SCHEMA, MUNICIPALITIES
 
 
 LOCATIONIQ_API_KEY = os.environ["LOCATIONIQ_API_KEY"]
@@ -151,9 +148,7 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
     )
 
     # 建立已查詢座標的 Hash Set，加快查找速度
-    existing_coords = set(
-        zip(existing_data["longitude"], existing_data["latitude"])
-    )
+    existing_coords = set(zip(existing_data["longitude"], existing_data["latitude"]))
 
     # 讀取 cities500.txt
     cities_df = pl.read_csv(
@@ -249,7 +244,7 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
             # API 出錯時，立即寫入當前累積的數據
             save_to_csv(result_df, output_file)
 
-            logger.error(f"API 錯誤: {e}，座標: {loc}")
+            logger.critical(f"API 錯誤: {e}，座標: {loc}")
             sys.exit(1)
 
     # 最後一次儲存剩餘的結果，確保剩餘資料被儲存
@@ -271,7 +266,7 @@ def run():
     cities500_file = os.path.join(args.output_folder, "cities500_optimized.txt")
 
     if not os.path.exists(cities500_file):
-        logger.error(f"{cities500_file} 不存在，請先下載。")
+        logger.critical(f"{cities500_file} 不存在，請先下載。")
         sys.exit(1)
 
     output_file = os.path.join(meta_data_folder, f"{args.country_code}.csv")

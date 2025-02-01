@@ -1,6 +1,6 @@
 opencc
-zhconv
 requests
 tqdm
 polars
 regex
+loguru

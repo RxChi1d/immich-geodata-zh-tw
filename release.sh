@@ -13,6 +13,17 @@ CURRENT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%S+00:00")
 TODAY_DATE=$(date -u +"%Y-%m-%d")
 
 ############################################
+# 下載 geoname_data 資料
+############################################
+
+echo "執行 geodata/prepare_geoname_data.py..."
+python geodata/prepare_geoname_data.py
+if [[ $? -ne 0 ]]; then
+    echo "執行 geodata/prepare_geoname_data.py 失敗！退出。"
+    exit 1
+fi
+
+############################################
 # 初始化資料夾
 ############################################
 
@@ -20,21 +31,10 @@ rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
 ############################################
-# 下載 geoname_data 資料
-############################################
-
-echo "執行 prepare_geoname_data.sh..."
-bash prepare_geoname_data.sh
-if [[ $? -ne 0 ]]; then
-    echo "執行 prepare_geoname_data.sh 失敗！退出。"
-    exit 1
-fi
-
-############################################
 # 優化 geoname_data 資料
 ############################################
 
-# 修改 admin1CodesASCII.txt 檔案以符合台灣慣用格式
+# 修改 admin1CodesASCII.txt 檔案以符合臺灣慣用格式
 echo "執行 python geodata/modify_admin1.py..."
 python geodata/modify_admin1.py
 if [[ $? -ne 0 ]]; then
@@ -95,8 +95,8 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
-echo "複製 output/admin1CodesASCII_optimized_translated.txt 到 geodata 資料夾..."
-cp output/admin1CodesASCII_optimized_translated.txt $GEODATA_DIR/admin1CodesASCII.txt
+echo "複製 output/admin1CodesASCII_translated.txt 到 geodata 資料夾..."
+cp output/admin1CodesASCII_translated.txt $GEODATA_DIR/admin1CodesASCII.txt
 if [[ $? -ne 0 ]]; then
     echo "複製 admin1CodesASCII.txt 檔案失敗！退出。"
     exit 1
