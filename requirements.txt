@@ -1,6 +1,6 @@
-opencc
-requests
-tqdm
-polars
-regex
-loguru
+opencc==1.1.9
+requests==2.32.3
+tqdm==4.67.1
+polars==1.21.0
+regex==2024.11.6
+loguru==0.7.3
