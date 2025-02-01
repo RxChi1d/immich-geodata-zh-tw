@@ -1,86 +1,99 @@
-# Immich 反向地理編碼 - 臺灣特化
-
-本專案為 Immich 提供反向地理編碼功能的臺灣特化優化，旨在提升地理資訊的準確性及使用體驗。主要功能包括：
-
-- **中文化處理**：將國內外地理名稱轉換為符合臺灣用語的繁體中文。
-- **行政區優化**：解決臺灣直轄市與省轄縣市僅顯示地區名稱的問題。
-
-### 使用前後對比
-![使用前後對比](./image/example.png)
-
+# Immich 反向地理編碼 - 臺灣特化  
+  
+本專案為 Immich 提供反向地理編碼功能的臺灣特化優化，旨在提升地理資訊的準確性及使用體驗。主要功能包括：  
+  
+- **中文化處理**：將國內外地理名稱轉換為符合臺灣用語的繁體中文。  
+- **行政區優化**：解決臺灣直轄市與省轄縣市僅顯示地區名稱的問題。  
+  
+### 使用前後對比  
+![使用前後對比](./image/example.png)  
+  
+> **NOTE**:  
+> 由於 Immich 反向地理解析功能基於 GeoNames 資料庫座標，以最近距離原則匹配地理名稱，因此部分地理名稱可能無法精確匹配，或出現不符合預期的結果。  
+  
 ## 使用方式
-
-1. **下載檔案**  
-   前往 [Release 頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases/tag/release) 下載 `immich-geodata-zh-tw.zip`，並將其解壓縮。
-
-2. **修改 `docker-compose.yml` 配置**  
+  
+1. **修改 `docker-compose.yml` 配置**  
    在 `volumes` 中新增以下映射 (路徑請按需求調整)：
    ```yaml
    volumes:
-     - ./geodata:/build/geodata:ro
-     - ./i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs:ro
+     - /mnt/user/appdata/immich:/build/geodata:ro
+     - /mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs:ro
    ```
-   或根據不同部署方式，自行替換上述文件夾。
-
+  
+2. **下載臺灣特化資料**  
+   下載方式有兩種： 通過腳本自動下載（適用於後續更新）和手動下載並解壓。  
+       
+   1. **腳本下載**  
+      參考本專案中的 `update_data.sh` 腳本，修改 `TARGET_DIR` 為存放 geodata 和 i18n-iso-countries 的資料夾路徑，並執行腳本：  
+      ```bash
+      bash update_data.sh
+      ```  
+      > **NOTE**:  
+      > UnRAID 使用者可以通過 User Scripts 插件執行腳本。
+     
+   2. **手動下載**  
+      前往 [Release 頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest) 下載 `release.zip`，並將其解壓縮至指定位置。
+  
 3. **重啟 Immich**  
-   執行以下命令以重啟 Immich：
-   ```bash
+   執行以下命令以重啟 Immich： 
+   ```bash  
    # 如果使用 docker-compose 部署
    docker compose down && docker compose up
-   ```
+   ```  
    或  
-   ```bash
+   ```bash  
    # 如果使用 docker 部署
    docker restart immich_server
-   ```
-   - 啟動後，檢查日誌中是否顯示 `10000 geodata records imported` 等類似訊息，確認 geodata 已成功更新。
-   - 若未更新，請修改 `geodata/geodata-date.txt` 為一個更新的時間戳，確保其晚於 Immich 上次加載的時間。
-
+   ```  
+   - 啟動後，檢查日誌中是否顯示 `10000 geodata records imported` 等類似訊息，確認 geodata 已成功更新。  
+   - 若未更新，請修改 `geodata/geodata-date.txt` 為一個更新的時間戳，確保其晚於 Immich 上次加載的時間。  
+  
 4. **重新提取照片元數據**  
-   登錄 Immich 管理後台，前往 **系統管理 > 任務**，點擊 **提取元數據 > 全部**，以觸發照片元數據的重新提取。完成後，所有照片的地理資訊將顯示為中文，新上傳的照片則無需額外操作，並支援中文搜尋。
-
-## 臺灣特化邏輯
-
-1. **中文化**：調整地理名稱的翻譯優先級，優先使用符合臺灣用語的中文翻譯。
-2. **行政區調整**：因臺灣已將省級行政區虛級化，將 Immich 的行政區邏輯調整如下：
-   - 一級行政區：包含 22 個直轄市及省轄縣市（如臺北市、高雄市）。
-   - 二級行政區：包含各縣市的次級區域（如新北市的板橋區）。
-
-## 本地運行資料處理
+   登錄 Immich 管理後台，前往 **系統管理 > 任務**，點擊 **提取元數據 > 全部**，以觸發照片元數據的重新提取。完成後，所有照片的地理資訊將顯示為中文，新上傳的照片則無需額外操作，並支援中文搜尋。  
+  
+## 臺灣特化邏輯  
+  
+1. **中文化**：調整地理名稱的翻譯優先級，優先使用符合臺灣用語的中文翻譯。  
+2. **行政區調整**：因臺灣已將省級行政區虛級化，將 Immich 的行政區邏輯調整如下：  
+   - 一級行政區：包含 22 個直轄市及省轄縣市（如臺北市、高雄市）。  
+   - 二級行政區：包含各縣市的次級區域（如新北市的板橋區）。  
+  
+## 本地運行資料處理  
+  
 1. **安裝依賴**  
    可以使用 requirements.txt 安裝所需的 Python 依賴。  
-   ```bash
+   ```bash  
    pip install -r requirements.txt
-   ```
-   或根據下表自行安裝：
-      | Package | Version |
-      | --- | --- |
-      | opencc | 1.1.9 |
-      | requests | 2.32.3 |
-      | tqdm | 4.67.1 |
-      | polars | 1.21.0 |
-      | regex | 2024.11.6 |
-      | loguru | 0.7.3 |
+   ```  
+   或根據下表自行安裝：  
+      | Package  | Version   |
+      | -------- | --------- |
+      | opencc   | 1.1.9     |
+      | requests | 2.32.3    |
+      | tqdm     | 4.67.1    |
+      | polars   | 1.21.0    |
+      | regex    | 2024.11.6 |
+      | loguru   | 0.7.3     |
    
-2. 至 [LocationIQ](https://locationiq.com/) 註冊帳號，並取得 API Key。
-3. **執行`main.py`**
-   ```bash
+2. 至 [LocationIQ](https://locationiq.com/) 註冊帳號，並取得 API Key。  
+3. **執行`main.py`**  
+   ```bash  
    python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "TW" "JP"
-   ```
-   > **NOTE:**
-   > - 可以通過 `python main.py --help` 或 `python main.py release --help` 查看更多選項。
-   > - `--country-code` 參數可指定需要處理的國家代碼，多個代碼之間使用空格分隔。(目前僅測試過 TW、JP)
-   
-   > **WARNING:**
-   > - 由於 LocationIQ 的 API 有請求次數限制 (可登入後於後台查看)，因此請注意要處理的國家的地名數量，以免超出限制。
-   > - 本專案允許 LocationIQ 反向地理編碼查詢的進度恢復，若超過當日請求限制，可於更換 api 金鑰或次日繼續執行。
-   >   - 需加上 `--pass-cleanup`參數，以取消重設資料夾功能： `python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "TW" "JP" --pass-cleanup`。
-
-## 致謝
-
-本專案基於 [immich-geodata-cn](https://github.com/ZingLix/immich-geodata-cn) 修改，特別感謝原作者 [ZingLix](https://github.com/ZingLix) 的貢獻。
-
-## 授權條款
-
-本專案採用 GPL 授權。
-
+   ```  
+   > **NOTE:**  
+   > - 可以通過 `python main.py --help` 或 `python main.py release --help` 查看更多選項。  
+   > - `--country-code` 參數可指定需要處理的國家代碼，多個代碼之間使用空格分隔。(目前僅測試過 TW、JP)  
+     
+   > **WARNING:**  
+   > - 由於 LocationIQ 的 API 有請求次數限制 (可登入後於後台查看)，因此請注意要處理的國家的地名數量，以免超出限制。  
+   > - 本專案允許 LocationIQ 反向地理編碼查詢的進度恢復，若超過當日請求限制，可於更換 api 金鑰或次日繼續執行。  
+   >   - 需加上 `--pass-cleanup`參數，以取消重設資料夾功能： `python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "TW" "JP" --pass-cleanup`。  
+  
+## 致謝  
+  
+本專案基於 [immich-geodata-cn](https://github.com/ZingLix/immich-geodata-cn) 修改，特別感謝原作者 [ZingLix](https://github.com/ZingLix) 的貢獻。  
+  
+## 授權條款  
+  
+本專案採用 GPL 授權。  
