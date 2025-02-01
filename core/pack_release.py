@@ -22,7 +22,7 @@ def remove_old_releases(output_dir):
 
 def pack(output_dir):
     current_date = datetime.now().strftime("%Y-%m-%d")
-    release_name = f"release_{current_date}"
+    release_name = "release"
     release_dir = os.path.join(output_dir, release_name)
     geodata_dir = os.path.join(release_dir, "geodata")
     zip_file = os.path.join(output_dir, f"{release_name}.zip")
