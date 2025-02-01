@@ -46,10 +46,35 @@
    - 一級行政區：包含 22 個直轄市及省轄縣市（如臺北市、高雄市）。
    - 二級行政區：包含各縣市的次級區域（如新北市的板橋區）。
 
-## TODO
-
-- 優化其他國家城市名稱的中文翻譯。
-- 優化資料處理的效率。
+## 本地運行資料處理
+1. **安裝依賴**  
+   可以使用 requirements.txt 安裝所需的 Python 依賴。  
+   ```bash
+   pip install -r requirements.txt
+   ```
+   或根據下表自行安裝：
+      | Package | Version |
+      | --- | --- |
+      | opencc | 1.1.9 |
+      | requests | 2.32.3 |
+      | tqdm | 4.67.1 |
+      | polars | 1.21.0 |
+      | regex | 2024.11.6 |
+      | loguru | 0.7.3 |
+   
+2. 至 [LocationIQ](https://locationiq.com/) 註冊帳號，並取得 API Key。
+3. **執行`main.py`**
+   ```bash
+   python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "TW" "JP"
+   ```
+   > **NOTE:**
+   > - 可以通過 `python main.py --help` 或 `python main.py release --help` 查看更多選項。
+   > - `--country-code` 參數可指定需要處理的國家代碼，多個代碼之間使用空格分隔。(目前僅測試過 TW、JP)
+   
+   > **WARNING:**
+   > - 由於 LocationIQ 的 API 有請求次數限制 (可登入後於後台查看)，因此請注意要處理的國家的地名數量，以免超出限制。
+   > - 本專案允許 LocationIQ 反向地理編碼查詢的進度恢復，若超過當日請求限制，可於更換 api 金鑰或次日繼續執行。
+   >   - 需加上 `--pass-cleanup`參數，以取消重設資料夾功能： `python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "TW" "JP" --pass-cleanup`。
 
 ## 致謝
 
