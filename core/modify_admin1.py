@@ -1,8 +1,11 @@
 import os
+import sys
 import polars as pl
 
-from utils import logger, load_alternate_names
-from define import ADMIN1_SCHEMA, TAIWAN_ADMIN1
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
+from core.utils import logger, load_alternate_names
+from core.define import ADMIN1_SCHEMA, TAIWAN_ADMIN1
 
 
 def create_new_taiwan_admin1(admin2_path, output_path):
@@ -57,7 +60,7 @@ def create_new_taiwan_admin1(admin2_path, output_path):
     # 3️. 選擇需要的欄位，並重新命名
     new_admin1_df = merged_df.select(
         [
-            "name",
+            pl.col("name_right").alias("name"),
             pl.col("name").alias("name_en"),
             "new_id",
             pl.col("id").alias("old_id"),
@@ -135,7 +138,9 @@ def update_taiwan_admin1(admin1_path, tw_admin1_map_path, output_path):
     logger.info(f"admin1CodesASCII.txt 中的臺灣資料更新完成，儲存至 {output_path}")
 
 
-if __name__ == "__main__":
+def test():
+    logger.info("開始執行測試")
+
     data_folder = "geoname_data"
     output_folder = "output"
 
@@ -146,3 +151,7 @@ if __name__ == "__main__":
 
     create_new_taiwan_admin1(admin2_path, tw_admin1_map_path)
     update_taiwan_admin1(admin1_path, tw_admin1_map_path, new_admin1_path)
+
+
+if __name__ == "__main__":
+    logger.error("請使用 main.py 作為主要接口，而非直接執行 modify_admin1.py")

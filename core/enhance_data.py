@@ -1,10 +1,11 @@
 import os
 import sys
-
 import polars as pl
 
-from utils import logger
-from define import CITIES_SCHEMA
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
+from core.utils import logger
+from core.define import CITIES_SCHEMA
 
 
 def update_taiwan_admin1(cities500_df):
@@ -77,7 +78,7 @@ def update_taiwan_admin1(cities500_df):
     return cities500_df
 
 
-def update_cities500(cities_file, extra_file, output_file):
+def update_cities500(cities_file, extra_file, output_file, min_population=100):
     """
     更新 cities500.txt 檔案，將新的城市資料合併進去，並進行資料清理和調整。
 
@@ -113,7 +114,7 @@ def update_cities500(cities_file, extra_file, output_file):
     #   - `population` 大於等於 `MIN_POPULATION`
     filtered_extra_df = extra_df.filter(
         ~pl.col("geoname_id").is_in(cities500_df["geoname_id"])  # geoname_id 不能已存在
-        & (pl.col("population") >= MIN_POPULATION)  # 人口數須 >= MIN_POPULATION
+        & (pl.col("population") >= min_population)  # 人口數須 >= MIN_POPULATION
     )
 
     # 合併新資料到 `cities500_df`
@@ -151,7 +152,6 @@ def update_cities500(cities_file, extra_file, output_file):
             & (pl.col("geoname_id") == pl.col("geoname_id_min"))
         )
         .select(cities500_df.columns)
-        
     )
 
     # 調整臺灣的 Admin Code
@@ -162,8 +162,8 @@ def update_cities500(cities_file, extra_file, output_file):
     logger.info(f"cites500.txt 更新完成，儲存至 {output_file}")
 
 
-if __name__ == "__main__":
-    MIN_POPULATION = 100
+def test():
+    min_population = 100
 
     # 文件路径
     data_base_folder = "./geoname_data"
@@ -174,4 +174,8 @@ if __name__ == "__main__":
     extra_file = os.path.join(extra_data_folder, "TW.txt")
     output_file = os.path.join(output_folder, "cities500_optimized.txt")
 
-    update_cities500(cities_file, extra_file, output_file)
+    update_cities500(cities_file, extra_file, output_file, min_population)
+
+
+if __name__ == "__main__":
+    logger.error("請使用 main.py 作為主要接口，而非直接執行 enhance_data.py")

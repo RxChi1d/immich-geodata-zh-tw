@@ -6,12 +6,40 @@ import regex
 import opencc
 import polars as pl
 
-from define import CITIES_SCHEMA, GEODATA_SCHEMA, ADMIN1_SCHEMA
-from utils import ensure_folder_exists, logger, load_alternate_names
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
+from core.define import CITIES_SCHEMA, GEODATA_SCHEMA, ADMIN1_SCHEMA
+from core.utils import ensure_folder_exists, logger, load_alternate_names
 
 # 初始化簡繁轉換器
 converter_t2s = opencc.OpenCC("t2s")
 converter_s2t = opencc.OpenCC("s2t")
+
+
+def find_duplicate_in_meta(meta_data):
+    duplicated_entries = []
+
+    for country, df in meta_data.items():
+        # 計算 (longitude, latitude) 的出現次數
+        duplicate_locs = (
+            df.group_by(["longitude", "latitude"])
+            .agg(pl.count().alias("count"))
+            .filter(pl.col("count") > 1)  # 只保留重複的組合
+            .select(["longitude", "latitude"])
+        )
+        
+        # 如果有重複的 (longitude, latitude)，將完整資訊加入結果
+        if not duplicate_locs.is_empty():
+            duplicate_rows = df.join(duplicate_locs, on=["longitude", "latitude"], how="inner")
+            duplicate_rows = duplicate_rows.with_columns(pl.lit(country).alias("country_code"))
+            duplicated_entries.append(duplicate_rows)
+
+    # 合併結果並顯示
+    if duplicated_entries:
+        duplicated_df = pl.concat(duplicated_entries)
+        print(duplicated_df)
+    else:
+        print("No non-unique longitude/latitude found.")
 
 
 def is_chinese(text):
@@ -160,6 +188,9 @@ def translate_cities500(
 
         return None  # 若無匹配則回傳 None
 
+
+    # TODO: 1. JP不應該讀到, 2. JP中的重複值沒有處理
+    find_duplicate_in_meta(meta_data)
     cities500_df = cities500_df.with_columns(
         pl.struct(["country_code", "longitude", "latitude"])
         .map_elements(translate_from_metadata, return_dtype=pl.String)
@@ -324,7 +355,7 @@ def translate_admin1(input_file, alternate_name_file, output_folder):
     logger.info(f"翻譯文件已儲存至 {output_file}")
 
 
-def run():
+def test():
     source_folder = "./geoname_data"
     output_folder = "./output"
     metadata_folder = os.path.join(output_folder, "meta_data")
@@ -349,4 +380,4 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    logger.error("請使用 main.py 作為主要接口，而非直接執行 translate.py")

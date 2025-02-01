@@ -1,4 +1,21 @@
+"""
+define.py
+
+此模組定義了專案中各種資料處理所需的 schema 與常數，
+供其他功能模組調用。
+
+注意：
+    此模組不應該被直接執行，請使用 main.py 作為專案的主要接口。
+"""
+
+import os
+import sys
+
 import polars as pl
+
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
+from core.utils import logger
 
 ADMIN1_SCHEMA = pl.Schema(
     {
@@ -86,3 +103,6 @@ TAIWAN_ADMIN1 = {
     "金門縣": "TW.21",
     "連江縣": "TW.22",
 }
+
+if __name__ == "__main__":
+    logger.error("這個模組不應該被直接執行，請使用 main.py 作為專案的主要接口。")

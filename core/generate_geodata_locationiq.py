@@ -1,6 +1,6 @@
 import os
-import time
 import sys
+import time
 import argparse
 
 import requests
@@ -8,12 +8,10 @@ from requests.adapters import HTTPAdapter, Retry
 import polars as pl
 from tqdm import tqdm
 
-from utils import logger, ensure_folder_exists
-from define import CITIES_SCHEMA, GEODATA_SCHEMA, MUNICIPALITIES
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-
-LOCATIONIQ_API_KEY = os.environ["LOCATIONIQ_API_KEY"]
-LOCATIONIQ_QPS = int(os.environ.get("LOCATIONIQ_QPS", "1"))
+from core.utils import logger, ensure_folder_exists
+from core.define import CITIES_SCHEMA, GEODATA_SCHEMA, MUNICIPALITIES
 
 
 s = requests.Session()
@@ -21,6 +19,23 @@ s = requests.Session()
 retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[403, 500, 502, 503, 504])
 
 s.mount("https://", HTTPAdapter(max_retries=retries))
+
+# 預設值（若沒有設定，可能會在使用時出現錯誤）
+LOCATIONIQ_API_KEY = None
+LOCATIONIQ_QPS = 1
+
+
+def set_locationiq_config(api_key, qps):
+    """
+    設定 LocationIQ 相關參數。
+
+    Args:
+        api_key (str): LocationIQ API Key
+        qps (int): 每秒查詢次數限制
+    """
+    global LOCATIONIQ_API_KEY, LOCATIONIQ_QPS
+    LOCATIONIQ_API_KEY = api_key
+    LOCATIONIQ_QPS = qps
 
 
 def get_loc_from_locationiq(lat, lon):
@@ -136,6 +151,8 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
     """
 
     logger.info(f"通過 LocationIQ 生成 {country_code} 的 metadata")
+    logger.info(f"LocationIQ API Key: {LOCATIONIQ_API_KEY}")
+    logger.info(f"LocationIQ QPS: {LOCATIONIQ_QPS}")
 
     # 嘗試讀取已存在的 meta_data (恢復進度)
     existing_data = (
@@ -254,12 +271,23 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
     logger.info(f"已生成 {country_code} 的 metadata")
 
 
-def run():
+def test():
     parser = argparse.ArgumentParser()
+    # 加入 LocationIQ 的參數
+    parser.add_argument(
+        "--locationiq-api-key", type=str, required=True, help="LocationIQ API Key"
+    )
+    parser.add_argument(
+        "--locationiq-qps", type=int, default=1, help="LocationIQ 每秒查詢次數限制"
+    )
+
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--country_code", type=str, default="TW")
     parser.add_argument("--output_folder", type=str, default="./output")
     args = parser.parse_args()
+
+    # 使用參數設定 LocationIQ 配置
+    set_locationiq_config(args.locationiq_api_key, args.locationiq_qps)
 
     output_folder = "./output"
     meta_data_folder = os.path.join(args.output_folder, "meta_data")
@@ -276,4 +304,6 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    logger.error(
+        "請使用 main.py 作為主要接口，而非直接執行 generate_geodata_locationiq.py"
+    )
