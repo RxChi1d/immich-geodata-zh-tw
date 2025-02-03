@@ -128,22 +128,20 @@ def load_alternate_names(file_path):
 
         create_alternate_map(alternate_file, file_path)
 
-        return load_alternate_names(file_path)
-    else:
-        data = pl.read_csv(
-            file_path,
-            has_header=True,
-            schema=pl.Schema(
-                {
-                    "geoname_id": pl.String,
-                    "name": pl.String,
-                }
-            ),
-        )
+    data = pl.read_csv(
+        file_path,
+        has_header=True,
+        schema=pl.Schema(
+            {
+                "geoname_id": pl.String,
+                "name": pl.String,
+            }
+        ),
+    )
 
-        # logger.info(f"已從 {file_path} 載入替代名稱對照表")
+    # logger.info(f"已從 {file_path} 載入替代名稱對照表")
 
-        return data
+    return data
 
 
 if __name__ == "__main__":
