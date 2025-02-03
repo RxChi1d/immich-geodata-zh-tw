@@ -17,14 +17,14 @@
    在 `volumes` 中新增以下映射 (路徑請按需求調整)：
    ```yaml
    volumes:
-     - /mnt/user/appdata/immich:/build/geodata:ro
+     - /mnt/user/appdata/immich/geodata:/build/geodata:ro
      - /mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs:ro
    ```
   
 2. **下載臺灣特化資料**  
    下載方式有兩種： 通過腳本自動下載（適用於後續更新）和手動下載並解壓。  
        
-   1. **腳本下載**  
+   1. **腳本下載  (推薦，便於更新)**  
       參考本專案中的 `update_data.sh` 腳本，修改 `TARGET_DIR` 為存放 geodata 和 i18n-iso-countries 的資料夾路徑，並執行腳本：  
       ```bash
       bash update_data.sh
@@ -58,6 +58,13 @@
 2. **行政區調整**：因臺灣已將省級行政區虛級化，將 Immich 的行政區邏輯調整如下：  
    - 一級行政區：包含 22 個直轄市及省轄縣市（如臺北市、高雄市）。  
    - 二級行政區：包含各縣市的次級區域（如新北市的板橋區）。  
+  
+## 更新資料
+  
+1. **更新地理資料**  
+   下載最新的 `release.zip`，並解壓至指定位置。（參考**使用方式**第一步驟）
+2. **重新提取照片元數據**   
+   方法同**使用方式**第四步驟。
   
 ## 本地運行資料處理  
   
