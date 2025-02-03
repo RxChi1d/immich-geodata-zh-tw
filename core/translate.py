@@ -192,7 +192,7 @@ def translate_cities500(
             if is_simplified_chinese(item):
                 return converter_s2t.convert(item)
             return item
-        
+
         return None  # 若無匹配則回傳 None
 
     cities500_df = cities500_df.with_columns(
@@ -202,11 +202,18 @@ def translate_cities500(
     )
 
     # 2. 透過 alternate_name 進行翻譯
-    cities500_df = cities500_df.join(alternate_name, on="geoname_id", how="left").with_columns(
-        pl.col("name_right")
-        .map_elements(lambda x: x if is_traditional_chinese(x) else converter_s2t.convert(x), return_dtype=pl.String)
-        .alias("alternate_translated_name")
-    ).drop("name_right")
+    cities500_df = (
+        cities500_df.join(alternate_name, on="geoname_id", how="left")
+        .with_columns(
+            pl.col("name_right")
+            .map_elements(
+                lambda x: x if is_traditional_chinese(x) else converter_s2t.convert(x),
+                return_dtype=pl.String,
+            )
+            .alias("alternate_translated_name")
+        )
+        .drop("name_right")
+    )
 
     # 3. 如果 `alternatenames` 存在，則檢查是否有簡體或繁體的名稱
     def extract_chinese_names(alt_names):
@@ -232,7 +239,7 @@ def translate_cities500(
         .alias("alternatenames_translated")
     )
 
-    # 將 "" 轉換為 None，以便 coalesce 時能夠正確處理Ｆ
+    # 將 "" 轉換為 None，以便 coalesce 時能夠正確處理
     cities500_df = cities500_df.with_columns(
         [
             pl.when(pl.col(col).cast(pl.String) == "")
@@ -264,20 +271,30 @@ def translate_cities500(
         #     logger.warning(f"未處理的行: {row['geoname_id']} {row['name']}")
         logger.warning(f"未翻譯的地名數量: {unprocessed.height}")
 
-    # 6. 更新 name 和 asciiname
+    # 6. 處理例外情況
+    #  裏 -> 里
+    cities500_df = cities500_df.with_columns(
+        pl.col("final_name")
+        .map_elements(
+            lambda x: x.replace("裏", "里") if "裏" in x else x, return_dtype=pl.String
+        )
+        .alias("final_name")
+    )
+
+    # 7. 更新 name 和 asciiname
     cities500_df = cities500_df.with_columns(
         pl.coalesce(["final_name", "name"]).alias("name"),
         pl.coalesce(["final_name", "name"]).alias("asciiname"),
     ).drop("final_name")
 
-    # 7. 紀錄空地名的行
+    # 8. 紀錄空地名的行
     empty_names = cities500_df.filter(
         (pl.col("name").is_null()) | (pl.col("name") == "")
     )
     if not empty_names.is_empty():
         logger.error(f"空地名數量: {empty_names.height}")
-        
-    # 8. 儲存
+
+    # 9. 儲存
     cities500_df.write_csv(output_file, separator="\t", include_header=False)
 
     logger.info(f"已翻譯 cities500，結果已儲存至 {output_file}")
