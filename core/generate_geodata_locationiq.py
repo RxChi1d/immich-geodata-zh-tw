@@ -177,9 +177,7 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
 
     # 讀取臺灣行政區對照表
     admin1_map = pl.read_csv(
-        os.path.join(
-            "output", "tw_admin1_map.csv"
-        ),
+        os.path.join("output", "tw_admin1_map.csv"),
     )
 
     # 篩選指定國家
@@ -205,7 +203,9 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
 
             # 如果 API 返回 None，則記錄錯誤並跳過
             if record_df is None or record_df.is_empty():
-                logger.warning(f"查詢失敗，座標: {loc}")
+                logger.warning(
+                    f"查詢失敗，geoname_id: {row['geoname_id']}, 座標: {loc}"
+                )
                 continue
 
             """
@@ -282,8 +282,8 @@ def test():
     )
 
     parser.add_argument("--overwrite", action="store_true")
-    parser.add_argument("--country_code", type=str, default="TW")
-    parser.add_argument("--output_folder", type=str, default="./output")
+    parser.add_argument("--country-code", type=str, default="TW")
+    parser.add_argument("--output-folder", type=str, default="./output")
     args = parser.parse_args()
 
     # 使用參數設定 LocationIQ 配置

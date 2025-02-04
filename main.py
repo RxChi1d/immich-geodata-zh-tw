@@ -98,7 +98,7 @@ def cmd_translate(args):
     """翻譯地名資料，包含 cities500 與 admin1/admin2"""
     source_folder = args.source_folder
     output_folder = args.output_folder
-    metadata_folder = os.path.join(output_folder, "meta_data")
+    metadata_folder = "./meta_data"
 
     # 處理 cities500 翻譯
     cities500_file = os.path.join(output_folder, "cities500_optimized.txt")
@@ -211,7 +211,7 @@ def cmd_release(args):
     # 6. translate
     if not args.pass_translate:
         logger.info("=== 執行 translate 步驟 ===")
-        metadata_folder = os.path.join(output_folder, "meta_data")
+        metadata_folder = "./meta_data"
         translated_cities = os.path.join(output_folder, "cities500_translated.txt")
         alternate_name_file = os.path.join(output_folder, "alternate_chinese_name.csv")
         translate.translate_cities500(
