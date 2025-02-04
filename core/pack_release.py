@@ -67,11 +67,15 @@ def pack(output_dir):
 
     # 壓縮 release 目錄
     shutil.make_archive(os.path.join(output_dir, release_name), "zip", release_dir)
+    shutil.make_archive(os.path.join(output_dir, release_name), "gztar", release_dir)
+
     logger.info(f"打包完成: {zip_file}")
+
 
 def test():
     output_folder = "output"
     pack(output_folder)
+
 
 if __name__ == "__main__":
     logger.error("請使用 main.py 作為主要接口，而非直接執行 generate_release.py")

@@ -26,8 +26,8 @@ if [ -d "$I18N_ISO_COUNTRIES_DIR" ]; then
 fi
 
 # 下載檔案
-echo "開始下載 release.zip..."
-wget -O $TARGET_DIR/release.zip "https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/release.zip"
+echo "開始下載 release.tar.gz..."
+curl -L -o $TARGET_DIR/release.tar.gz "https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/release.tar.gz"
 
 if [ $? -ne 0 ]; then
   echo "下載檔案失敗"
@@ -35,11 +35,11 @@ if [ $? -ne 0 ]; then
 fi
 
 # 解壓縮檔案
-echo "開始解壓縮 release.zip..."
-unzip -o $TARGET_DIR/release.zip -d $TARGET_DIR
+echo "開始解壓縮 release.tar.gz..."
+tar -xvf $TARGET_DIR/release.tar.gz -C $TARGET_DIR
 
 # 刪除檔案/資料夾
-echo "刪除 release.zip..."
-rm -rf $TARGET_DIR/release.zip
+echo "刪除 release.tar.gz..."
+rm -rf $TARGET_DIR/release.tar.gz
 
 echo "更新完成"

@@ -37,7 +37,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           name: Auto Release ${{ env.TODAY }}
-          artifacts: "output/release.zip"
+          artifacts: "output/release.*"
           body: 這是定期自動生成的 Release，如果發現問題請提 issue 並暫時選擇到 [此處](https://github.com/RxChi1d/immich-geodata-zh-tw/releases) 選擇手動發布的 Release 文件。如果遇到 Immich 沒有更新數據，請手動修改 geodata-date.txt 文件，將其內容中的時間修改為更新的時間（比如當前時間）。
           draft: false
           generateReleaseNotes: false

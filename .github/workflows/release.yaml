@@ -35,7 +35,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           name: Release ${{ env.TODAY }}
-          artifacts: "output/release.zip"
+          artifacts: "output/release.*"
           draft: false
           generateReleaseNotes: false
           commit: main
