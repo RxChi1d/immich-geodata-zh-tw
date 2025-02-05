@@ -189,6 +189,8 @@ def translate_cities500(
         # 如果有匹配的行，取出 admin_2
         if not result.is_empty():
             item = result["admin_2"].item()
+            if not is_chinese(item):
+                return None
             if is_simplified_chinese(item):
                 return converter_s2t.convert(item)
             return item
