@@ -60,6 +60,20 @@ def is_chinese(text):
     return bool(regex.match(r"^[\p{Script_Extensions=Han}-]+$", text))
 
 
+def include_chinese(text):
+    """
+    判斷給定的文字是否包含中文。
+
+    Args:
+        text (str): 要檢查的文字。
+
+    Returns:
+        bool: 如果文字包含中文，返回 True，否則返回 False。
+    """
+
+    return bool(regex.search(r"[\p{Script_Extensions=Han}]", text))
+
+
 def is_simplified_chinese(text):
     """
     判斷給定的文字是否為簡體中文。
@@ -222,18 +236,28 @@ def translate_cities500(
         if not alt_names:
             return None
         candidates = alt_names.split(",")
-        chinese_words = [word for word in candidates if is_chinese(word)]
-        traditional = next(
-            (word for word in chinese_words if is_traditional_chinese(word)), None
-        )
-        simplified = next(
-            (word for word in chinese_words if is_simplified_chinese(word)), None
-        )
-        return (
-            traditional
-            if traditional
-            else (converter_s2t.convert(simplified) if simplified else None)
-        )
+
+        simplified_candidate = None  # 第一個簡體中文候選
+        generic_candidate = None  # 第一個包含中文的候選
+
+        for w in candidates:
+            # 優先返回繁體中文的候選
+            if is_traditional_chinese(w):
+                return w
+            # 若還沒找到簡體中文候選則記錄第一個簡體中文
+            elif is_simplified_chinese(w) and simplified_candidate is None:
+                simplified_candidate = w
+            # 記錄第一個包含中文的候選
+            elif include_chinese(w) and generic_candidate is None:
+                generic_candidate = w
+
+        if simplified_candidate is not None:
+            # 返回轉換成繁體的簡體候選
+            return converter_s2t.convert(simplified_candidate)
+        elif generic_candidate is not None:
+            return generic_candidate
+        else:
+            return None
 
     cities500_df = cities500_df.with_columns(
         pl.col("alternatenames")
