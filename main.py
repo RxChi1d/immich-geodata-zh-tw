@@ -51,7 +51,10 @@ def cmd_prepare(args):
 def cmd_enhance(args):
     """優化 cities500 資料"""
     cities_file = args.cities_file or os.path.join("geoname_data", "cities500.txt")
-    extra_files = [os.path.join("geoname_data", "extra_data", f"{cc}.txt") for cc in args.country_code]
+    extra_files = [
+        os.path.join("geoname_data", "extra_data", f"{cc}.txt")
+        for cc in args.country_code
+    ]
     output_file = args.output_file or os.path.join("output", "cities500_optimized.txt")
     enhance_data.update_cities500(
         cities_file, extra_files, output_file, args.min_population
@@ -175,7 +178,10 @@ def cmd_release(args):
     if not args.pass_enhance:
         logger.info("=== 執行 enhance 步驟 ===")
         cities_file = os.path.join("geoname_data", "cities500.txt")
-        extra_files = [os.path.join("geoname_data", "extra_data", f"{cc}.txt") for cc in args.country_code]
+        extra_files = [
+            os.path.join("geoname_data", "extra_data", f"{cc}.txt")
+            for cc in args.country_code
+        ]
         enhance_data.update_cities500(cities_file, extra_files, enhanced_output, 100)
     else:
         logger.info("跳過 enhance 步驟")
