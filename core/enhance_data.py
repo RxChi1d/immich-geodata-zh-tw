@@ -107,7 +107,9 @@ def update_cities500(cities_file, extra_files, output_file, min_population=100):
     # 讀取 extra_data/country_code.txt
     extra_df = pl.DataFrame(schema=CITIES_SCHEMA)
     for file in extra_files:
-        extra_df = extra_df.vstack(pl.read_csv(file, separator="\t", has_header=False, schema=CITIES_SCHEMA))    
+        extra_df = extra_df.vstack(
+            pl.read_csv(file, separator="\t", has_header=False, schema=CITIES_SCHEMA)
+        )
 
     # 篩選條件：
     #   - `geoname_id` 不在 `cities500_df` 的 `geoname_id` 中
@@ -116,7 +118,7 @@ def update_cities500(cities_file, extra_files, output_file, min_population=100):
         ~pl.col("geoname_id").is_in(cities500_df["geoname_id"])  # geoname_id 不能已存在
         & (pl.col("population") >= min_population)  # 人口數須 >= MIN_POPULATION
     )
-    
+
     # 合併新資料到 `cities500_df`
     cities500_df = cities500_df.vstack(filtered_extra_df)
 
@@ -172,7 +174,9 @@ def test():
     country_code = ["TW", "JP"]
 
     cities_file = os.path.join(data_base_folder, "cities500.txt")
-    extra_files = [os.path.join(extra_data_folder, f"{code}.txt") for code in country_code]
+    extra_files = [
+        os.path.join(extra_data_folder, f"{code}.txt") for code in country_code
+    ]
     output_file = os.path.join(output_folder, "cities500_optimized.txt")
 
     update_cities500(cities_file, extra_files, output_file, min_population)

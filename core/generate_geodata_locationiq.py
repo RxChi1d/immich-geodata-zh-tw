@@ -68,8 +68,8 @@ def get_loc_from_locationiq(lat, lon):
         time.sleep(1.02 / LOCATIONIQ_QPS)
         if response.status_code == 200:
             return response.json()
-    except:
-        logger.error(f"{lat},{lon} 查詢失敗")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"{lat},{lon} 查詢失敗: {e}")
         pass
     return None
 

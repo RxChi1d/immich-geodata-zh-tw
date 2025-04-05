@@ -54,7 +54,6 @@ def ensure_folder_exists(file_path):
 def create_alternate_map(alternate_file, output_path):
     logger.info(f"正在從 {alternate_file} 建立替代名稱對照表")
 
-    output_folder = os.path.dirname(output_path)
     ensure_folder_exists(output_path)
 
     data = pl.read_csv(
