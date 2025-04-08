@@ -47,10 +47,10 @@
 
       # 其他配置省略
 
-      entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/auto_update.sh) && exec /bin/bash start.sh" ]
+      entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/update_data.sh) --install && exec /bin/bash start.sh" ]
    ```  
    > **NOTE**:  
-   > - `entrypoint` 會在容器啟動時先執行本專案的 `auto_update.sh` 腳本，自動下載並配置臺灣特化資料，隨後執行 Immich 伺服器的 `start.sh` 啟動服務。
+   > - `entrypoint` 會在容器啟動時先執行本專案的 `update_data.sh` 腳本，自動下載並配置臺灣特化資料，隨後執行 Immich 伺服器的 `start.sh` 啟動服務。
    > - 整合式部署也支援指定特定版本下載，詳情請參考 [指定特定版本](#指定特定版本) 章節。
 
 2. **重啟 Immich**  
@@ -80,7 +80,7 @@
    提供以下兩種下載方式：  
        
    (1) **自動下載**  
-      參考本專案中的 `update_data.sh` 腳本，修改 `TARGET_DIR` 為存放 geodata 和 i18n-iso-countries 的資料夾路徑，並執行腳本：  
+      參考本專案中的 `update_data.sh` 腳本，修改 `DOWNLOAD_DIR` 為存放 geodata 和 i18n-iso-countries 的資料夾路徑，並執行腳本：  
       ```bash
       bash update_data.sh
       ```  
@@ -99,14 +99,14 @@
 在某些情況下（例如最新的 release 出現問題），你可能需要下載或回滾到特定的 release 版本。本專案的更新腳本支援透過 `--tag` 參數來指定要下載的 release tag。
 
 **如何找到可用的 Tag？**
-請前往本專案的 [Releases 頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases) 查看所有可用的 release tag 名稱（例如 `auto-release`, `release-2025-02-06` 等）。
+請前往本專案的 [Releases 頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases) 查看所有可用的 release tag 名稱（例如  `v1.0.0`, `nightly` 等）。
 
 **使用範例：**
 
 1.  **整合式部署 (`docker-compose.yml` 中的 `entrypoint`)**
     在 `entrypoint` 的指令後面加上 `--tag <tag_name>`：
     ```yaml
-    entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/auto_update.sh) --tag <tag_name> && exec /bin/bash start.sh" ] 
+    entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/update_data.sh) --install --tag <tag_name> && exec /bin/bash start.sh" ] 
     ```
     將 `<tag_name>` 替換為你想要下載的具體 tag 名稱。如果省略 `--tag`，則預設下載最新的 release (`latest`)。
 

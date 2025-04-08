@@ -36,15 +36,18 @@ jobs:
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          name: Auto Release ${{ env.TODAY }}
+          name: Automated Nightly Build ${{ env.TODAY }}
           artifacts: "output/release.*"
-          body: 這是定期自動生成的 Release，如果發現問題請提 issue 並暫時選擇到 [此處](https://github.com/RxChi1d/immich-geodata-zh-tw/releases) 選擇手動發布的 Release 文件。如果遇到 Immich 沒有更新數據，請手動修改 geodata-date.txt 文件，將其內容中的時間修改為更新的時間（比如當前時間）。
+          body: | 
+            這是定期自動生成的 nightly 版本 (包含最新 geodata)，可能未經充分測試。建議使用標有 "Latest" 的穩定版本。
+            如果發現問題請提 issue 並暫時選擇到 [此處](https://github.com/RxChi1d/immich-geodata-zh-tw/releases) 選擇手動發布的 Release 文件。
+            如果遇到 Immich 沒有更新數據，請手動修改 geodata-date.txt 文件，將其內容中的時間修改為更新的時間（比如當前時間）。
           draft: false
           generateReleaseNotes: false
           commit: main
-          tag: auto-release
-          allowUpdates: true
-          makeLatest: true
+          tag: nightly # Use the fixed 'nightly' tag
+          allowUpdates: true # Allow updating the release associated with the 'nightly' tag
+          makeLatest: false # Do NOT mark this as the latest release
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
