@@ -134,6 +134,9 @@ if [ "$INSTALL_MODE" = true ]; then
     echo "更新 geodata..."
     rm -rf "$SYSTEM_GEODATA_PATH"
     cp -a "$DOWNLOAD_DIR/geodata" "$SYSTEM_GEODATA_PATH"
+    # 確保複製後的檔案擁有者為 root
+    echo "設定 geodata 擁有者為 root..."
+    chown -R root:root "$SYSTEM_GEODATA_PATH"
   else
     echo "錯誤：geodata 資料夾不存在，無法完成更新。"
   fi
@@ -145,6 +148,9 @@ if [ "$INSTALL_MODE" = true ]; then
     # 複製下載目錄的 *內容* 到目標目錄，覆蓋現有檔案
     # 注意來源路徑結尾的 /. 表示複製內容而非目錄本身
     cp -a "$DOWNLOAD_DIR/i18n-iso-countries/." "$SYSTEM_I18N_PATH/"
+    # 確保複製後的檔案擁有者為 root
+    echo "設定 i18n-iso-countries 擁有者為 root..."
+    chown -R root:root "$SYSTEM_I18N_PATH"
   else
     echo "錯誤：i18n-iso-countries 資料夾不存在，無法完成更新。"
   fi
