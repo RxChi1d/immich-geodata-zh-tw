@@ -4,6 +4,11 @@ name: Release
 on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+    inputs:
+      version_tag:
+        description: '請輸入語意化版本標籤 (例如: v1.0.0)' # Input for semantic version tag
+        required: true
+        type: string
 
 defaults:
   run:
@@ -34,12 +39,13 @@ jobs:
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          name: Release ${{ env.TODAY }}
+          name: ${{ github.event.inputs.version_tag }} # Use the input tag for the release name
           artifacts: "output/release.*"
           draft: false
-          generateReleaseNotes: false
-          commit: main
-          tag: release-${{ env.TODAY }}
+          generateReleaseNotes: false # Keep false unless you want auto-generated notes
+          commit: main # Or specify the commit SHA/branch if needed
+          tag: ${{ github.event.inputs.version_tag }} # Use the input tag
+          makeLatest: true # Mark this as the latest stable release
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
