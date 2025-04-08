@@ -140,8 +140,11 @@ if [ "$INSTALL_MODE" = true ]; then
 
   if [ -d "$DOWNLOAD_DIR/i18n-iso-countries" ]; then
     echo "更新 i18n-iso-countries..."
-    rm -rf "$SYSTEM_I18N_PATH"
-    cp -a "$DOWNLOAD_DIR/i18n-iso-countries" "$SYSTEM_I18N_PATH"
+    # 確保目標模組目錄存在 (它應該由基礎映像檔安裝好)
+    mkdir -p "$SYSTEM_I18N_PATH"
+    # 複製下載目錄的 *內容* 到目標目錄，覆蓋現有檔案
+    # 注意來源路徑結尾的 /. 表示複製內容而非目錄本身
+    cp -a "$DOWNLOAD_DIR/i18n-iso-countries/." "$SYSTEM_I18N_PATH/"
   else
     echo "錯誤：i18n-iso-countries 資料夾不存在，無法完成更新。"
   fi
