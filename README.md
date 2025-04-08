@@ -16,6 +16,7 @@
   - [使用方式](#使用方式)
     - [整合式部署（推薦，方便後續更新）](#整合式部署推薦方便後續更新)
     - [手動部署](#手動部署)
+  - [指定特定版本](#指定特定版本)
   - [臺灣特化邏輯](#臺灣特化邏輯)
   - [更新地理資料](#更新地理資料)
     - [整合式部署](#整合式部署)
@@ -50,6 +51,7 @@
    ```  
    > **NOTE**:  
    > - `entrypoint` 會在容器啟動時先執行本專案的 `auto_update.sh` 腳本，自動下載並配置臺灣特化資料，隨後執行 Immich 伺服器的 `start.sh` 啟動服務。
+   > - 整合式部署也支援指定特定版本下載，詳情請參考 [指定特定版本](#指定特定版本) 章節。
 
 2. **重啟 Immich**  
    執行以下命令以重啟 Immich： 
@@ -83,13 +85,39 @@
       bash update_data.sh
       ```  
       > **NOTE**:  
-      > UnRAID 使用者可以通過 User Scripts 插件執行腳本。
+      > - 手動部署也支援指定特定版本下載，詳情請參考 [指定特定版本](#指定特定版本) 章節。
+      > - UnRAID 使用者可以通過 User Scripts 插件執行腳本。
      
    (2) **手動下載**  
-      前往 [Release 頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest) 下載 `release.tar.gz` 或 `release.zip`，並將其解壓縮至指定位置。
+      前往 [Release 頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases) 查找所需的版本，下載對應的 `release.tar.gz` 或 `release.zip`，並將其解壓縮至指定位置。
   
 3. **重啟 Immich 和重新提取照片元數據**  
    與[**整合式部署**](#整合式部署)的步驟 2、3 相同。
+
+## 指定特定版本
+
+在某些情況下（例如最新的 release 出現問題），你可能需要下載或回滾到特定的 release 版本。本專案的更新腳本支援透過 `--tag` 參數來指定要下載的 release tag。
+
+**如何找到可用的 Tag？**
+請前往本專案的 [Releases 頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases) 查看所有可用的 release tag 名稱（例如 `auto-release`, `release-2025-02-06` 等）。
+
+**使用範例：**
+
+1.  **整合式部署 (`docker-compose.yml` 中的 `entrypoint`)**
+    在 `entrypoint` 的指令後面加上 `--tag <tag_name>`：
+    ```yaml
+    entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/auto_update.sh) --tag <tag_name> && exec /bin/bash start.sh" ] 
+    ```
+    將 `<tag_name>` 替換為你想要下載的具體 tag 名稱。如果省略 `--tag`，則預設下載最新的 release (`latest`)。
+
+2.  **手動部署 (`update_data.sh`)**
+    執行腳本時加上 `--tag <tag_name>`：
+    ```bash
+    bash update_data.sh --tag <tag_name>
+    ```
+    將 `<tag_name>` 替換為你想要下載的具體 tag 名稱。如果省略 `--tag`，則預設下載最新的 release (`latest`)。
+
+> **NOTE**: 腳本會先驗證指定的 tag 是否存在於 GitHub Releases，如果 tag 無效則會提示錯誤並終止執行，因此請在執行前確保 tag 有效。
   
 ## 臺灣特化邏輯  
   
@@ -140,7 +168,7 @@
    ```  
    > **NOTE:**  
    > - 可以通過 `python main.py --help` 或 `python main.py release --help` 查看更多選項。  
-   > - `--country-code` 參數可指定需要處理的國家代碼，多個代碼之間使用空格分隔。(目前僅測試過 TW、JP)  
+   > - `--country-code` 參數可指定需要處理的國家代碼，多個代碼之間使用空格分隔。(目前僅測試過 TW、JP、KR)  
      
    > **WARNING:**  
    > - 由於 LocationIQ 的 API 有請求次數限制 (可登入後於後台查看)，因此請注意要處理的國家的地名數量，以免超出限制。  
@@ -153,4 +181,4 @@
   
 ## 授權條款  
   
-本專案採用 GPL 授權。  
+本專案採用 GPL 授權。
