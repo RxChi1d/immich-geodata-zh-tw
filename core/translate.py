@@ -285,29 +285,44 @@ def translate_cities500(
                 "alternate_translated_name",
                 "alternatenames_translated",
             ]
-        ).alias("final_name")
-    ).drop(
-        ["translated_name", "alternate_translated_name", "alternatenames_translated"]
+        ).alias("final_name_temp")  # 使用臨時名稱
     )
 
-    # 5. 記錄未處理的行
+    # 4.5. 台灣特殊處理：直接使用原始 name
+    cities500_df = cities500_df.with_columns(
+        pl.when(pl.col("country_code") == "TW")
+        .then(pl.col("name"))  # 台灣資料直接使用原始 name
+        .otherwise(pl.col("final_name_temp"))  # 其他國家使用 coalesce 結果
+        .alias("final_name")  # 這是最終確定的名稱
+    ).drop(
+        [
+            "translated_name",
+            "alternate_translated_name",
+            "alternatenames_translated",
+            "final_name_temp",
+        ]
+    )
+
+    # 5. 記錄未處理的行 (現在判斷 final_name)
     unprocessed = cities500_df.filter(pl.col("final_name").is_null())
     if not unprocessed.is_empty():
         # for row in unprocessed.iter_rows(named=True):
         #     logger.warning(f"未處理的行: {row['geoname_id']} {row['name']}")
-        logger.warning(f"未翻譯的地名數量: {unprocessed.height}")
+        logger.warning(f"未翻譯的地名數量 (final_name is null): {unprocessed.height}")
 
-    # 6. 處理例外情況
+    # 6. 處理例外情況 (應用於 final_name)
     #  裏 -> 里
+    # 先確保 final_name 不是 None 且是字串
     cities500_df = cities500_df.with_columns(
-        pl.col("final_name")
-        .map_elements(
-            lambda x: x.replace("裏", "里") if "裏" in x else x, return_dtype=pl.String
+        pl.when(
+            pl.col("final_name").is_not_null() & pl.col("final_name").str.contains("裏")
         )
+        .then(pl.col("final_name").str.replace("裏", "里"))
+        .otherwise(pl.col("final_name"))
         .alias("final_name")
     )
 
-    # 7. 更新 name 和 asciiname
+    # 7. 更新 name 和 asciiname (如果 final_name 有值，則使用它；否則保留原始 name)
     cities500_df = cities500_df.with_columns(
         pl.coalesce(["final_name", "name"]).alias("name"),
         pl.coalesce(["final_name", "name"]).alias("asciiname"),

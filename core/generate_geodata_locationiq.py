@@ -236,7 +236,7 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
                         ).alias("admin_1"),
                         pl.col("admin_3").alias("admin_2"),
                         pl.col("admin_4").alias("admin_3"),
-                        pl.lit("").alias("admin_4"),
+                        pl.lit(None).alias("admin_4"),
                     )
 
                 # 省轄縣

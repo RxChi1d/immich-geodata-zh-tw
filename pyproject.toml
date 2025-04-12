@@ -7,7 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "loguru==0.7.3",
     "opencc==1.1.9",
-    "polars==1.26.0",
+    "polars==1.27.1",
     "regex==2024.11.6",
     "requests==2.32.3",
     "tqdm==4.67.1",
@@ -15,5 +15,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "ruff>=0.11.4",
+    "geopandas>=1.0.1",
+    "ruff>=0.11.5",
+    "scipy>=1.15.2",
 ]
