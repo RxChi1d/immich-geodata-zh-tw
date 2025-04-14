@@ -93,7 +93,7 @@ fi
 
 # 解壓縮檔案
 echo "開始解壓縮 release.tar.gz..."
-tar -xvf "$DOWNLOAD_DIR/release.tar.gz" -C "$DOWNLOAD_DIR"
+tar -xvf "$DOWNLOAD_DIR/release.tar.gz" -C "$DOWNLOAD_DIR" --no-same-permissions || echo "解壓縮過程中出現權限警告，但將繼續執行..."
 
 # 在安裝模式下，不需要特別刪除壓縮檔，因為整個臨時目錄會被清理
 # 在普通模式下，保留壓縮檔，讓用戶自行決定是否刪除
