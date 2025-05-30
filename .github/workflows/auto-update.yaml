@@ -33,6 +33,11 @@ jobs:
         run: echo "TODAY=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
       - name: Build
         run: python main.py release --locationiq-api-key "${{ secrets.LOCATIONIQ_API_KEY }}" --country-code "JP" "KR" "TH"
+      - name: Delete existing nightly release
+        run: |
+          gh release delete nightly --yes || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
