@@ -36,6 +36,7 @@ jobs:
       - name: Delete existing nightly release
         run: |
           gh release delete nightly --yes || true
+          gh api repos/${{ github.repository }}/git/refs/tags/nightly --method DELETE || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create Release
@@ -51,7 +52,6 @@ jobs:
           generateReleaseNotes: false
           commit: main
           tag: nightly # Use the fixed 'nightly' tag
-          allowUpdates: true # Allow updating the release associated with the 'nightly' tag
           makeLatest: false # Do NOT mark this as the latest release
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
