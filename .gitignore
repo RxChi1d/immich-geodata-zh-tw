@@ -25,7 +25,6 @@ env/
 output/
 output*/
 geoname_data/
-meta_data/
 
 # Large data files
 *.zip
