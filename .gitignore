@@ -26,6 +26,7 @@ output/
 output*/
 geoname_data/
 notes/
+.spec-workflow/
 
 # Large data files
 *.zip
