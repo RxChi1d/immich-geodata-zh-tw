@@ -1,136 +1,137 @@
-# Changelog
+# 更新日誌
 
-All notable changes to this project will be documented in this file.
+此檔案記錄專案的所有重要變更。
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+格式基於 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
+專案遵循 [語義版本控制](https://semver.org/spec/v2.0.0.html)。
 
-## About This Project
+## 關於此專案
 
-This project provides Taiwan-localized optimization for Immich's reverse geocoding functionality, improving geographical information accuracy and user experience through Chinese localization, administrative division optimization, and enhanced Taiwan data accuracy using official NLSC (National Land Surveying and Mapping Center) data.
+本專案為 Immich 提供反向地理編碼功能的臺灣特化優化，旨在透過中文在地化、行政區劃最佳化，以及使用國土測繪中心 (NLSC) 官方資料提升臺灣資料準確性，改善地理資訊準確度與使用體驗。
 
-## Version Types
+## 版本類型
 
-- **Stable Releases** (v1.x.x): Manually released versions with comprehensive testing
-- **Nightly Releases**: Automated builds with the latest geodata updates, tagged as `nightly`
-- **Pre-releases**: Historical development snapshots (release-YYYY-MM-DD format)
+- **穩定版本** (v1.x.x)：經過完整測試的手動發佈版本
+- **夜間建構**：包含最新地理資料更新的自動建構，標記為 `nightly`
+- **預發佈版本**：歷史開發快照 (release-YYYY-MM-DD 格式)
 
-For installation instructions and usage, see the [README](README.md).
+安裝說明與使用方式請參閱 [README](README.md)。
 
-## Release Links
+## 發佈連結
 
-- [Latest Release](https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest)
-- [All Releases](https://github.com/RxChi1d/immich-geodata-zh-tw/releases)
-- [Compare Versions](https://github.com/RxChi1d/immich-geodata-zh-tw/compare)
+- [最新版本](https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest)
+- [所有版本](https://github.com/RxChi1d/immich-geodata-zh-tw/releases)
+- [版本比較](https://github.com/RxChi1d/immich-geodata-zh-tw/compare)
 
 ---
 
-## [Unreleased]
+## [未發佈版本]
 
 ## [1.1.4] - 2025-08-11
 
 ### Added
-- **AI Collaboration Documentation**: Comprehensive CLAUDE.md file with project guidelines, coding standards, and AI collaboration instructions for improved development workflow
-- **Enhanced Development Guidelines**: Complete coding conventions, commit standards, and language usage rules for better code quality
+- **AI 協作文件**：完整的 CLAUDE.md 檔案，包含專案指引、編碼規範與 AI 協作說明，改善開發工作流程
+- **強化開發指引**：完整的編碼慣例、提交標準與語言使用規則，提升程式碼品質
 
 ### Changed
-- **Project Dependencies**: Updated core dependencies (polars 1.32.2, regex 2025.7.34, requests 2.32.4) for improved performance and security
-- **Development Environment**: Enhanced development dependencies (geopandas 1.1.1, ruff 0.12.8, scipy 1.16.1) for better code quality and analysis tools
-- **Project Maintenance**: Improved .gitignore configuration to exclude temporary files and development artifacts
+- **專案依賴套件**：更新核心依賴 (polars 1.32.2、regex 2025.7.34、requests 2.32.4)，提升效能與安全性
+- **開發環境**：強化開發依賴套件 (geopandas 1.1.1、ruff 0.12.8、scipy 1.16.1)，改善程式碼品質與分析工具
+- **專案維護**：改善 .gitignore 設定，排除暫存檔案與開發產物
+- **資料更新**：更新反向地理編碼資料
 
 ## [1.1.3] - 2025-07-19
 
 ### Changed
-- **Enhanced Data Tracking**: Improved metadata CSV file tracking capabilities for better data management and monitoring
+- **強化資料追蹤**：改善中繼資料 CSV 檔案追蹤功能，提供更好的資料管理與監控
 
 ### Fixed
-- Resolved issues with CSV file handling in automated data processing workflows
+- 解決自動化資料處理工作流程中 CSV 檔案處理問題
 
 ## [1.1.2] - 2025-06-10
 
 ### Added
-- **English Documentation**: Complete English README for international users and contributors
-- **Bilingual Support**: Full documentation available in both Traditional Chinese and English
+- **英文文件**：為國際使用者與貢獻者提供完整英文 README
+- **雙語支援**：提供繁體中文與英文雙語完整文件
 
 ### Changed
-- **Documentation Structure**: Improved organization and clarity of installation and usage instructions
-- **User Experience**: Enhanced accessibility for non-Chinese speaking users
+- **文件結構**：改善安裝與使用說明的組織架構與清晰度
+- **使用者體驗**：提升非中文使用者的可及性
 
 ## [1.1.1] - 2025-05-30
 
 ### Fixed
-- **Release Automation**: Resolved date ordering issues in nightly release system
-- **CI/CD Pipeline**: Improved reliability of automated release recreation process
+- **發佈自動化**：解決夜間建構系統中日期排序問題
+- **CI/CD 流水線**：改善自動化發佈重建流程的可靠性
 
 ## [1.1.0] - 2025-04-12
 
 ### Added
-- **NLSC Integration**: Official Taiwan geodata processing using National Land Surveying and Mapping Center (NLSC) Shapefile data
-- **Enhanced Taiwan Accuracy**: Authoritative boundary and administrative data for Taiwan region
+- **NLSC 整合**：使用國土測繪中心 (NLSC) Shapefile 資料進行官方臺灣地理資料處理
+- **強化臺灣準確度**：提供臺灣地區權威邊界與行政資料
 
 ### Changed
-- **Documentation Updates**: Synchronized dependency versions and improved project documentation
-- **Geodata Quality**: Significantly improved accuracy for Taiwan geographical information
+- **文件更新**：同步依賴套件版本並改善專案文件
+- **地理資料品質**：大幅提升臺灣地理資訊準確度
 
 ## [1.0.0] - 2025-04-09
 
 ### Added
-- **Core Taiwan Localization**: Complete reverse geocoding optimization for Taiwan region
-- **Chinese Translation**: Traditional Chinese names for domestic and international locations
-- **Administrative Optimization**: Fixed Taiwan municipalities and counties display issues
-- **Automated Updates**: Streamlined release system with automated data refresh
-- **Docker Integration**: Containerized deployment with integrated and manual options
+- **核心臺灣在地化**：完整的臺灣地區反向地理編碼最佳化
+- **中文翻譯**：國內外地點的繁體中文名稱
+- **行政區劃最佳化**：修正臺灣直轄市與縣市顯示問題
+- **自動化更新**：簡化發佈系統與自動化資料更新
+- **Docker 整合**：容器化部署與整合/手動部署選項
 
 ### Changed
-- **Release System**: Refactored and streamlined release automation processes
-- **Script Enhancements**: Improved update scripts with tag validation and error handling
+- **發佈系統**：重構並簡化發佈自動化流程
+- **腳本強化**：改善更新腳本的標籤驗證與錯誤處理
 
-## Pre-Release Versions
+## 預發佈版本
 
 ### [release-2025-04-05] - 2025-04-05
 
 ### Added
-- **Thailand Support**: Geodata processing for Thailand (TH) region
-- **International Expansion**: Extended localization capabilities beyond Taiwan
+- **泰國支援**：泰國 (TH) 地區地理資料處理
+- **國際擴展**：將在地化功能擴展至臺灣以外地區
 
 ### [release-2025-02-06] - 2025-02-06
 
 ### Changed
-- **Translation Improvements**: Enhanced translation processing and accuracy
+- **翻譯改善**：強化翻譯處理與準確度
 
 ### [release-2025-02-05] - 2025-02-05  
 
 ### Added
-- **Korean Metadata**: Support for Korean region geodata processing
+- **韓國中繼資料**：支援韓國地區地理資料處理
 
 ### Fixed
-- **Translation Processing**: Resolved translation script issues and improved reliability
+- **翻譯處理**：解決翻譯腳本問題並改善可靠性
 
-## Nightly Releases
+## 夜間建構
 
-The `nightly` tag provides continuously updated builds with the latest geodata. These automated releases include:
+`nightly` 標籤提供包含最新地理資料的持續更新建構。這些自動化發佈包含：
 
-- **Automated Data Updates**: Fresh reverse geocoding data pulled regularly
-- **Latest Improvements**: Most recent bug fixes and enhancements
-- **Development Features**: Early access to new functionality before stable releases
+- **自動化資料更新**：定期提取最新的反向地理編碼資料
+- **最新改善**：最近的錯誤修正與功能增強
+- **開發功能**：搶先使用穩定版本前的新功能
 
-**Note**: Nightly releases are recommended for users who want the most up-to-date geodata but may include experimental features. For production use, stable releases (v1.x.x) are recommended.
+**注意**：建議希望取得最新地理資料的使用者使用夜間建構，但可能包含實驗性功能。生產環境建議使用穩定版本 (v1.x.x)。
 
-## Historical Development
+## 歷史開發
 
-### Early Development (2025-01-01 to 2025-03-31)
+### 早期開發 (2025-01-01 至 2025-03-31)
 
-- **Project Initialization**: Initial commit and project structure setup
-- **Core Development**: Implementation of Taiwan localization algorithms
-- **CI/CD Setup**: Automated release and data update workflows
-- **Documentation**: Initial README and usage instructions
-- **Testing**: Quality assurance and feature validation
+- **專案初始化**：首次提交與專案結構建立
+- **核心開發**：實作臺灣在地化演算法
+- **CI/CD 設定**：自動化發佈與資料更新工作流程
+- **文件撰寫**：初始 README 與使用說明
+- **測試**：品質保證與功能驗證
 
 ---
 
-For more information about specific changes, see the [commit history](https://github.com/RxChi1d/immich-geodata-zh-tw/commits/main) or [releases page](https://github.com/RxChi1d/immich-geodata-zh-tw/releases).
+特定變更的詳細資訊請參閱 [提交歷史](https://github.com/RxChi1d/immich-geodata-zh-tw/commits/main) 或 [發佈頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases)。
 
-[Unreleased]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.1.4...HEAD
+[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.1.4...HEAD
 [1.1.4]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.1.1...v1.1.2
