@@ -43,7 +43,7 @@ The geographic data used in this project mainly comes from the following sources
 1.  **GeoNames** ([geonames.org](https://www.geonames.org/)): As the global geographic location database foundation.
 2.  **National Land Surveying and Mapping Center (NLSC)** of Taiwan:
     - Source: [NLSC Open Data Platform](https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx)
-    - Dataset: Village Boundaries (TWD97 Latitude/Longitude), Version 1131128 (or newer)
+    - Dataset: Village Boundaries (TWD97 Latitude/Longitude), Version 1140620
     - Purpose: As the primary data source for Taiwan region village boundaries and administrative district names, ensuring data accuracy and authority.
 3.  **LocationIQ**: Used for processing reverse geocoding requests for non-Taiwan regions, calibrating administrative division levels.
 4.  **Ministry of Economic Affairs International Trade Administration & Ministry of Foreign Affairs of Taiwan**: As reference sources for Chinese translations of some countries/regions.
@@ -201,7 +201,7 @@ Simply restart the Immich container to automatically update geographic data.
 
 3. **Execute `main.py`**  
    ```bash  
-   python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "TW" "JP"
+   python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "TW" "JP" "TH"
    ```  
    > **NOTE:**  
    > - You can view more options through `python main.py --help` or `python main.py release --help`.  

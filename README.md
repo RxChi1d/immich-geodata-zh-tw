@@ -43,7 +43,7 @@
 1.  **GeoNames** ([geonames.org](https://www.geonames.org/)): 作為全球地理位置的基礎數據庫。
 2.  **中華民國國土測繪中心 (NLSC)**:
     - 來源: [國土測繪中心開放資料平台](https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx)
-    - 資料集: 村(里)界 (TWD97經緯度), 版本 1131128 (或更新版本)
+    - 資料集: 村(里)界 (TWD97經緯度), 版本 1140620
     - 用途: 作為臺灣地區村里界線及行政區名稱的主要數據源，確保資料的準確性與權威性。
 3.  **LocationIQ**: 用於處理非臺灣地區的反向地理編碼請求，校準行政區劃層級。
 4.  **中華民國經濟部國際貿易署 & 中華民國外交部**: 作為部分國家/地區中文譯名的參考來源。
@@ -201,7 +201,7 @@
 
 3. **執行`main.py`**  
    ```bash  
-   python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "TW" "JP"
+   python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "TW" "JP" "TH"
    ```  
    > **NOTE:**  
    > - 可以通過 `python main.py --help` 或 `python main.py release --help` 查看更多選項。  

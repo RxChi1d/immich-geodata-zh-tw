@@ -1,3 +1,39 @@
+"""
+臺灣村里級行政區界資料處理工具。
+
+輸入資料說明
+------------
+- 檔案來源：國土測繪中心（NLSC）
+  https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx
+- 使用資料：「村(里)界（TWD97經緯度）」
+- 解壓縮：請將下載的檔案完整解壓縮到
+  `geoname_data/VILLAGE_NLSC_YYYMMDD`（YYYMMDD 為資料日期）。
+
+目錄結構範例（以 1140620 為例）：
+
+    geoname_data
+    └── VILLAGE_NLSC_1140620
+        ├── 修正清單_1140620.xlsx
+        ├── TW-07-301000100G-613995.xml
+        ├── VILLAGE_NLSC_1140620.CPG
+        ├── VILLAGE_NLSC_1140620.dbf
+        ├── VILLAGE_NLSC_1140620.prj
+        ├── VILLAGE_NLSC_1140620.shp
+        ├── VILLAGE_NLSC_1140620.shx
+        ├── Village_Sanhe.CPG
+        ├── Village_Sanhe.dbf
+        ├── Village_Sanhe.prj
+        ├── Village_Sanhe.shp
+        └── Village_Sanhe.shx
+
+使用提示
+------
+ - 透過 `--shapefile` 參數指定 `.shp` 檔路徑（未指定則使用預設路徑），例如：
+  `python core/taiwan_geodata.py --shapefile geoname_data/VILLAGE_NLSC_1140620/VILLAGE_NLSC_1140620.shp`。
+ - 本腳本會計算多邊形中心點，並輸出 WGS84 經緯度到 CSV，
+   以利後續反向地理編碼使用。
+"""
+
 import sys
 import os
 from pathlib import Path
@@ -22,7 +58,7 @@ class TaiwanGeoData:
         - 此模組預期使用的 Shapefile 圖資來源為：
           國土測繪中心 (https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx)
           資料集名稱：村(里)界 (TWD97經緯度)
-          版本/日期：1131128 (或更新版本)
+          版本/日期：1140620 (或更新版本)
         - 請確保已安裝 geopandas 及其相關依賴。
         - 處理過程會將座標系統轉換，最終輸出 WGS84 格式的中心點座標。
     """
@@ -149,36 +185,51 @@ def process_taiwan_geodata(shapefile_path: str, output_path: str) -> None:
 
 
 if __name__ == "__main__":
-    # 測試用的程式碼
     import sys
-    from pathlib import Path
     import os
+    from pathlib import Path
+    import argparse
 
-    # 獲取當前工作目錄
-    current_working_dir = Path(os.getcwd())
-    logger.info(f"當前工作目錄: {current_working_dir}")
-
-    # 設定測試用的檔案路徑
-    shapefile_path = (
-        current_working_dir
-        / "geoname_data"
-        / "VILLAGE_NLSC_1131128"
-        / "VILLAGE_NLSC_1131128.shp"
+    parser = argparse.ArgumentParser(description="處理臺灣村里界 Shapefile 產生 CSV。")
+    parser.add_argument(
+        "-s",
+        "--shapefile",
+        type=str,
+        default=str(Path("geoname_data") / "VILLAGE_NLSC_1140620" / "VILLAGE_NLSC_1140620.shp"),
+        help=("Shapefile 檔案路徑。預設：geoname_data/VILLAGE_NLSC_1140620/VILLAGE_NLSC_1140620.shp"),
     )
-    output_path = current_working_dir / "meta_data" / "taiwan_geodata.csv"
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        default=str(Path("meta_data") / "taiwan_geodata.csv"),
+        help="輸出的 CSV 檔案路徑（預設：meta_data/taiwan_geodata.csv）",
+    )
 
-    # 檢查輸入檔案是否存在
-    if not shapefile_path.exists():
-        logger.error(f"找不到 Shapefile: {shapefile_path}")
+    args = parser.parse_args()
+
+    # Resolve CWD and absolute paths.
+    cwd = Path(os.getcwd())
+    shp_path = Path(args.shapefile)
+    if not shp_path.is_absolute():
+        shp_path = cwd / shp_path
+    # 僅接受 .shp 檔案，且必須存在
+    if not (shp_path.is_file() and shp_path.suffix.lower() == ".shp"):
+        logger.error(f"請提供存在的 .shp 檔案路徑：{shp_path}")
         sys.exit(1)
 
+    output_path = Path(args.output)
+    if not output_path.is_absolute():
+        output_path = cwd / output_path
+
     try:
-        # 執行處理
+        logger.info(f"使用 Shapefile：{shp_path}")
+        logger.info(f"輸出 CSV：{output_path}")
         logger.info("開始處理台灣行政區劃資料...")
-        process_taiwan_geodata(str(shapefile_path), str(output_path))
+        process_taiwan_geodata(str(shp_path), str(output_path))
         logger.info("處理完成！")
 
-        # 顯示處理後的資料預覽
+        # Preview head rows
         df = pl.read_csv(output_path)
         logger.info("\n處理後的資料預覽：")
         logger.info(df.head())
