@@ -201,11 +201,11 @@
 
 3. **執行`main.py`**  
    ```bash  
-   python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "TW" "JP" "TH"
+   python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "JP" "KR" "TH"
    ```  
    > **NOTE:**  
    > - 可以通過 `python main.py --help` 或 `python main.py release --help` 查看更多選項。  
-   > - `--country-code` 參數可指定需要處理的國家代碼，多個代碼之間使用空格分隔。(目前僅測試過 TW、JP、KR)  
+   > - `--country-code` 參數可指定需要處理的國家代碼，多個代碼之間使用空格分隔。(目前僅測試過 "JP" "KR" "TH")  
      
    > **WARNING:**  
    > - 由於 LocationIQ 的 API 有請求次數限制 (可登入後於後台查看)，因此請注意要處理的國家的地名數量，以免超出限制。  

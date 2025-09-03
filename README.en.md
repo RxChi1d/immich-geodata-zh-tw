@@ -201,11 +201,11 @@ Simply restart the Immich container to automatically update geographic data.
 
 3. **Execute `main.py`**  
    ```bash  
-   python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "TW" "JP" "TH"
+   python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "JP" "KR" "TH"
    ```  
    > **NOTE:**  
    > - You can view more options through `python main.py --help` or `python main.py release --help`.  
-   > - The `--country-code` parameter can specify country codes to process, multiple codes separated by spaces. (Currently only tested with TW, JP, KR)  
+   > - The `--country-code` parameter can specify country codes to process, multiple codes separated by spaces. (Currently only tested with JP, KR, TH)  
      
    > **WARNING:**  
    > - Since LocationIQ API has request limits (can be checked in the backend after login), please pay attention to the number of place names in the countries to be processed to avoid exceeding limits.  

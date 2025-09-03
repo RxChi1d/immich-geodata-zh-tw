@@ -28,14 +28,15 @@
 ## [未發佈版本]
 
 ### Added
-- **舊版相容性**：`update_data.sh` 腳本自動偵測 Immich 版本，對於 < 1.139.4 自動使用舊路徑 `/usr/src/app/node_modules/i18n-iso-countries`，無需手動調整。
-- **CLI 參數**：為 `core/taiwan_geodata.py` 加入 `argparse`，提供 `--shapefile`、`--output` 與使用說明，便於指定輸入/輸出路徑。
+- **Immich 版本自動偵測**：部署腳本支援自動選擇適當的容器路徑，確保新舊版本相容性
+- **CLI 參數支援**：Taiwan geodata 處理工具新增命令列參數 (`--shapefile`, `--output`)
 
 ### Changed
-- **容器路徑映射**：配合 Immich ≥ 1.139.4，i18n-iso-countries 改安裝至 `/usr/src/app/server/node_modules/i18n-iso-countries`；README 同步更新 `volumes` 範例與相容性提示。
-- **相依套件**：更新 `polars 1.33.0`、`regex 2025.9.1`、`requests 2.32.5`，開發相依更新 `ruff 0.12.11`，並同步 `uv.lock`。
-- **NLSC 圖資版本**：更新至 1140620，程式與文件同步調整，並以新版 NLSC 圖資更新 `meta_data/taiwan_geodata.csv`。
-- **文件範例**：README（中/英）同步資料版本；釋出指令示例更新（加入 `TH`，以符合當前資料庫）。
+- **容器路徑更新**：調整 i18n-iso-countries 路徑以支援 Immich 1.139.4+，並新增版本相容性說明
+- **文檔結構優化**：移除過時的版本遷移警告，改善專案說明的可讀性
+- **NLSC 圖資更新**：更新至版本 1140620，提升臺灣地理資料準確性
+- **指令範例調整**：統一文檔中的國家代碼參數為 `JP KR TH`，符合 CI/CD 流程
+- **相依套件更新**：升級核心套件至最新穩定版本
 
 ## [1.1.4] - 2025-08-11
 
@@ -45,7 +46,7 @@
 
 ### Changed
 - **專案依賴套件**：更新核心依賴 (polars 1.32.2、regex 2025.7.34、requests 2.32.4)，提升效能與安全性
-- **開發環境**：強化開發依賴套件 (geopandas 1.1.1、ruff 0.12.8、scipy 1.16.1)，改善程式碼品質與分析工具
+- **開發環境**：更新開發依賴套件 (geopandas 1.1.1、ruff 0.12.8、scipy 1.16.1)，改善程式碼品質與分析工具
 - **專案維護**：改善 .gitignore 設定，排除暫存檔案與開發產物
 - **資料更新**：更新反向地理編碼資料
 
