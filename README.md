@@ -8,16 +8,12 @@
 - **行政區優化**：解決臺灣直轄市與省轄縣市僅顯示地區名稱的問題。  
 - **提升臺灣資料準確性**：利用**中華民國國土測繪中心 (NLSC)** 的官方圖資處理臺灣地區的地理名稱與邊界資料，確保數據來源的權威性。  
 
-> [!WARNING]
-> **重要更新通知**
+> [!TIP]
+> 版本相容性提示
 > 
-> 本專案最近進行了以下重要調整：
-> 1. **部署腳本變更**：用於 Docker `entrypoint` 的自動更新腳本已從 `auto_update.sh` 更改為 `update_data.sh`，並且現在需要加上 `--install` 參數。請務必更新您的 `docker-compose.yml` 配置。
-> 2. **版本標籤調整**：
->    - 自動構建的版本現在使用固定的 `nightly` 標籤。
->    - 手動發布的穩定版本將使用語意化版本標籤（例如 `v1.0.0`）。
-> 
-> 請仔細閱讀 [使用方式](#使用方式) 和 [指定特定版本](#指定特定版本) 章節以獲取最新的配置說明。
+> - 自 Immich 1.139.4 起，容器內路徑有所調整。
+> - 若你使用 1.139.3（含）以下且採「手動部署」，請依照本文件的「[手動部署](#手動部署)」章節調整 `volumes` 映射路徑。
+> - 若使用本專案提供的整合式自動部署（update_data.sh），無需更動；腳本已更新以支援新舊版本。
 
 ### 使用前後對比  
 ![使用前後對比](./image/example.png) 
@@ -100,8 +96,11 @@
    ```yaml
    volumes:
      - /mnt/user/appdata/immich/geodata:/build/geodata:ro
-     - /mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs:ro
+     - /mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/server/node_modules/i18n-iso-countries/langs:ro
    ```
+   > **NOTE**:  
+   > 若使用 Immich < 1.139.4 版本，請將第二行改為：  
+   > `/mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs:ro`
   
 2. **下載臺灣特化資料**  
    提供以下兩種下載方式：  
