@@ -4,7 +4,22 @@
 # 下載的檔案會被解壓縮到指定的目錄 (DOWNLOAD_DIR)
 # 如果指定了 --install 參數，則會將檔案安裝到系統目錄 (僅限於 Docker 環境)
 
+
 set -e
+
+# --- 版本工具函數 ---
+# 從 /usr/src/app/server/package.json 取得版本字串，例如 1.140.1
+get_pkg_version() {
+  node -p "require('/usr/src/app/server/package.json').version" 2>/dev/null
+}
+
+# 比較語義化版本：若 $1 < $2 則傳回 0 (true)，否則傳回 1 (false)
+# 用 Node 原生實作，避免依賴外部套件
+semver_lt() {
+  local a="$1" b="$2"
+  node -e "const [a,b]=process.argv.slice(1);\nconst pa=a.split('.').map(Number);\nconst pb=b.split('.').map(Number);\nconst lt = (pa[0]<pb[0]) || (pa[0]===pb[0] && (pa[1]<pb[1] || (pa[1]===pb[1] && pa[2]<pb[2])));\nprocess.exit(lt?0:1);" "$a" "$b"
+}
+# --- 版本工具函數結束 ---
 
 # 用戶可修改的配置
 DOWNLOAD_DIR="./temp" # 普通模式下的下載目錄
@@ -109,13 +124,26 @@ if [ "$INSTALL_MODE" = true ]; then
 
   # 定義系統目標路徑
   SYSTEM_GEODATA_PATH="/build/geodata"
-  SYSTEM_I18N_PATH="/usr/src/app/node_modules/i18n-iso-countries"
-  SYSTEM_I18N_MODULE_PATH="/usr/src/app/node_modules" # i18n 的父目錄
+
+  # 依版本決定 i18n 目標路徑
+  CURRENT_VERSION="$(get_pkg_version)"
+  if [ -z "$CURRENT_VERSION" ]; then
+    echo "警告：無法讀取 /usr/src/app/server/package.json 版本，將使用相容路徑 /usr/src/app/node_modules"
+    CURRENT_VERSION="0.0.0"
+  fi
+
+  if semver_lt "$CURRENT_VERSION" "1.139.4"; then
+    SYSTEM_I18N_PATH="/usr/src/app/node_modules/i18n-iso-countries"
+  else
+    SYSTEM_I18N_PATH="/usr/src/app/server/node_modules/i18n-iso-countries"
+  fi
+
+  echo "偵測版本: $CURRENT_VERSION -> i18n 目標: $SYSTEM_I18N_PATH"
 
   # 確保目標父目錄存在
   echo "確保目標系統目錄存在..."
   mkdir -p /build
-  mkdir -p "$SYSTEM_I18N_MODULE_PATH"
+  mkdir -p "$(dirname "$SYSTEM_I18N_PATH")"
 
   # --- 先備份系統路徑 ---
   echo "備份現有系統檔案..."

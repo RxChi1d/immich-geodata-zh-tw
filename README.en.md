@@ -8,16 +8,12 @@ This project provides Taiwan-localized optimization for Immich's reverse geocodi
 - **Administrative Division Optimization**: Solving the issue where Taiwan's municipalities and provincial cities/counties only display region names.  
 - **Enhanced Taiwan Data Accuracy**: Utilizing official map data from **National Land Surveying and Mapping Center (NLSC)** of Taiwan to process geographical names and boundary data for Taiwan region, ensuring authoritative data sources.  
 
-> [!WARNING]
-> **Important Update Notice**
+> [!TIP]
+> Compatibility Notice
 > 
-> This project has recently made the following important adjustments:
-> 1. **Deployment Script Changes**: The auto-update script for Docker `entrypoint` has been changed from `auto_update.sh` to `update_data.sh`, and now requires the `--install` parameter. Please make sure to update your `docker-compose.yml` configuration.
-> 2. **Version Tag Adjustments**:
->    - Auto-built versions now use the fixed `nightly` tag.
->    - Manually released stable versions will use semantic version tags (e.g., `v1.0.0`).
-> 
-> Please carefully read the [Usage](#usage) and [Specify Specific Version](#specify-specific-version) sections for the latest configuration instructions.
+> - Starting from Immich 1.139.4, container paths have changed.
+> - If you're on 1.139.3 or earlier and use Manual Deployment, adjust the `volumes` mapping as described in the [Manual Deployment](#manual-deployment) section.
+> - If you use this project's integrated auto-deployment (update_data.sh), no changes are required; the script has been updated to support both old and new versions.
 
 ### Before and After Comparison  
 ![Before and After Comparison](./image/example.png) 
@@ -100,8 +96,11 @@ This project supports the following two deployment methods:
    ```yaml
    volumes:
      - /mnt/user/appdata/immich/geodata:/build/geodata:ro
-     - /mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs:ro
+     - /mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/server/node_modules/i18n-iso-countries/langs:ro
    ```
+   > **NOTE**:  
+   > For Immich < 1.139.4, please change the second line to:  
+   > `/mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs:ro`
   
 2. **Download Taiwan localization data**  
    Two download methods are provided:  

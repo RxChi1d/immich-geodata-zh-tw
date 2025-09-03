@@ -27,6 +27,13 @@
 
 ## [未發佈版本]
 
+### Added
+- **舊版相容性**：`update_data.sh` 腳本自動偵測 Immich 版本，對於 < 1.139.4 自動使用舊路徑 `/usr/src/app/node_modules/i18n-iso-countries`，無需手動調整。
+
+### Changed
+- **容器路徑映射**：配合 Immich ≥ 1.139.4，i18n-iso-countries 改安裝至 `/usr/src/app/server/node_modules/i18n-iso-countries`；README 同步更新 `volumes` 範例與相容性提示。
+- **相依套件**：更新 `polars 1.33.0`、`regex 2025.9.1`、`requests 2.32.5`，開發相依更新 `ruff 0.12.11`，並同步 `uv.lock`。
+
 ## [1.1.4] - 2025-08-11
 
 ### Added
