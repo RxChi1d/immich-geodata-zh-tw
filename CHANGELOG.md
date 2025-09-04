@@ -27,6 +27,8 @@
 
 ## [未發佈版本]
 
+## [1.2.0] - 2025-09-04
+
 ### Added
 - **Immich 版本自動偵測**：部署腳本支援自動識別不同版本的 Immich 容器結構，確保新舊版本相容性
 - **可靠的版本比較機制**：部署腳本提升版本號判斷的準確性，避免因版本比較錯誤導致的路徑選擇問題
@@ -38,7 +40,7 @@
 - **安裝方式**：本地開發安裝改為 `uv sync`，執行命令更新為 `uv run python main.py`
 - **容器路徑更新**：調整 i18n-iso-countries 路徑以支援 Immich 1.136.0+，並新增版本相容性說明
 - **NLSC 圖資更新**：更新至版本 1140620，提升臺灣地理資料準確性
-- **相依套件更新**：升級核心套件至最新穩定版本
+- **依賴結構調整**：將 geopandas 提升為運行時依賴，並移除未使用的 scipy 開發依賴；升級核心套件至最新穩定版本
 
 ### Fixed
 - **Immich 版本判斷邏輯**：修正容器路徑變更的版本分界點從 1.139.4 改為 1.136.0，確保版本判斷的準確性
@@ -154,7 +156,8 @@
 
 特定變更的詳細資訊請參閱 [提交歷史](https://github.com/RxChi1d/immich-geodata-zh-tw/commits/main) 或 [發佈頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases)。
 
-[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.1.4...HEAD
+[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.1.4...v1.2.0
 [1.1.4]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.1.1...v1.1.2
