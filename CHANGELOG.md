@@ -34,6 +34,7 @@
 ### Changed
 - **依賴管理系統**：遷移至 uv 現代化套件管理，提升安裝效能並簡化專案維護
 - **CI/CD 管線**：GitHub Actions 升級至 Python 3.13 並採用 uv 快速安裝流程
+- **版本發布邏輯**：Release workflow 自動識別預發布版本，確保只有穩定版本被標記為 Latest
 - **安裝方式**：本地開發安裝改為 `uv sync`，執行命令更新為 `uv run python main.py`
 - **容器路徑更新**：調整 i18n-iso-countries 路徑以支援 Immich 1.139.4+，並新增版本相容性說明
 - **NLSC 圖資更新**：更新至版本 1140620，提升臺灣地理資料準確性
