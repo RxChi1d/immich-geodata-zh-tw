@@ -180,37 +180,30 @@ Simply restart the Immich container to automatically update geographic data.
 ## Local Data Processing  
   
 1. **Install Dependencies**  
-   Execute the following command to install required Python dependencies：  
-
+   First install uv (if not already installed):
+   
+   Please refer to the [uv official installation guide](https://docs.astral.sh/uv/getting-started/installation/) to install uv for your operating system.
+   
+   Then install project dependencies:
+   
    ```bash
-   pip install -r requirements.txt
+   uv sync
    ```
-
-   Or manually install the following packages：
-
-      | Package  | Version   |
-      | -------- | --------- |
-      | loguru   | 0.7.3     |
-      | opencc   | 1.1.9     |
-      | polars   | 1.27.1    |
-      | regex    | 2024.11.6 |
-      | requests | 2.32.3    |
-      | tqdm     | 4.67.1    |
 
 2. Register an account at [LocationIQ](https://locationiq.com/) and obtain an API Key.  
 
 3. **Execute `main.py`**  
    ```bash  
-   python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "JP" "KR" "TH"
+   uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "JP" "KR" "TH"
    ```  
    > **NOTE:**  
-   > - You can view more options through `python main.py --help` or `python main.py release --help`.  
+   > - You can view more options through `uv run python main.py --help` or `uv run python main.py release --help`.  
    > - The `--country-code` parameter can specify country codes to process, multiple codes separated by spaces. (Currently only tested with JP, KR, TH)  
      
    > **WARNING:**  
    > - Since LocationIQ API has request limits (can be checked in the backend after login), please pay attention to the number of place names in the countries to be processed to avoid exceeding limits.  
    > - This project allows LocationIQ reverse geocoding query progress recovery. If daily request limits are exceeded, you can continue execution after changing API keys or the next day.  
-   >   - Need to add `--pass-cleanup` parameter to cancel folder reset function: `python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "TW" "JP" --pass-cleanup`.  
+   >   - Need to add `--pass-cleanup` parameter to cancel folder reset function: `uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "TW" "JP" --pass-cleanup`.  
   
 ## Acknowledgments  
   

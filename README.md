@@ -180,37 +180,30 @@
 ## 本地運行資料處理  
   
 1. **安裝依賴**  
-   執行以下指令安裝所需 Python 依賴：  
-
+   首先安裝 uv（如果尚未安裝）：
+   
+   請參考 [uv 官方安裝指南](https://docs.astral.sh/uv/getting-started/installation/) 根據你的作業系統安裝 uv。
+   
+   然後安裝專案依賴：
+   
    ```bash
-   pip install -r requirements.txt
+   uv sync
    ```
-
-   或手動安裝以下套件：
-
-      | Package  | Version   |
-      | -------- | --------- |
-      | loguru   | 0.7.3     |
-      | opencc   | 1.1.9     |
-      | polars   | 1.27.1    |
-      | regex    | 2024.11.6 |
-      | requests | 2.32.3    |
-      | tqdm     | 4.67.1    |
 
 2. 至 [LocationIQ](https://locationiq.com/) 註冊帳號，並取得 API Key。  
 
 3. **執行`main.py`**  
    ```bash  
-   python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "JP" "KR" "TH"
+   uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "JP" "KR" "TH"
    ```  
    > **NOTE:**  
-   > - 可以通過 `python main.py --help` 或 `python main.py release --help` 查看更多選項。  
+   > - 可以通過 `uv run python main.py --help` 或 `uv run python main.py release --help` 查看更多選項。  
    > - `--country-code` 參數可指定需要處理的國家代碼，多個代碼之間使用空格分隔。(目前僅測試過 "JP" "KR" "TH")  
      
    > **WARNING:**  
    > - 由於 LocationIQ 的 API 有請求次數限制 (可登入後於後台查看)，因此請注意要處理的國家的地名數量，以免超出限制。  
    > - 本專案允許 LocationIQ 反向地理編碼查詢的進度恢復，若超過當日請求限制，可於更換 api 金鑰或次日繼續執行。  
-   >   - 需加上 `--pass-cleanup`參數，以取消重設資料夾功能： `python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "TW" "JP" --pass-cleanup`。  
+   >   - 需加上 `--pass-cleanup`參數，以取消重設資料夾功能： `uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "TW" "JP" --pass-cleanup`。  
   
 ## 致謝  
   
