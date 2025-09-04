@@ -62,6 +62,7 @@ class TaiwanGeoData:
         - 請確保已安裝 geopandas 及其相關依賴。
         - 處理過程會將座標系統轉換，最終輸出 WGS84 格式的中心點座標。
     """
+
     def __init__(self, shapefile_path: str):
         """
         初始化 TaiwanGeoData 類別
@@ -195,8 +196,12 @@ if __name__ == "__main__":
         "-s",
         "--shapefile",
         type=str,
-        default=str(Path("geoname_data") / "VILLAGE_NLSC_1140620" / "VILLAGE_NLSC_1140620.shp"),
-        help=("Shapefile 檔案路徑。預設：geoname_data/VILLAGE_NLSC_1140620/VILLAGE_NLSC_1140620.shp"),
+        default=str(
+            Path("geoname_data") / "VILLAGE_NLSC_1140620" / "VILLAGE_NLSC_1140620.shp"
+        ),
+        help=(
+            "Shapefile 檔案路徑。預設：geoname_data/VILLAGE_NLSC_1140620/VILLAGE_NLSC_1140620.shp"
+        ),
     )
     parser.add_argument(
         "-o",

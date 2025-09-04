@@ -2,7 +2,7 @@ import os
 import sys
 import polars as pl
 from pathlib import Path
-from datetime import date # 導入 date
+from datetime import date
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -47,24 +47,29 @@ def convert_taiwan_geodata():
 
     # 將 admin_1 (縣市名稱) 映射到 admin1_code
     df = df.with_columns(
-        pl.col("admin_1").map_elements(
-            lambda name: TAIWAN_ADMIN1.get(name, None),
-            return_dtype=pl.String
-        ).alias("admin1_code_full") # Store the full code temporarily "TW.XX"
+        pl.col("admin_1")
+        .map_elements(
+            lambda name: TAIWAN_ADMIN1.get(name, None), return_dtype=pl.String
+        )
+        .alias("admin1_code_full")  # Store the full code temporarily "TW.XX"
     )
 
     # 檢查是否有無法映射的 admin_1
     null_admin1_codes = df.filter(pl.col("admin1_code_full").is_null())
     if null_admin1_codes.height > 0:
-        missing_names = null_admin1_codes['admin_1'].unique().to_list()
-        logger.warning(f"以下縣市名稱無法在 TAIWAN_ADMIN1 中找到對應代碼，admin1_code 將設為 None: {missing_names}")
+        missing_names = null_admin1_codes["admin_1"].unique().to_list()
+        logger.warning(
+            f"以下縣市名稱無法在 TAIWAN_ADMIN1 中找到對應代碼，admin1_code 將設為 None: {missing_names}"
+        )
 
     # 提取 admin1_code 的數字/字母部分 "XX"
     df = df.with_columns(
         pl.when(pl.col("admin1_code_full").is_not_null())
-        .then(pl.col("admin1_code_full").str.split(".").list.last()) # Split by '.' and get last part
-        .otherwise(None) # Keep None if mapping failed
-        .alias("admin1_code_mapped") # Final code "XX"
+        .then(
+            pl.col("admin1_code_full").str.split(".").list.last()
+        )  # Split by '.' and get last part
+        .otherwise(None)  # Keep None if mapping failed
+        .alias("admin1_code_mapped")  # Final code "XX"
     )
 
     # 獲取今天的日期字串
@@ -74,28 +79,28 @@ def convert_taiwan_geodata():
     new_df = pl.DataFrame(
         {
             "geoname_id": df["geoname_id"],
-            "name": df["admin_2"], # 鄉鎮市區名
-            "asciiname": df["admin_2"], # 同上
+            "name": df["admin_2"],  # 鄉鎮市區名
+            "asciiname": df["admin_2"],  # 同上
             "alternatenames": None,
             "latitude": df["latitude"],
             "longitude": df["longitude"],
             "feature_class": "A",
-            "feature_code": "ADM2", # 因為主要地名是鄉鎮市區
+            "feature_code": "ADM2",  # 因為主要地名是鄉鎮市區
             "country_code": "TW",
             "cc2": None,
-            "admin1_code": df["admin1_code_mapped"], # 使用提取後的 "XX" 部分
-            "admin2_code": None, # 暫不提供鄉鎮市區代碼
-            "admin3_code": None, # 暫不提供村里代碼
-            "admin4_code": None, # 暫不提供更低級別代碼
+            "admin1_code": df["admin1_code_mapped"],  # 使用提取後的 "XX" 部分
+            "admin2_code": None,  # 暫不提供鄉鎮市區代碼
+            "admin3_code": None,  # 暫不提供村里代碼
+            "admin4_code": None,  # 暫不提供更低級別代碼
             "population": 0,
             "elevation": None,
             "dem": None,
             "timezone": "Asia/Taipei",
-            "modification_date": today_date_str, # 使用今天的日期
+            "modification_date": today_date_str,  # 使用今天的日期
         },
-        schema=CITIES_SCHEMA
+        schema=CITIES_SCHEMA,
     )
-    
+
     # 將轉換後的台灣地理資料暫存到 output 資料夾
     output_path = os.path.join("output", "taiwan_geodata_converted.csv")
     new_df.write_csv(output_path)
