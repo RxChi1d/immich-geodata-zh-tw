@@ -8,16 +8,54 @@
 set -e
 
 # --- 版本工具函數 ---
-# 從 /usr/src/app/server/package.json 取得版本字串，例如 1.140.1
+# 自動檢測 package.json 位置並取得版本字串，例如 1.140.1
 get_pkg_version() {
-  node -p "require('/usr/src/app/server/package.json').version" 2>/dev/null
+  # 優先檢查舊版本路徑
+  if [ -f "/usr/src/app/package.json" ]; then
+    node -p "require('/usr/src/app/package.json').version" 2>/dev/null
+  # 備援檢查新版本路徑
+  elif [ -f "/usr/src/app/server/package.json" ]; then
+    node -p "require('/usr/src/app/server/package.json').version" 2>/dev/null
+  else
+    echo "錯誤：無法找到 Immich package.json 檔案" >&2
+    echo "檢查的位置：" >&2
+    echo "  - /usr/src/app/package.json" >&2
+    echo "  - /usr/src/app/server/package.json" >&2
+    echo "請確認此腳本在正確的 Immich 容器環境中執行。" >&2
+    exit 1
+  fi
 }
 
 # 比較語義化版本：若 $1 < $2 則傳回 0 (true)，否則傳回 1 (false)
-# 用 Node 原生實作，避免依賴外部套件
 semver_lt() {
   local a="$1" b="$2"
-  node -e "const [a,b]=process.argv.slice(1);\nconst pa=a.split('.').map(Number);\nconst pb=b.split('.').map(Number);\nconst lt = (pa[0]<pb[0]) || (pa[0]===pb[0] && (pa[1]<pb[1] || (pa[1]===pb[1] && pa[2]<pb[2])));\nprocess.exit(lt?0:1);" "$a" "$b"
+  
+  # 優先使用 npx semver（最標準的語意版本比較）
+  if command -v npx >/dev/null 2>&1; then
+    npx --yes semver "$a" -r "<$b" >/dev/null 2>&1
+    return $?
+  fi
+  
+  # 備援：使用 GNU sort -V 進行版本排序
+  if command -v sort >/dev/null 2>&1 && sort --version-sort /dev/null >/dev/null 2>&1; then
+    local sorted=$(printf "%s\n%s\n" "$a" "$b" | sort -V)
+    local first_line=$(echo "$sorted" | head -n1)
+    [ "$first_line" = "$a" ] && [ "$a" != "$b" ]
+    return $?
+  fi
+  
+  # 最後備援：安全的語意版本比較實現
+  node -e "
+    const [a, b] = process.argv.slice(1);
+    const normalize = v => {
+      const parts = v.split('.').map(Number);
+      return [parts[0] || 0, parts[1] || 0, parts[2] || 0];
+    };
+    const [a0, a1, a2] = normalize(a);
+    const [b0, b1, b2] = normalize(b);
+    const lt = (a0 < b0) || (a0 === b0 && (a1 < b1 || (a1 === b1 && a2 < b2)));
+    process.exit(lt ? 0 : 1);
+  " "$a" "$b"
 }
 # --- 版本工具函數結束 ---
 
@@ -132,7 +170,7 @@ if [ "$INSTALL_MODE" = true ]; then
     CURRENT_VERSION="0.0.0"
   fi
 
-  if semver_lt "$CURRENT_VERSION" "1.139.4"; then
+  if semver_lt "$CURRENT_VERSION" "1.136.0"; then
     SYSTEM_I18N_PATH="/usr/src/app/node_modules/i18n-iso-countries"
   else
     SYSTEM_I18N_PATH="/usr/src/app/server/node_modules/i18n-iso-countries"

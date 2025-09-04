@@ -11,8 +11,8 @@
 > [!TIP]
 > 版本相容性提示
 > 
-> - 自 Immich 1.139.4 起，容器內路徑有所調整。
-> - 若你使用 1.139.3（含）以下且採「手動部署」，請依照本文件的「[手動部署](#手動部署)」章節調整 `volumes` 映射路徑。
+> - 自 Immich 1.136.0 起，容器內路徑有所調整。
+> - 若你使用 1.135.x（含）以下且採「手動部署」，請依照本文件的「[手動部署](#手動部署)」章節調整 `volumes` 映射路徑。
 > - 若使用本專案提供的整合式自動部署（update_data.sh），無需更動；腳本已更新以支援新舊版本。
 
 ### 使用前後對比  
@@ -99,7 +99,7 @@
      - /mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/server/node_modules/i18n-iso-countries/langs:ro
    ```
    > **NOTE**:  
-   > 若使用 Immich < 1.139.4 版本，請將第二行改為：  
+   > 若使用 Immich < 1.136.0 版本，請將第二行改為：  
    > `/mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs:ro`
   
 2. **下載臺灣特化資料**  
