@@ -11,11 +11,10 @@ dependencies = [
     "regex==2025.9.1",
     "requests==2.32.5",
     "tqdm==4.67.1",
+    "geopandas>=1.1.1",
 ]
 
 [dependency-groups]
 dev = [
-    "geopandas>=1.1.1",
     "ruff>=0.12.11",
-    "scipy>=1.16.1",
 ]
