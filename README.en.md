@@ -11,8 +11,8 @@ This project provides Taiwan-localized optimization for Immich's reverse geocodi
 > [!TIP]
 > Compatibility Notice
 > 
-> - Starting from Immich 1.139.4, container paths have changed.
-> - If you're on 1.139.3 or earlier and use Manual Deployment, adjust the `volumes` mapping as described in the [Manual Deployment](#manual-deployment) section.
+> - Starting from Immich 1.136.0, container paths have changed.
+> - If you're on 1.135.x or earlier and use Manual Deployment, adjust the `volumes` mapping as described in the [Manual Deployment](#manual-deployment) section.
 > - If you use this project's integrated auto-deployment (update_data.sh), no changes are required; the script has been updated to support both old and new versions.
 
 ### Before and After Comparison  
@@ -98,9 +98,9 @@ This project supports the following two deployment methods:
      - /mnt/user/appdata/immich/geodata:/build/geodata:ro
      - /mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/server/node_modules/i18n-iso-countries/langs:ro
    ```
-   > **NOTE**:  
-   > For Immich < 1.139.4, please change the second line to:  
-   > `/mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs:ro`
+     > **NOTE**:  
+  > For Immich < 1.136.0, please change the second line to:  
+  > `/mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs:ro`
   
 2. **Download Taiwan localization data**  
    Two download methods are provided:  
