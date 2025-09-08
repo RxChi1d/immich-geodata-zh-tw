@@ -9,6 +9,9 @@ on:
         description: '請輸入語意化版本標籤 (例如: v1.0.0)' # Input for semantic version tag
         required: true
         type: string
+  push:
+    tags:
+      - 'v*' # Trigger when pushing semantic version tags like v1.0.0, v1.0.0a1, etc.
 
 defaults:
   run:
@@ -20,7 +23,20 @@ jobs:
     permissions:
       contents: write
     runs-on: ubuntu-latest
+    env:
+      # Prefer manual input when dispatched; otherwise use the pushed tag name
+      VERSION_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version_tag || github.ref_name }}
     steps:
+      - name: Validate version tag (PEP 440)
+        run: |
+          echo "Validating VERSION_TAG: ${VERSION_TAG}"
+          # Allow: vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCHaN/bN/rcN (PEP 440 pre-releases)
+          REGEX='^v[0-9]+\.[0-9]+\.[0-9]+((a|b|rc)[0-9]+)?$'
+          if [[ ! "$VERSION_TAG" =~ $REGEX ]]; then
+            echo "❌ Invalid VERSION_TAG: $VERSION_TAG"
+            echo "Expected (PEP 440): vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCHaN/bN/rcN"
+            exit 1
+          fi
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -42,13 +58,14 @@ jobs:
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          name: ${{ github.event.inputs.version_tag }} # Use the input tag for the release name
+          name: ${{ env.VERSION_TAG }} # Use input when manual or the pushed tag name
           artifacts: "output/release.*"
           draft: false
           generateReleaseNotes: false # Keep false unless you want auto-generated notes
           commit: main # Or specify the commit SHA/branch if needed
-          tag: ${{ github.event.inputs.version_tag }} # Use the input tag
-          makeLatest: ${{ !contains(github.event.inputs.version_tag, 'a') && !contains(github.event.inputs.version_tag, 'b') && !contains(github.event.inputs.version_tag, 'rc') && !contains(github.event.inputs.version_tag, 'alpha') && !contains(github.event.inputs.version_tag, 'beta') }} # Only mark stable versions as latest
+          tag: ${{ env.VERSION_TAG }} # Use input when manual or the pushed tag
+          makeLatest: ${{ !contains(env.VERSION_TAG, 'a') && !contains(env.VERSION_TAG, 'b') && !contains(env.VERSION_TAG, 'rc') && !contains(env.VERSION_TAG, 'alpha') && !contains(env.VERSION_TAG, 'beta') }} # Only mark stable versions as latest
+          prerelease: ${{ contains(env.VERSION_TAG, 'a') || contains(env.VERSION_TAG, 'b') || contains(env.VERSION_TAG, 'rc') || contains(env.VERSION_TAG, 'alpha') || contains(env.VERSION_TAG, 'beta') }} # Mark alpha/beta/rc as pre-release
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
