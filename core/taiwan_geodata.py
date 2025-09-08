@@ -9,17 +9,17 @@
 - 解壓縮：請將下載的檔案完整解壓縮到
   `geoname_data/VILLAGE_NLSC_YYYMMDD`（YYYMMDD 為資料日期）。
 
-目錄結構範例（以 1140620 為例）：
+目錄結構範例（以 1140825 為例）：
 
     geoname_data
-    └── VILLAGE_NLSC_1140620
-        ├── 修正清單_1140620.xlsx
+    └── VILLAGE_NLSC_1140825
+        ├── 修正清單_1140825.xlsx
         ├── TW-07-301000100G-613995.xml
-        ├── VILLAGE_NLSC_1140620.CPG
-        ├── VILLAGE_NLSC_1140620.dbf
-        ├── VILLAGE_NLSC_1140620.prj
-        ├── VILLAGE_NLSC_1140620.shp
-        ├── VILLAGE_NLSC_1140620.shx
+        ├── VILLAGE_NLSC_1140825.CPG
+        ├── VILLAGE_NLSC_1140825.dbf
+        ├── VILLAGE_NLSC_1140825.prj
+        ├── VILLAGE_NLSC_1140825.shp
+        ├── VILLAGE_NLSC_1140825.shx
         ├── Village_Sanhe.CPG
         ├── Village_Sanhe.dbf
         ├── Village_Sanhe.prj
@@ -29,7 +29,7 @@
 使用提示
 ------
  - 透過 `--shapefile` 參數指定 `.shp` 檔路徑（未指定則使用預設路徑），例如：
-  `python core/taiwan_geodata.py --shapefile geoname_data/VILLAGE_NLSC_1140620/VILLAGE_NLSC_1140620.shp`。
+  `python core/taiwan_geodata.py --shapefile geoname_data/VILLAGE_NLSC_1140825/VILLAGE_NLSC_1140825.shp`。
  - 本腳本會計算多邊形中心點，並輸出 WGS84 經緯度到 CSV，
    以利後續反向地理編碼使用。
 """
@@ -58,7 +58,7 @@ class TaiwanGeoData:
         - 此模組預期使用的 Shapefile 圖資來源為：
           國土測繪中心 (https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx)
           資料集名稱：村(里)界 (TWD97經緯度)
-          版本/日期：1140620 (或更新版本)
+          版本/日期：1140825 (或更新版本)
         - 請確保已安裝 geopandas 及其相關依賴。
         - 處理過程會將座標系統轉換，最終輸出 WGS84 格式的中心點座標。
     """
@@ -197,10 +197,10 @@ if __name__ == "__main__":
         "--shapefile",
         type=str,
         default=str(
-            Path("geoname_data") / "VILLAGE_NLSC_1140620" / "VILLAGE_NLSC_1140620.shp"
+            Path("geoname_data") / "VILLAGE_NLSC_1140825" / "VILLAGE_NLSC_1140825.shp"
         ),
         help=(
-            "Shapefile 檔案路徑。預設：geoname_data/VILLAGE_NLSC_1140620/VILLAGE_NLSC_1140620.shp"
+            "Shapefile 檔案路徑。預設：geoname_data/VILLAGE_NLSC_1140825/VILLAGE_NLSC_1140825.shp"
         ),
     )
     parser.add_argument(
