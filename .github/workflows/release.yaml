@@ -49,6 +49,7 @@ jobs:
           commit: main # Or specify the commit SHA/branch if needed
           tag: ${{ github.event.inputs.version_tag }} # Use the input tag
           makeLatest: ${{ !contains(github.event.inputs.version_tag, 'a') && !contains(github.event.inputs.version_tag, 'b') && !contains(github.event.inputs.version_tag, 'rc') && !contains(github.event.inputs.version_tag, 'alpha') && !contains(github.event.inputs.version_tag, 'beta') }} # Only mark stable versions as latest
+          prerelease: ${{ contains(github.event.inputs.version_tag, 'a') || contains(github.event.inputs.version_tag, 'b') || contains(github.event.inputs.version_tag, 'rc') || contains(github.event.inputs.version_tag, 'alpha') || contains(github.event.inputs.version_tag, 'beta') }} # Mark alpha/beta/rc as pre-release
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
