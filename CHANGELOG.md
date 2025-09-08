@@ -27,6 +27,9 @@
 
 ## [未發佈版本]
 
+
+## [1.2.1] - 2025-09-08
+
 ### Changed
 - **發佈流程**：推送以 v 為前綴的標籤自動觸發 Release，並在建置前依 PEP 440 驗證版本格式。
 - **NLSC 圖資更新**：村(里)界資料更新至 `1140825`，同步調整 `meta_data/taiwan_geodata.csv` 之中心點座標（WGS84）
@@ -160,7 +163,8 @@
 
 特定變更的詳細資訊請參閱 [提交歷史](https://github.com/RxChi1d/immich-geodata-zh-tw/commits/main) 或 [發佈頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases)。
 
-[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.0...HEAD
+[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.1.4...v1.2.0
 [1.1.4]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.1.2...v1.1.3
