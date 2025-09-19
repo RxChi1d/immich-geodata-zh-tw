@@ -8,6 +8,10 @@ This project provides Taiwan-localized optimization for Immich's reverse geocodi
 - **Administrative Division Optimization**: Solving the issue where Taiwan's municipalities and provincial cities/counties only display region names.  
 - **Enhanced Taiwan Data Accuracy**: Utilizing official map data from **National Land Surveying and Mapping Center (NLSC)** of Taiwan to process geographical names and boundary data for Taiwan region, ensuring authoritative data sources.  
 
+> [!WARNING]
+> If integrated deployment continues to use `exec /bin/bash start.sh` as the `entrypoint`, Immich 1.142.0+ will exit on startup with `Error: /usr/src/dist/main.js not found`, leading to a reboot loop.
+> Switch to `exec start.sh` instead (the Integrated Deployment section provides updated examples and guidance).
+
 > [!TIP]
 > Compatibility Notice
 > 
@@ -70,7 +74,7 @@ This project supports the following two deployment methods:
 
       # Other configurations omitted
 
-      entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/update_data.sh) --install && exec /bin/bash start.sh" ]
+      entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/update_data.sh) --install && exec start.sh" ]
    ```  
    > **NOTE**:  
    > - The `entrypoint` will first execute this project's `update_data.sh` script when the container starts, automatically downloading and configuring Taiwan localization data, then execute Immich server's `start.sh` to start the service.
@@ -132,7 +136,7 @@ Please go to this project's [Releases page](https://github.com/RxChi1d/immich-ge
 1.  **Integrated Deployment (`entrypoint` in `docker-compose.yml`)**
     Add `--tag <tag_name>` after the entrypoint command:
     ```yaml
-    entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/update_data.sh) --install --tag <tag_name> && exec /bin/bash start.sh" ] 
+    entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/update_data.sh) --install --tag <tag_name> && exec start.sh" ] 
     ```
     Replace `<tag_name>` with the specific tag name you want to download. If `--tag` is omitted, the latest release (`latest`) is downloaded by default.
 
