@@ -1,12 +1,16 @@
 # Immich 反向地理編碼 - 臺灣特化  
 
 [繁體中文](README.md) | [English](README.en.md)
-  
+
 本專案為 Immich 提供反向地理編碼功能的臺灣特化優化，旨在提升地理資訊的準確性及使用體驗。主要功能包括：  
   
 - **中文化處理**：將國內外地理名稱轉換為符合臺灣用語的繁體中文。  
 - **行政區優化**：解決臺灣直轄市與省轄縣市僅顯示地區名稱的問題。  
 - **提升臺灣資料準確性**：利用**中華民國國土測繪中心 (NLSC)** 的官方圖資處理臺灣地區的地理名稱與邊界資料，確保數據來源的權威性。  
+
+> [!WARNING]
+> 若整合式部署仍使用 `exec /bin/bash start.sh` 作為 `entrypoint`，Immich 1.142.0 起會在啟動時顯示 `Error: /usr/src/dist/main.js not found` 並陷入重啟循環。
+> 請改用 `exec start.sh`（整合式部署章節提供更新後的範例與說明）。
 
 > [!TIP]
 > 版本相容性提示
@@ -60,7 +64,7 @@
 2. 手動部署（適用於自訂部署環境，可手動下載並配置特化資料）。
 
 ### 整合式部署（推薦，方便後續更新）
-  
+
 1. **修改 `docker-compose.yml` 配置**  
    在 `immich_server` 服務內新增 `entrypoint` 設定，使容器啟動時自動下載最新地理資料：  
    ```yaml  
@@ -70,7 +74,7 @@
 
       # 其他配置省略
 
-      entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/update_data.sh) --install && exec /bin/bash start.sh" ]
+      entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/update_data.sh) --install && exec start.sh" ]
    ```  
    > **NOTE**:  
    > - `entrypoint` 會在容器啟動時先執行本專案的 `update_data.sh` 腳本，自動下載並配置臺灣特化資料，隨後執行 Immich 伺服器的 `start.sh` 啟動服務。
@@ -132,7 +136,7 @@
 1.  **整合式部署 (`docker-compose.yml` 中的 `entrypoint`)**
     在 `entrypoint` 的指令後面加上 `--tag <tag_name>`：
     ```yaml
-    entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/update_data.sh) --install --tag <tag_name> && exec /bin/bash start.sh" ] 
+    entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/update_data.sh) --install --tag <tag_name> && exec start.sh" ] 
     ```
     將 `<tag_name>` 替換為你想要下載的具體 tag 名稱。如果省略 `--tag`，則預設下載最新的 release (`latest`)。
 
