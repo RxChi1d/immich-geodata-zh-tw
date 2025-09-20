@@ -27,10 +27,12 @@
 
 ## [未發佈版本]
 
-### Changed
-- **Geodata Refresh**: 自動資料管線匯入 2025-09-12 的反向地理編碼資料集，確保夜間建構持續同步最新地理資訊。
-- **Deployment Guidance**: README 說明更新為使用 `exec start.sh`，避免 Immich 1.142.0+ 在整合式部署時因路徑誤判而發生重啟循環。
 
+## [1.2.2] - 2025-09-19
+
+### Changed
+- **Geodata Refresh**: 自動資料管線匯入 2025-09-12 的反向地理編碼資料集，確保 Nightly 建構持續同步最新地理資訊。
+- **Deployment Guidance**: README 說明更新為使用 `exec start.sh`，避免 Immich 1.142.0+ 在整合式部署時因路徑誤判而發生重啟循環。
 
 ## [1.2.1] - 2025-09-08
 
@@ -167,7 +169,8 @@
 
 特定變更的詳細資訊請參閱 [提交歷史](https://github.com/RxChi1d/immich-geodata-zh-tw/commits/main) 或 [發佈頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases)。
 
-[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.1...HEAD
+[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.1.4...v1.2.0
 [1.1.4]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.1.3...v1.1.4
