@@ -124,6 +124,68 @@
 - **Python 套件管理工具**：uv
 - **uv 管理的虛擬環境**：`.venv/`
 
+## 架構說明
+
+### 地理資料處理流程（ETL 模式）
+
+本專案採用 **Extract-Transform-Load (ETL)** 模式處理地理資料：
+
+```
+core/geodata/
+├── base.py         # GeoDataHandler 抽象基類
+├── taiwan.py       # TaiwanGeoDataHandler
+└── japan.py        # JapanGeoDataHandler
+```
+
+每個國家的 Handler 包含三個階段的方法：
+
+#### 1. Extract（提取）
+- **方法**：`extract_from_shapefile(shapefile_path, output_csv)`
+- **功能**：從 Shapefile 提取資料並轉換為標準化 CSV
+- **輸入**：原始 Shapefile 檔案
+- **輸出**：`meta_data/{country}_geodata.csv`
+- **處理內容**：
+  - 讀取 Shapefile（使用 geopandas）
+  - 計算多邊形中心點（使用適當的投影）
+  - 轉換為 WGS84 座標
+  - 輸出標準化欄位：longitude, latitude, admin_1-4, country
+
+#### 2. Transform（轉換）
+- `convert_to_cities_schema(csv_path)`: 將標準 CSV 轉成 CITIES_SCHEMA，負責生成 geoname_id、對應行政區與補齊時區、國家代碼。
+
+#### 3. Load（載入）
+- `replace_in_dataset(input_df, country_code)`: 以新資料覆蓋 cities500 中對應國家的紀錄並回傳更新結果。
+
+### 常用指令
+
+```bash
+python main.py extract --country TW --shapefile <path_to_tw_shapefile>
+python main.py extract --country JP --shapefile <path_to_jp_shapefile>
+python main.py enhance --country-code <country_code>
+```
+
+### 在程式中使用
+
+```python
+from core.geodata import get_handler
+
+handler = get_handler("TW")()
+handler.extract_from_shapefile("path/to/file.shp", "output.csv")
+df = handler.convert_to_cities_schema("output.csv")
+updated_df = handler.replace_in_dataset(cities500_df, "TW")
+```
+
+### 擴充新國家
+
+1. 建立 `core/geodata/<country>.py`，繼承 `GeoDataHandler` 並加上 `@register_handler("<CC>")`。
+2. 實作 `extract_from_shapefile` 與 `convert_to_cities_schema`：
+   - `geoname_id` 從 `92_000_000` 起算。
+   - 填寫正確時區與 `country_code`。
+   - 輸出需符合 `CITIES_SCHEMA`。
+3. 執行 `python main.py extract --country <CC> ...` 與 `python main.py enhance --country-code <CC>` 驗證流程。
+
+Registry 會自動載入新處理器，毋須調整其他檔案。
+
 ### 核心開發循環
 
 #### Git Hooks（pre-commit）

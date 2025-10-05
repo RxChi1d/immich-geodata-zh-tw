@@ -36,7 +36,7 @@ This project provides Taiwan-localized optimization for Immich's reverse geocodi
   - [Update Geographic Data](#update-geographic-data)
     - [Integrated Deployment](#integrated-deployment)
     - [Manual Deployment](#manual-deployment-1)
-  - [Local Data Processing](#local-data-processing)
+  - [Developer: Local Data Processing](#developer-local-data-processing)
   - [Acknowledgments](#acknowledgments)
   - [License](#license)
   
@@ -178,37 +178,76 @@ Simply restart the Immich container to automatically update geographic data.
 ### Manual Deployment
   
 1. Download the latest release.zip and extract it to the specified location.
-   
+
 2. Re-extract photo metadata (same as [Manual Deployment](#manual-deployment)).
-  
-## Local Data Processing  
-  
-1. **Install Dependencies**  
-   First install uv (if not already installed):
-   
-   Please refer to the [uv official installation guide](https://docs.astral.sh/uv/getting-started/installation/) to install uv for your operating system.
-   
-   Then install project dependencies:
-   
-   ```bash
-   uv sync
-   ```
 
-2. Register an account at [LocationIQ](https://locationiq.com/) and obtain an API Key.  
+## Developer: Local Data Processing
 
-3. **Execute `main.py`**  
-   ```bash  
-   uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "JP" "KR" "TH"
-   ```  
-   > **NOTE:**  
-   > - You can view more options through `uv run python main.py --help` or `uv run python main.py release --help`.  
-   > - The `--country-code` parameter can specify country codes to process, multiple codes separated by spaces. (Currently only tested with JP, KR, TH)  
-     
-   > **WARNING:**  
-   > - Since LocationIQ API has request limits (can be checked in the backend after login), please pay attention to the number of place names in the countries to be processed to avoid exceeding limits.  
-   > - This project allows LocationIQ reverse geocoding query progress recovery. If daily request limits are exceeded, you can continue execution after changing API keys or the next day.  
-   >   - Need to add `--pass-cleanup` parameter to cancel folder reset function: `uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "TW" "JP" --pass-cleanup`.  
-  
+### 1. Install Dependencies
+
+First install uv (if not already installed):
+
+Please refer to the [uv official installation guide](https://docs.astral.sh/uv/getting-started/installation/) to install uv for your operating system.
+
+Then install project dependencies:
+
+```bash
+uv sync
+```
+
+### 2. Extract Raw Geographic Data (Optional)
+
+If you need to process new countries or update existing geographic data sources, you can use the `extract` command to extract data from Shapefiles. This step is optional and only needed when updating data sources.
+
+#### Taiwan Data Extraction
+
+Data source: [National Land Surveying and Mapping Center (NLSC)](https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx)
+
+```bash
+# 1. Download "Village Boundaries (TWD97 Latitude/Longitude)" data and extract
+# 2. Execute extraction command
+uv run python main.py extract --country TW \
+  --shapefile geoname_data/VILLAGE_NLSC_1140825/VILLAGE_NLSC_1140825.shp \
+  --output meta_data/tw_geodata.csv
+```
+
+#### Japan Data Extraction
+
+Data source: [国土数値情報](https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2025.html)
+
+```bash
+# 1. Download "行政区域データ（世界測地系）" and extract
+# 2. Execute extraction command
+uv run python main.py extract --country JP \
+  --shapefile geoname_data/N03-20250101_GML/N03-20250101.shp \
+  --output meta_data/jp_geodata.csv
+```
+
+After extraction is complete, the data will be automatically integrated when executing `main.py release`.
+
+### 3. Complete Data Processing Workflow
+
+After completing data extraction (or using existing data), you can execute the complete data processing workflow to generate releases.
+
+#### Register LocationIQ API
+
+Register an account at [LocationIQ](https://locationiq.com/) and obtain an API Key.
+
+#### Execute Data Processing
+
+```bash
+uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH"
+```
+
+> **NOTE:**
+> - You can view more options through `uv run python main.py --help` or `uv run python main.py release --help`.
+> - The `--country-code` parameter can specify country codes to process, multiple codes separated by spaces. (Currently only tested with "KR" "TH")
+
+> **WARNING:**
+> - Since LocationIQ API has request limits (can be checked in the backend after login), please pay attention to the number of place names in the countries to be processed to avoid exceeding limits.
+> - This project allows LocationIQ reverse geocoding query progress recovery. If daily request limits are exceeded, you can continue execution after changing API keys or the next day.
+>   - Need to add `--pass-cleanup` parameter to cancel folder reset function: `uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH" --pass-cleanup`.
+
 ## Acknowledgments  
   
 This project is modified based on [immich-geodata-cn](https://github.com/ZingLix/immich-geodata-cn), special thanks to the original author [ZingLix](https://github.com/ZingLix) for their contribution.  

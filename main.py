@@ -48,6 +48,40 @@ def cmd_prepare(args):
     logger.info("prepare 步驟完成。")
 
 
+def cmd_extract(args):
+    """提取原始地理資料（Shapefile → CSV）"""
+    from core.geodata import get_handler
+    from pathlib import Path
+
+    # 取得 Handler
+    try:
+        handler_class = get_handler(args.country)
+    except ValueError as e:
+        logger.error(str(e))
+        sys.exit(1)
+
+    # 驗證 Shapefile
+    shapefile_path = Path(args.shapefile)
+    if not shapefile_path.exists():
+        logger.error(f"Shapefile 不存在: {shapefile_path}")
+        sys.exit(1)
+
+    if shapefile_path.suffix.lower() != ".shp":
+        logger.error(f"請提供 .shp 檔案，而非: {shapefile_path.suffix}")
+        sys.exit(1)
+
+    # 執行提取
+    output_csv = args.output or f"meta_data/{args.country.lower()}_geodata.csv"
+    logger.info(f"開始提取 {args.country} 地理資料...")
+    logger.info(f"  輸入: {shapefile_path}")
+    logger.info(f"  輸出: {output_csv}")
+
+    handler = handler_class()
+    handler.extract_from_shapefile(str(shapefile_path), output_csv)
+
+    logger.info("extract 步驟完成。")
+
+
 def cmd_enhance(args):
     """優化 cities500 資料"""
     cities_file = args.cities_file or os.path.join("geoname_data", "cities500.txt")
@@ -267,6 +301,24 @@ def main():
         "--update", action="store_true", help="刪除現有資料並重新下載"
     )
     parser_prepare.set_defaults(func=cmd_prepare)
+
+    # extract 子命令
+    parser_extract = subparsers.add_parser(
+        "extract", help="提取原始地理資料（Shapefile → CSV）"
+    )
+    parser_extract.add_argument(
+        "--country", type=str, required=True, help="國家代碼（例如: TW, JP）"
+    )
+    parser_extract.add_argument(
+        "-s", "--shapefile", type=str, required=True, help="Shapefile (.shp) 檔案路徑"
+    )
+    parser_extract.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        help="輸出 CSV 檔案路徑（預設: meta_data/{country}_geodata.csv）",
+    )
+    parser_extract.set_defaults(func=cmd_extract)
 
     # enhance 子命令
     parser_enhance = subparsers.add_parser("enhance", help="優化 cities500 資料")

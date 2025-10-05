@@ -36,7 +36,14 @@
   - [更新地理資料](#更新地理資料)
     - [整合式部署](#整合式部署)
     - [手動部署](#手動部署-1)
-  - [本地運行資料處理](#本地運行資料處理)
+  - [開發者：本地資料處理](#開發者本地資料處理)
+    - [1. 安裝依賴](#1-安裝依賴)
+    - [2. 提取原始地理資料](#2-提取原始地理資料)
+      - [臺灣資料提取](#臺灣資料提取)
+      - [日本資料提取](#日本資料提取)
+    - [3. 完整資料處理流程](#3-完整資料處理流程)
+      - [註冊 LocationIQ API](#註冊-locationiq-api)
+      - [執行資料處理](#執行資料處理)
   - [致謝](#致謝)
   - [授權條款](#授權條款)
   
@@ -178,37 +185,76 @@
 ### 手動部署
   
 1. 下載最新 release.zip，並解壓至指定位置。
-   
-2. 重新提取照片元數據（與[手動部署](#手動部署)相同）。
-  
-## 本地運行資料處理  
-  
-1. **安裝依賴**  
-   首先安裝 uv（如果尚未安裝）：
-   
-   請參考 [uv 官方安裝指南](https://docs.astral.sh/uv/getting-started/installation/) 根據你的作業系統安裝 uv。
-   
-   然後安裝專案依賴：
-   
-   ```bash
-   uv sync
-   ```
 
-2. 至 [LocationIQ](https://locationiq.com/) 註冊帳號，並取得 API Key。  
+2. 重新提取照片元數據（與「使用方式-[手動部署](#手動部署)」相同）。
 
-3. **執行`main.py`**  
-   ```bash  
-   uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "JP" "KR" "TH"
-   ```  
-   > **NOTE:**  
-   > - 可以通過 `uv run python main.py --help` 或 `uv run python main.py release --help` 查看更多選項。  
-   > - `--country-code` 參數可指定需要處理的國家代碼，多個代碼之間使用空格分隔。(目前僅測試過 "JP" "KR" "TH")  
-     
-   > **WARNING:**  
-   > - 由於 LocationIQ 的 API 有請求次數限制 (可登入後於後台查看)，因此請注意要處理的國家的地名數量，以免超出限制。  
-   > - 本專案允許 LocationIQ 反向地理編碼查詢的進度恢復，若超過當日請求限制，可於更換 api 金鑰或次日繼續執行。  
-   >   - 需加上 `--pass-cleanup`參數，以取消重設資料夾功能： `uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "TW" "JP" --pass-cleanup`。  
-  
+## 開發者：本地資料處理
+
+### 1. 安裝依賴
+
+首先安裝 uv（如果尚未安裝）：
+
+請參考 [uv 官方安裝指南](https://docs.astral.sh/uv/getting-started/installation/) 根據你的作業系統安裝 uv。
+
+然後安裝專案依賴：
+
+```bash
+uv sync
+```
+
+### 2. 提取原始地理資料
+
+如果你需要處理新的國家或更新現有的地理資料來源，可以使用 `extract` 命令從 Shapefile 提取資料。此步驟是選用的，僅在需要更新資料來源時執行。
+
+#### 臺灣資料提取
+
+資料來源：[國土測繪中心（NLSC）](https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx)
+
+```bash
+# 1. 下載「村(里)界（TWD97經緯度）」資料並解壓縮
+# 2. 執行提取命令
+uv run python main.py extract --country TW \
+  --shapefile geoname_data/VILLAGE_NLSC_1140825/VILLAGE_NLSC_1140825.shp \
+  --output meta_data/tw_geodata.csv
+```
+
+#### 日本資料提取
+
+資料來源：[国土数値情報](https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2025.html)
+
+```bash
+# 1. 下載「行政区域データ（世界測地系）」並解壓縮
+# 2. 執行提取命令
+uv run python main.py extract --country JP \
+  --shapefile geoname_data/N03-20250101_GML/N03-20250101.shp \
+  --output meta_data/jp_geodata.csv
+```
+
+提取完成後，執行 `main.py release` 時會自動整合這些資料。
+
+### 3. 完整資料處理流程
+
+完成資料提取（或使用現有的資料）後，可以執行完整的資料處理流程來生成 release。
+
+#### 註冊 LocationIQ API
+
+至 [LocationIQ](https://locationiq.com/) 註冊帳號，並取得 API Key。
+
+#### 執行資料處理
+
+```bash
+uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH"
+```
+
+> **NOTE:**
+> - 可以通過 `uv run python main.py --help` 或 `uv run python main.py release --help` 查看更多選項。
+> - `--country-code` 參數可指定需要處理的國家代碼，多個代碼之間使用空格分隔。(目前僅測試過 "KR" "TH")
+
+> **WARNING:**
+> - 由於 LocationIQ 的 API 有請求次數限制 (可登入後於後台查看)，因此請注意要處理的國家的地名數量，以免超出限制。
+> - 本專案允許 LocationIQ 反向地理編碼查詢的進度恢復，若超過當日請求限制，可於更換 api 金鑰或次日繼續執行。
+>   - 需加上 `--pass-cleanup`參數，以取消重設資料夾功能： `uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH" --pass-cleanup`。
+
 ## 致謝  
   
 本專案基於 [immich-geodata-cn](https://github.com/ZingLix/immich-geodata-cn) 修改，特別感謝原作者 [ZingLix](https://github.com/ZingLix) 的貢獻。  
