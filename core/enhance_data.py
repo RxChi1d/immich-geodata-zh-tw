@@ -7,13 +7,13 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from core.utils import logger
 from core.define import CITIES_SCHEMA
-from core.processors import TaiwanProcessor
+from core.geodata import get_handler
 
 
 def update_cities500(cities_file, extra_files, output_file, min_population=100):
     """
     更新 cities500.txt 檔案，將新的城市資料合併進去，並進行資料清理和調整。
-    其中，台灣地區的資料將被 meta_data/taiwan_geodata.csv 的內容完全取代。
+    其中，台灣地區的資料將被 meta_data/tw_geodata.csv 的內容完全取代。
 
     Args:
         cities_file (str): 原始的 cities500.txt 檔案路徑。
@@ -27,7 +27,7 @@ def update_cities500(cities_file, extra_files, output_file, min_population=100):
         2. 篩選出 geoname_id 不在 cities500.txt 中且人口數大於等於 min_population 的資料。
         3. 將篩選出的新資料合併到 cities500.txt 中。
         4. 檢查是否有重複座標的資料，若有則保留人口數最大者 (若人口數相同則保留 geoname_id 最小者)。
-        5. **調用 replace_with_converted_taiwan_data 函數，使用轉換後的資料替換台灣資料。**
+        5. 調用 GeoDataHandler 的 replace_in_dataset，使用轉換後的資料替換對應國家資料。
         6. 將更新後的資料寫入指定的輸出檔案中。
     """
 
@@ -90,8 +90,9 @@ def update_cities500(cities_file, extra_files, output_file, min_population=100):
         logger.info("未發現需要處理的重複座標資料")
 
     # --- 使用處理器替換台灣資料 ---
-    taiwan_processor = TaiwanProcessor()
-    cities500_df = taiwan_processor.replace_data(cities500_df)
+    taiwan_handler_class = get_handler("TW")
+    taiwan_handler = taiwan_handler_class()
+    cities500_df = taiwan_handler.replace_in_dataset(cities500_df, "TW")
 
     cities500_df.write_csv(output_file, separator="\t", include_header=False)
 
