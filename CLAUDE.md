@@ -176,3 +176,6 @@ uv run pytest              # 4. 執行單元測試
 - **除非有明確指示，或任務需求（見 `TASK.md`），**否則**不得刪除或覆蓋現有程式碼。**
 - **需要分析或拆解問題，通過 sequential thinking 進行更深度思考**
 - **與 GitHub 互動需使用 gh CLI**
+- **不准在未經允許的情況下，擅自在任何的文檔、訊息等文字中，包含 AI 編輯器或是 AI 模型的名稱**，例如:
+  - Generated with [Claude Code]
+  - Co-Authored-By: Claude
