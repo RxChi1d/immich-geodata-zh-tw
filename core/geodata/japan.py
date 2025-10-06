@@ -1,4 +1,4 @@
-"""日本地理資料處理器（完整 ETL 流程）"""
+"""日本地理資料處理器。"""
 
 import os
 import sys
@@ -12,7 +12,6 @@ from datetime import date
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from core.utils import logger
-from core.define import CITIES_SCHEMA
 from core.geodata.base import GeoDataHandler, register_handler
 
 # 設定 GDAL 選項，允許自動重建 .shx 檔案
@@ -21,69 +20,27 @@ os.environ["SHAPE_RESTORE_SHX"] = "YES"
 
 @register_handler("JP")
 class JapanGeoDataHandler(GeoDataHandler):
-    """
-    日本地理資料處理器。
+    """日本地理資料處理器。
 
-    資料來源：
-        - 機構：国土数値情報ダウンロードサイト
-        - 網址：https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2025.html
-        - 資料集：行政区域データ（世界測地系）
-        - 測地系：JGD2011 / EPSG:6668
-        - 版本：2025年（令和7年）N03-20250101
-
-    處理流程：
-        1. Extract: 從日本 Shapefile 提取行政區資料
-        2. Transform: 轉換為 CITIES_SCHEMA 格式
-        3. Load: 替換到主資料集
-
-    注意：
-        - 使用動態 UTM 區選擇方法（結合 Albers 投影）計算中心點
-        - 郡名（N03_003）會與市區町村名（N03_004）合併到 admin_2 欄位
+    資料來源：国土数値情報ダウンロードサイト 行政区域データ。
+    使用動態 UTM 區選擇方法（結合 Albers 投影）計算中心點。
     """
 
-    # ==================== Extract 階段 ====================
+    COUNTRY_NAME = "日本"
+    COUNTRY_CODE = "JP"
+    TIMEZONE = "Asia/Tokyo"
+    BASE_GEONAME_ID = 91000000
+    ADMIN1_MAPPING = None
 
     def _get_utm_epsg_from_lon(self, longitude: float) -> int:
-        """
-        根據經度計算 UTM 區的 EPSG 代碼。
-
-        Args:
-            longitude: 經度（單位：度）
-
-        Returns:
-            WGS84 UTM 北半球區的 EPSG 代碼
-        """
+        """根據經度計算 UTM 區的 EPSG 代碼。"""
         zone = int((longitude + 180) / 6) + 1
         return 32600 + zone
 
     def _calculate_centroids_utm(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-        """
-        使用動態 UTM 區選擇計算中心點（向量化）。
+        """使用動態 UTM 區選擇計算中心點（向量化）。
 
-        這是主要的計算方法，透過結合兩種投影技術提供最高精確度：
-
-        1. Albers 等面積圓錐投影：
-           - 用於決定準確的幾何中心點
-           - 確保對於不規則形狀能選擇正確的 UTM 區
-
-        2. 動態 UTM 區選擇：
-           - 每個幾何體使用其最佳的 UTM 區（基於 Albers 中心點）
-           - 在適當的 UTM 投影中計算最終中心點
-
-        實作細節：
-        - 完全使用 GeoPandas 向量化運算 - 無 Python 迴圈
-        - 按 UTM 區批次處理（日本通常為 3-5 個區）
-        - 直接使用 NumPy 陣列運算提取座標
-
-        效能：
-        - 處理 10 萬個幾何體：約 7-8 秒
-        - 精確度：中心點計算誤差 < 0.1 公尺
-
-        Args:
-            gdf: 包含幾何資料的 GeoDataFrame
-
-        Returns:
-            已新增經度和緯度欄位的 GeoDataFrame
+        結合 Albers 投影和動態 UTM 區選擇，提供高精確度的中心點計算。
         """
         # 確保使用 WGS84 座標系統
         if gdf.crs.to_epsg() != 4326:
@@ -156,19 +113,6 @@ class JapanGeoDataHandler(GeoDataHandler):
         return gdf
 
     def extract_from_shapefile(self, shapefile_path: str, output_csv: str) -> None:
-        """
-        從日本 Shapefile 提取行政區資料。
-
-        處理流程：
-            1. 讀取 Shapefile
-            2. 使用動態 UTM 區選擇方法計算中心點
-            3. 選擇並重新命名欄位
-            4. 儲存為標準化 CSV
-
-        Args:
-            shapefile_path: 日本 Shapefile 檔案路徑
-            output_csv: 輸出 CSV 檔案路徑
-        """
         try:
             logger.info(f"正在讀取 Shapefile: {shapefile_path}")
 
@@ -247,29 +191,12 @@ class JapanGeoDataHandler(GeoDataHandler):
 
             # 顯示前五筆資料供檢查
             logger.info(df.head(5))
-            
+
         except Exception as e:
             logger.error(f"處理 Shapefile 時發生錯誤: {e}")
             raise
 
-    # ==================== Transform 階段 ====================
-
     def convert_to_cities_schema(self, csv_path: str) -> pl.DataFrame:
-        """
-        讀取日本 CSV 並轉換為 CITIES_SCHEMA 格式。
-
-        處理流程：
-            1. 讀取標準化 CSV
-            2. 生成唯一 geoname_id（日本使用 91000000 起始）
-            3. 轉換為 CITIES_SCHEMA DataFrame
-            4. 暫存轉換後的資料
-
-        Args:
-            csv_path: 輸入 CSV 檔案路徑
-
-        Returns:
-            符合 CITIES_SCHEMA 的 DataFrame
-        """
         logger.info(f"讀取並轉換日本地理資料 ({Path(csv_path).name})")
 
         input_file = Path(csv_path)
@@ -280,12 +207,12 @@ class JapanGeoDataHandler(GeoDataHandler):
 
         df = pl.read_csv(input_file)
 
-        # 生成唯一的 geoname_id（日本使用 91000000 起始）
-        base_id = 91000000
+        # 生成唯一的 geoname_id（使用類別定義的起始 ID）
         df = df.with_columns(
-            pl.Series("geoname_id", [base_id + i for i in range(df.height)]).cast(
-                pl.Int64
-            )
+            pl.Series(
+                "geoname_id",
+                [self.BASE_GEONAME_ID + i for i in range(df.height)],
+            ).cast(pl.Int64)
         )
 
         # 獲取今天的日期字串
@@ -302,7 +229,7 @@ class JapanGeoDataHandler(GeoDataHandler):
                 "longitude": df["longitude"],
                 "feature_class": "A",
                 "feature_code": "ADM2",  # 市區町村層級
-                "country_code": "JP",
+                "country_code": self.COUNTRY_CODE,
                 "cc2": None,
                 "admin1_code": None,  # 暫不提供都道府縣代碼
                 "admin2_code": None,  # 暫不提供市區町村代碼
@@ -311,10 +238,10 @@ class JapanGeoDataHandler(GeoDataHandler):
                 "population": 0,
                 "elevation": None,
                 "dem": None,
-                "timezone": "Asia/Tokyo",
+                "timezone": self.TIMEZONE,
                 "modification_date": today_date_str,
             },
-            schema=CITIES_SCHEMA,
+            schema=self.CITIES_SCHEMA,
         )
 
         # 將轉換後的日本地理資料暫存到 output 資料夾

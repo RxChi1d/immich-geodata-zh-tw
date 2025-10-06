@@ -1,69 +1,79 @@
-"""地理資料統一處理器抽象基類（ETL 模式）"""
+"""地理資料處理器抽象基類（ETL 模式）。"""
 
 from abc import ABC, abstractmethod
 import polars as pl
 from core.utils import logger
+from core.schemas import ADMIN1_SCHEMA, GEODATA_SCHEMA, CITIES_SCHEMA
 
 
 class GeoDataHandler(ABC):
-    """
-    地理資料統一處理器（ETL 模式）。
+    """地理資料處理器（ETL 模式）。
 
-    每個國家應繼承此基類並實作三階段處理方法：
-    - Extract: Shapefile → 標準化 CSV
-    - Transform: CSV → CITIES_SCHEMA DataFrame
-    - Load: 整合到主資料集
+    提供三階段處理流程：
+        Extract: Shapefile → 標準化 CSV
+        Transform: CSV → CITIES_SCHEMA DataFrame
+        Load: 整合到主資料集
+
+    子類必須定義的類別變數：
+        COUNTRY_NAME: 國家名稱
+        COUNTRY_CODE: ISO 3166-1 alpha-2 代碼
+        TIMEZONE: IANA 時區名稱
+        ADMIN1_MAPPING: 行政區代碼映射（dict 或 None）
+        BASE_GEONAME_ID: geoname_id 起始值（預設 90000000）
     """
 
-    # ==================== Extract 階段 ====================
+    # Schema 引用（從 core.schemas 匯入，供子類繼承）
+    ADMIN1_SCHEMA = ADMIN1_SCHEMA
+    GEODATA_SCHEMA = GEODATA_SCHEMA
+    CITIES_SCHEMA = CITIES_SCHEMA
+
+    # 子類必須覆寫的類別變數
+    COUNTRY_NAME: str = ""
+    COUNTRY_CODE: str = ""
+    TIMEZONE: str = ""
+    BASE_GEONAME_ID: int = 90000000
+    ADMIN1_MAPPING: dict[str, str] | None = None
+
+    def __init__(self):
+        if not self.COUNTRY_NAME:
+            raise NotImplementedError(
+                f"{self.__class__.__name__} 必須定義 COUNTRY_NAME 類別變數"
+            )
+        if not self.COUNTRY_CODE:
+            raise NotImplementedError(
+                f"{self.__class__.__name__} 必須定義 COUNTRY_CODE 類別變數"
+            )
+        if not self.TIMEZONE:
+            raise NotImplementedError(
+                f"{self.__class__.__name__} 必須定義 TIMEZONE 類別變數"
+            )
+
+        logger.info(
+            f"初始化 {self.__class__.__name__} "
+            f"(國家: {self.COUNTRY_NAME}, 代碼: {self.COUNTRY_CODE})"
+        )
 
     @abstractmethod
     def extract_from_shapefile(self, shapefile_path: str, output_csv: str) -> None:
-        """
-        從 Shapefile 提取資料並儲存為標準化 CSV。
+        """從 Shapefile 提取資料並儲存為標準化 CSV。
 
         Args:
-            shapefile_path: Shapefile 檔案路徑
-            output_csv: 輸出 CSV 檔案路徑
-
-        處理流程：
-            1. 讀取 Shapefile
-            2. 計算中心點座標（使用適當的投影）
-            3. 轉換為標準化格式（longitude, latitude, admin_1-4, country）
-            4. 儲存為 CSV
-
-        Raises:
-            FileNotFoundError: 當 Shapefile 不存在時
-            Exception: 當處理過程發生錯誤時
+            shapefile_path: Shapefile 檔案路徑。
+            output_csv: 輸出 CSV 檔案路徑。
         """
         pass
-
-    # ==================== Transform 階段 ====================
 
     @abstractmethod
     def convert_to_cities_schema(self, csv_path: str) -> pl.DataFrame:
-        """
-        讀取 CSV 並轉換為 CITIES_SCHEMA 格式。
+        """讀取 CSV 並轉換為 CITIES_SCHEMA 格式。
 
         Args:
-            csv_path: 輸入 CSV 檔案路徑
+            csv_path: 輸入 CSV 檔案路徑。
 
         Returns:
-            符合 CITIES_SCHEMA 的 DataFrame
-
-        處理流程：
-            1. 讀取標準化 CSV
-            2. 生成唯一 geoname_id
-            3. 映射行政區代碼
-            4. 轉換為 CITIES_SCHEMA 格式
-
-        Raises:
-            FileNotFoundError: 當 CSV 檔案不存在時
-            ValueError: 當資料格式不符合預期時
+            符合 CITIES_SCHEMA 的 DataFrame。
         """
         pass
-
-    # ==================== Load 階段 ====================
 
     def replace_in_dataset(
         self,
@@ -71,18 +81,15 @@ class GeoDataHandler(ABC):
         country_code: str,
         csv_path: str | None = None,
     ) -> pl.DataFrame:
-        """
-        將轉換後的資料替換到主資料集中（通用實作）。
-
-        子類別通常不需要覆寫此方法。
+        """將轉換後的資料替換到主資料集中。
 
         Args:
-            input_df: 主資料集 DataFrame
-            country_code: 國家代碼（例如 "TW", "JP"）
-            csv_path: CSV 檔案路徑（預設 meta_data/{country}_geodata.csv）
+            input_df: 主資料集 DataFrame。
+            country_code: 國家代碼。
+            csv_path: CSV 檔案路徑（預設 meta_data/{country}_geodata.csv）。
 
         Returns:
-            已替換資料的 DataFrame
+            已替換資料的 DataFrame。
         """
         # 預設 CSV 路徑
         if csv_path is None:
@@ -108,22 +115,14 @@ class GeoDataHandler(ABC):
         return output_df
 
 
-# ==================== Registry ====================
-
 _HANDLER_REGISTRY: dict[str, type[GeoDataHandler]] = {}
 
 
 def register_handler(country_code: str):
-    """
-    註冊處理器的裝飾器。
+    """註冊處理器的裝飾器。
 
     Args:
-        country_code: 國家代碼（ISO 3166-1 alpha-2），例如 "TW", "JP"
-
-    Example:
-        @register_handler("TW")
-        class TaiwanGeoDataHandler(GeoDataHandler):
-            ...
+        country_code: 國家代碼（ISO 3166-1 alpha-2）。
     """
 
     def decorator(handler_class: type[GeoDataHandler]) -> type[GeoDataHandler]:
@@ -134,22 +133,16 @@ def register_handler(country_code: str):
 
 
 def get_handler(country_code: str) -> type[GeoDataHandler]:
-    """
-    取得指定國家的處理器類別。
+    """取得指定國家的處理器類別。
 
     Args:
-        country_code: 國家代碼（ISO 3166-1 alpha-2）
+        country_code: 國家代碼（ISO 3166-1 alpha-2）。
 
     Returns:
-        處理器類別
+        處理器類別。
 
     Raises:
-        ValueError: 當國家代碼不存在時
-
-    Example:
-        handler_class = get_handler("TW")
-        handler = handler_class()
-        handler.extract_from_shapefile("path/to/file.shp", "output.csv")
+        ValueError: 當國家代碼不存在時。
     """
     country_code = country_code.upper()
     if country_code not in _HANDLER_REGISTRY:
