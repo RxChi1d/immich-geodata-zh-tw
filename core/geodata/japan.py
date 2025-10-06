@@ -222,7 +222,7 @@ class JapanGeoDataHandler(GeoDataHandler):
                             & (pl.col("N03_005") != "nan")
                         )
                         .then(pl.col("N03_005"))
-                        .otherwise(pl.lit(None))
+                        .otherwise(pl.lit(""))
                     ).alias("admin_3"),  # 政令指定都市的行政區
                     pl.lit("").alias("admin_4"),  # 空字串
                     pl.lit("日本").alias("country"),  # 國家
