@@ -8,7 +8,7 @@ import polars as pl
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from core.define import CITIES_SCHEMA, GEODATA_SCHEMA, ADMIN1_SCHEMA
+from core.schemas import ADMIN1_SCHEMA, GEODATA_SCHEMA, CITIES_SCHEMA
 from core.utils import ensure_folder_exists, logger, load_alternate_names
 
 # 初始化簡繁轉換器

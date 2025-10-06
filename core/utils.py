@@ -8,7 +8,7 @@ import polars as pl
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from core.define import CHINESE_PRIORITY
+from core.constants import CHINESE_PRIORITY
 
 
 class TqdmLogSink:

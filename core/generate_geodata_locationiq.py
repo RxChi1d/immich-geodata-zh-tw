@@ -11,7 +11,12 @@ from tqdm import tqdm
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from core.utils import logger, ensure_folder_exists
-from core.define import CITIES_SCHEMA, GEODATA_SCHEMA, MUNICIPALITIES
+from core.schemas import CITIES_SCHEMA, GEODATA_SCHEMA
+from core.geodata import get_handler
+
+# 取得臺灣處理器的 MUNICIPALITIES
+TaiwanHandler = get_handler("TW")
+MUNICIPALITIES = TaiwanHandler.MUNICIPALITIES
 
 
 s = requests.Session()

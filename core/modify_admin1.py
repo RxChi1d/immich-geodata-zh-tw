@@ -5,7 +5,12 @@ import polars as pl
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from core.utils import logger, load_alternate_names
-from core.define import ADMIN1_SCHEMA, TAIWAN_ADMIN1
+from core.schemas import ADMIN1_SCHEMA
+from core.geodata import get_handler
+
+# 取得臺灣處理器的 ADMIN1_MAPPING
+TaiwanHandler = get_handler("TW")
+TAIWAN_ADMIN1 = TaiwanHandler.ADMIN1_MAPPING
 
 
 def create_new_taiwan_admin1(admin2_path, output_path):

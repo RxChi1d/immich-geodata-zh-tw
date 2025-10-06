@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from core.utils import logger
-from core.define import CITIES_SCHEMA
+from core.schemas import CITIES_SCHEMA
 from core.geodata import get_handler
 
 
@@ -35,7 +35,10 @@ def update_cities500(cities_file, extra_files, output_file, min_population=100):
 
     # 讀取 cites500.txt
     cities500_df = pl.read_csv(
-        cities_file, separator="\t", has_header=False, schema=CITIES_SCHEMA
+        cities_file,
+        separator="\t",
+        has_header=False,
+        schema=CITIES_SCHEMA,
     )
 
     # 讀取 extra_data/country_code.txt
@@ -44,7 +47,10 @@ def update_cities500(cities_file, extra_files, output_file, min_population=100):
         if Path(file).exists():
             extra_df = extra_df.vstack(
                 pl.read_csv(
-                    file, separator="\t", has_header=False, schema=CITIES_SCHEMA
+                    file,
+                    separator="\t",
+                    has_header=False,
+                    schema=CITIES_SCHEMA,
                 )
             )
             logger.info(f"讀取額外資料檔案: {file}")
