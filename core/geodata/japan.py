@@ -14,9 +14,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 from core.utils import logger
 from core.geodata.base import GeoDataHandler, register_handler
 
-# 設定 GDAL 選項，允許自動重建 .shx 檔案
-os.environ["SHAPE_RESTORE_SHX"] = "YES"
-
 
 @register_handler("JP")
 class JapanGeoDataHandler(GeoDataHandler):
