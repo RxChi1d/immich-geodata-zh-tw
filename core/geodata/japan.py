@@ -26,7 +26,6 @@ class JapanGeoDataHandler(GeoDataHandler):
     COUNTRY_NAME = "日本"
     COUNTRY_CODE = "JP"
     TIMEZONE = "Asia/Tokyo"
-    BASE_GEONAME_ID = 91000000
     ADMIN1_MAPPING = None
 
     def _get_utm_epsg_from_lon(self, longitude: float) -> int:
@@ -193,7 +192,9 @@ class JapanGeoDataHandler(GeoDataHandler):
             logger.error(f"處理 Shapefile 時發生錯誤: {e}")
             raise
 
-    def convert_to_cities_schema(self, csv_path: str) -> pl.DataFrame:
+    def convert_to_cities_schema(
+        self, csv_path: str, base_geoname_id: int
+    ) -> pl.DataFrame:
         logger.info(f"讀取並轉換日本地理資料 ({Path(csv_path).name})")
 
         input_file = Path(csv_path)
@@ -204,11 +205,11 @@ class JapanGeoDataHandler(GeoDataHandler):
 
         df = pl.read_csv(input_file)
 
-        # 生成唯一的 geoname_id（使用類別定義的起始 ID）
+        # 生成唯一的 geoname_id
         df = df.with_columns(
             pl.Series(
                 "geoname_id",
-                [self.BASE_GEONAME_ID + i for i in range(df.height)],
+                [base_geoname_id + i for i in range(df.height)],
             ).cast(pl.Int64)
         )
 
