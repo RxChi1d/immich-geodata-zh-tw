@@ -59,11 +59,23 @@ class GeoDataHandler(ABC):
         """
         pass
 
-    @abstractmethod
+    @classmethod
     def convert_to_cities_schema(
-        self, csv_path: str, base_geoname_id: int
+        cls, csv_path: str, base_geoname_id: int
     ) -> pl.DataFrame:
-        """讀取 CSV 並轉換為 CITIES_SCHEMA 格式。
+        """讀取 CSV 並轉換為 CITIES_SCHEMA 格式（共用實作）。
+
+        此方法提供通用的城市資料轉換流程：
+        1. 驗證輸入路徑並讀取 CSV
+        2. 呼叫 prepare_cities_source 進行前處理
+        3. 檢查必要欄位是否存在
+        4. 分配 geoname_id 並映射 admin1_code
+        5. 呼叫 build_cities_dataframe 建立輸出
+        6. 寫入暫存檔案並回傳結果
+
+        子類通常不需覆寫此方法，而是透過以下鉤子自訂行為：
+        - prepare_cities_source: 前處理來源資料
+        - build_cities_dataframe: 自訂 DataFrame 組裝邏輯
 
         Args:
             csv_path: 輸入 CSV 檔案路徑。
@@ -72,8 +84,207 @@ class GeoDataHandler(ABC):
 
         Returns:
             符合 CITIES_SCHEMA 的 DataFrame。
+
+        Raises:
+            FileNotFoundError: 當 CSV 檔案不存在時。
+            ValueError: 當 CSV 缺少必要欄位時。
         """
-        pass
+        from pathlib import Path
+
+        logger.info(f"正在轉換 {cls.COUNTRY_NAME} 地理資料...")
+
+        # 驗證檔案存在
+        input_file = Path(csv_path)
+        if not input_file.exists():
+            error_msg = (
+                f"輸入檔案不存在: {input_file}\n"
+                f"建議：請先執行 extract 階段以生成 CSV 檔案"
+            )
+            logger.error(error_msg)
+            raise FileNotFoundError(error_msg)
+
+        # 讀取 CSV
+        df = pl.read_csv(csv_path)
+        logger.info(f"成功讀取 CSV，共 {df.height} 筆資料")
+
+        # 呼叫前處理鉤子
+        df = cls.prepare_cities_source(df)
+
+        # 驗證必要欄位
+        required_cols = ["admin_1", "admin_2", "latitude", "longitude"]
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            error_msg = (
+                f"CSV 檔案缺少必要欄位: {missing_cols}\n"
+                f"檔案路徑: {csv_path}\n"
+                f"可用欄位: {df.columns}\n"
+                f"建議：請檢查 extract_from_shapefile 的實作"
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        # 獲取 admin1_mapping
+        admin1_mapping = cls.get_admin1_mapping(csv_path)
+
+        # 生成唯一的 geoname_id
+        df = df.with_columns(
+            pl.Series(
+                "geoname_id",
+                [base_geoname_id + i for i in range(df.height)],
+            ).cast(pl.Int64)
+        )
+
+        # 將 admin_1 映射到 admin1_code
+        df = df.with_columns(
+            pl.col("admin_1")
+            .map_elements(
+                lambda name: admin1_mapping.get(name, None),
+                return_dtype=pl.String,
+            )
+            .alias("admin1_code_full")  # 暫存完整代碼 "XX.YY"
+        )
+
+        # 檢查是否有無法映射的 admin_1
+        null_admin1_codes = df.filter(pl.col("admin1_code_full").is_null())
+        if null_admin1_codes.height > 0:
+            missing_names = null_admin1_codes["admin_1"].unique().to_list()
+            logger.warning(
+                f"以下 admin_1 無法映射到 admin1_code（將設為 None）: {missing_names}"
+            )
+
+        # 提取 admin1_code 的數字/字母部分（"XX.YY" -> "YY"）
+        df = df.with_columns(
+            pl.when(pl.col("admin1_code_full").is_not_null())
+            .then(pl.col("admin1_code_full").str.split(".").list.last())
+            .otherwise(None)
+            .alias("admin1_code_mapped")
+        )
+
+        # 呼叫 build_cities_dataframe 建立輸出
+        result = cls.build_cities_dataframe(df)
+
+        # 寫入暫存檔案
+        output_path = (
+            Path("output") / f"{cls.COUNTRY_CODE.lower()}_geodata_converted.csv"
+        )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        result.write_csv(output_path)
+        logger.info(f"已將轉換後的資料暫存至: {output_path}")
+
+        logger.info(f"{cls.COUNTRY_NAME} 地理資料轉換完成，共 {result.height} 筆資料")
+        logger.info(
+            f"Geoname ID 範圍: {base_geoname_id} - "
+            f"{base_geoname_id + result.height - 1}"
+        )
+
+        return result
+
+    @classmethod
+    def prepare_cities_source(cls, df: pl.DataFrame) -> pl.DataFrame:
+        """前處理城市來源資料的鉤子方法。
+
+        預設行為為標準化空值並排序。
+        子類可覆寫此方法以進行資料前處理，例如：
+        - 正規化地名（去除空白、統一格式）
+        - 過濾或合併特定記錄
+        - 額外的欄位處理
+
+        Args:
+            df: 從 CSV 讀取的原始 DataFrame。
+
+        Returns:
+            前處理後的 DataFrame。
+
+        Example:
+            >>> class CustomHandler(GeoDataHandler):
+            ...     @classmethod
+            ...     def prepare_cities_source(cls, df: pl.DataFrame) -> pl.DataFrame:
+            ...         # 清理 admin 欄位中的 "" 字串
+            ...         for col in ["admin_1", "admin_2", "admin_3", "admin_4"]:
+            ...             if col in df.columns:
+            ...                 df = df.with_columns(
+            ...                     pl.when(pl.col(col) == '""')
+            ...                     .then(None)
+            ...                     .otherwise(pl.col(col))
+            ...                     .alias(col)
+            ...                 )
+            ...         return df.sort(["admin_1", "admin_2"])
+        """
+        # 標準化空值：將空字串或 "" 轉為 None
+        admin_cols = ["admin_1", "admin_2", "admin_3", "admin_4"]
+        for col in admin_cols:
+            if col in df.columns:
+                df = df.with_columns(
+                    pl.when((pl.col(col) == "") | (pl.col(col) == '""'))
+                    .then(None)
+                    .otherwise(pl.col(col))
+                    .alias(col)
+                )
+
+        # 排序以確保輸出穩定性
+        sort_cols = [col for col in ["admin_1", "admin_2"] if col in df.columns]
+        if sort_cols:
+            df = df.sort(sort_cols)
+
+        return df
+
+    @classmethod
+    def build_cities_dataframe(cls, df: pl.DataFrame) -> pl.DataFrame:
+        """建立符合 CITIES_SCHEMA 的 DataFrame（可覆寫）。
+
+        預設實作根據常見欄位需求建立輸出 DataFrame。
+        子類可覆寫此方法以自訂欄位取值或處理邏輯。
+
+        Args:
+            df: 已經過前處理並分配 geoname_id、admin1_code 的 DataFrame。
+                必須包含欄位：geoname_id, admin1_code_mapped, latitude, longitude, admin_2
+
+        Returns:
+            符合 CITIES_SCHEMA 的 DataFrame。
+
+        Example:
+            >>> class CustomHandler(GeoDataHandler):
+            ...     @classmethod
+            ...     def build_cities_dataframe(cls, df: pl.DataFrame) -> pl.DataFrame:
+            ...         # 自訂欄位取值
+            ...         from datetime import date
+            ...         return pl.DataFrame({
+            ...             "geoname_id": df["geoname_id"],
+            ...             "name": df["custom_name_column"],  # 使用自訂欄位
+            ...             "asciiname": df["custom_name_column"],
+            ...             ...
+            ...         }, schema=cls.CITIES_SCHEMA)
+        """
+        from datetime import date
+
+        # 獲取今天的日期字串
+        today_date_str = date.today().strftime("%Y-%m-%d")
+
+        # 建立符合 CITIES_SCHEMA 的 DataFrame
+        return pl.DataFrame(
+            {
+                "geoname_id": df["geoname_id"],
+                "name": df["admin_2"],  # 預設使用 admin_2 作為地名
+                "asciiname": df["admin_2"],
+                "alternatenames": None,
+                "latitude": df["latitude"],
+                "longitude": df["longitude"],
+                "feature_class": "A",
+                "feature_code": "ADM2",  # 預設為 admin2 層級
+                "country_code": cls.COUNTRY_CODE,
+                "cc2": None,
+                "admin1_code": df["admin1_code_mapped"],  # 使用 "XX" 部分
+                "admin2_code": None,
+                "admin3_code": None,
+                "admin4_code": None,
+                "population": 0,
+                "elevation": None,
+                "dem": None,
+                "timezone": cls.TIMEZONE,
+                "modification_date": today_date_str,
+            },
+            schema=cls.CITIES_SCHEMA,
+        )
 
     @classmethod
     def prepare_admin1_source(cls, df: pl.DataFrame) -> pl.DataFrame:
@@ -314,8 +525,10 @@ class GeoDataHandler(ABC):
         else:
             logger.info(f"輸入資料中未找到需要移除的 {self.COUNTRY_CODE} 資料")
 
-        # 轉換資料
-        converted_df = self.convert_to_cities_schema(csv_path, base_geoname_id)
+        # 轉換資料（使用類別方法）
+        converted_df = self.__class__.convert_to_cities_schema(
+            csv_path, base_geoname_id
+        )
 
         # 計算使用的最大 ID（需要轉換為整數）
         max_id_used = converted_df.select(

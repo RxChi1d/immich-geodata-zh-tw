@@ -59,7 +59,7 @@ def update_geodata(
         handler_countries=handler_countries,
         current_max_id=current_max_id,
     )
-    
+
     # 再更新 cities500.txt（參照已建立的 admin1 記錄）
     current_max_id = update_cities500_data(
         cities_file=cities_file,

@@ -7,16 +7,15 @@ import geopandas as gpd
 import pyproj
 import numpy as np
 from pathlib import Path
-from datetime import date
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from core.utils import logger
-from core.geodata.base import GeoDataHandler  # , register_handler
+from core.geodata.base import GeoDataHandler, register_handler
 
 
 # TODO: 日本 handler 開發中，完成後取消註解以啟用
-# @register_handler("JP")
+@register_handler("JP")
 class JapanGeoDataHandler(GeoDataHandler):
     """日本地理資料處理器。
 
@@ -108,6 +107,7 @@ class JapanGeoDataHandler(GeoDataHandler):
 
         return gdf
 
+    # TODO: Extract - 從 Shapefile 提取地理資料並轉換為標準化 CSV
     def extract_from_shapefile(self, shapefile_path: str, output_csv: str) -> None:
         try:
             logger.info(f"正在讀取 Shapefile: {shapefile_path}")
@@ -191,91 +191,3 @@ class JapanGeoDataHandler(GeoDataHandler):
         except Exception as e:
             logger.error(f"處理 Shapefile 時發生錯誤: {e}")
             raise
-
-    def convert_to_cities_schema(
-        self, csv_path: str, base_geoname_id: int
-    ) -> pl.DataFrame:
-        logger.info(f"讀取並轉換日本地理資料 ({Path(csv_path).name})")
-
-        input_file = Path(csv_path)
-
-        if not input_file.exists():
-            logger.error(f"輸入檔案不存在: {input_file}")
-            sys.exit(1)
-
-        df = pl.read_csv(input_file)
-
-        # 獲取 admin1_mapping（自動生成或從緩存讀取）
-        admin1_mapping = self.__class__.get_admin1_mapping(csv_path)
-
-        # 生成唯一的 geoname_id
-        df = df.with_columns(
-            pl.Series(
-                "geoname_id",
-                [base_geoname_id + i for i in range(df.height)],
-            ).cast(pl.Int64)
-        )
-
-        # 將 admin_1（都道府縣名稱）映射到 admin1_code
-        df = df.with_columns(
-            pl.col("admin_1")
-            .map_elements(
-                lambda name: admin1_mapping.get(name, None),
-                return_dtype=pl.String,
-            )
-            .alias("admin1_code_full")  # 暫存完整代碼 "JP.XX"
-        )
-
-        # 檢查是否有無法映射的 admin_1
-        null_admin1_codes = df.filter(pl.col("admin1_code_full").is_null())
-        if null_admin1_codes.height > 0:
-            missing_names = null_admin1_codes["admin_1"].unique().to_list()
-            logger.warning(
-                f"以下都道府縣名稱無法映射到 admin1_code（將設為 None）: {missing_names}"
-            )
-
-        # 提取 admin1_code 的數字/字母部分 "XX"
-        df = df.with_columns(
-            pl.when(pl.col("admin1_code_full").is_not_null())
-            .then(pl.col("admin1_code_full").str.split(".").list.last())
-            .otherwise(None)
-            .alias("admin1_code_mapped")
-        )
-
-        # 獲取今天的日期字串
-        today_date_str = date.today().strftime("%Y-%m-%d")
-
-        # 建立 CITIES_SCHEMA DataFrame
-        new_df = pl.DataFrame(
-            {
-                "geoname_id": df["geoname_id"],
-                "name": df["admin_2"],  # 市區町村名
-                "asciiname": df["admin_2"],  # 同上
-                "alternatenames": None,
-                "latitude": df["latitude"],
-                "longitude": df["longitude"],
-                "feature_class": "A",
-                "feature_code": "ADM2",  # 市區町村層級
-                "country_code": self.COUNTRY_CODE,
-                "cc2": None,
-                "admin1_code": df["admin1_code_mapped"],  # 使用提取後的 "XX" 部分
-                "admin2_code": None,  # 暫不提供市區町村代碼
-                "admin3_code": None,  # 暫不提供更低級別代碼
-                "admin4_code": None,
-                "population": 0,
-                "elevation": None,
-                "dem": None,
-                "timezone": self.TIMEZONE,
-                "modification_date": today_date_str,
-            },
-            schema=self.CITIES_SCHEMA,
-        )
-
-        # 將轉換後的日本地理資料暫存到 output 資料夾
-        output_path = Path("output") / "jp_geodata_converted.csv"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        new_df.write_csv(output_path)
-        logger.info(f"已將轉換後的日本地理資料暫存至: {output_path}")
-
-        logger.info(f"日本地理資料轉換完成，共 {new_df.height} 筆資料")
-        return new_df
