@@ -27,6 +27,21 @@
 
 ## [未發佈版本]
 
+### Added
+- **Japan GeoData 處理器**: 新增 `JapanGeoDataHandler` 與 `meta_data/jp_geodata.csv`，支援日本官方行政區 Shapefile 的自動 ETL 流程。
+- **Handler Registry**: 建立 `register_handler` 與 `get_handler` 架構，允許依 ISO 國碼載入對應處理器供 `extract` 與 `enhance` 指令使用。
+- **Enhance 流程整合**: 新增 `update_geodata()` 將 admin1 與 cities500 優化合併執行，集中管理 geoname ID 範圍與日誌追蹤。
+
+### Changed
+- **GeoData Handler 架構**: 基底類別統一 `convert_to_cities_schema` 與 admin1 產生流程，透過鉤子方法保留國別前處理彈性並提供一致的錯誤診斷。
+- **Geoname ID 管理**: `replace_in_dataset` 改為根據現有資料動態計算編號起點，避免硬編碼造成的 geoname ID 衝突。
+- **Schema 與常數來源**: Polars schema 集中於 `core/schemas.py`，常數整合進 `core/constants.py`，降低重複定義並解除循環匯入問題。
+- **CLI 行為**: `enhance` 指令自動跳過已由 Handler 支援的國家，並整合原有 modify 流程；相關操作說明同步更新 README。
+
+### Fixed
+- **輸出路徑處理**：確保資料寫入前輸出資料夾存在，避免路徑不存在時寫入失敗。
+- **日本資料格式**：統一空值表示方式（admin_3 欄位），確保 Extract 階段輸出的資料格式一致性。
+
 
 ## [1.2.2] - 2025-09-19
 
