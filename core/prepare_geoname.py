@@ -2,6 +2,7 @@ import os
 import sys
 import requests
 import zipfile
+from core.geodata import get_handler
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -61,7 +62,18 @@ def download(countries=["TW"], update=False):
     else:
         logger.info(f"{TXT_FILE} 已存在，跳過下載。")
 
+    # 檢查哪些國家有註冊的 Handler，跳過這些國家的下載
     for country in countries:
+        # 檢查是否有對應的 Handler
+        try:
+            get_handler(country)
+            logger.info(
+                f"跳過 {country} 的資料下載（使用 {country}GeoDataHandler 產生精準資料）"
+            )
+            continue  # 有 Handler，跳過下載
+        except ValueError:
+            pass
+
         country_zip = os.path.join(EXTRA_DATA_DIR, f"{country}.zip")
         country_txt = os.path.join(EXTRA_DATA_DIR, f"{country}.txt")
         if not os.path.exists(country_txt):
