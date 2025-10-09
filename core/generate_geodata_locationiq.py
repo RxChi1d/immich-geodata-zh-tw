@@ -228,7 +228,7 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
                 admin1_map = pl.read_csv(
                     os.path.join("output", "tw_admin1_map.csv"),
                 )
-                
+
                 admin_1 = f"TW.{row['admin1_code']}"
 
                 # 直轄市/省轄市
