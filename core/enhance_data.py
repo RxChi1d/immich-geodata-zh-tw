@@ -59,7 +59,7 @@ def update_geodata(
         handler_countries=handler_countries,
         current_max_id=current_max_id,
     )
-
+    
     # 再更新 cities500.txt（參照已建立的 admin1 記錄）
     current_max_id = update_cities500_data(
         cities_file=cities_file,
@@ -151,6 +151,8 @@ def update_admin1_data(
             logger.error(f"處理 {country_code} admin1 時發生錯誤: {e}")
 
     # 儲存 admin1CodesASCII_optimized.txt
+    # 確保輸出資料夾存在
+    Path(admin1_output).parent.mkdir(parents=True, exist_ok=True)
     admin1_df.write_csv(admin1_output, separator="\t", include_header=False)
     logger.info(f"admin1CodesASCII.txt 更新完成，儲存至 {admin1_output}")
 
@@ -210,6 +212,8 @@ def update_cities500_data(
     )
 
     # 儲存結果
+    # 確保輸出資料夾存在
+    Path(output_file).parent.mkdir(parents=True, exist_ok=True)
     cities500_df.write_csv(output_file, separator="\t", include_header=False)
     logger.info(
         f"cities500.txt 更新完成 ({cities500_df.height} 筆資料)，儲存至 {output_file}"
