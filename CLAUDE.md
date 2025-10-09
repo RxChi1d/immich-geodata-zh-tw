@@ -154,7 +154,7 @@ core/geodata/
 - `convert_to_cities_schema(csv_path)`: 將標準 CSV 轉成 CITIES_SCHEMA，負責生成 geoname_id、對應行政區與補齊時區、國家代碼。
 
 #### 3. Load（載入）
-- `replace_in_dataset(input_df, country_code)`: 以新資料覆蓋 cities500 中對應國家的紀錄並回傳更新結果。
+- `replace_in_dataset(input_df, base_geoname_id)`: 以新資料覆蓋 cities500 中對應國家的紀錄並回傳更新結果。國家代碼由 Handler 實例的 `COUNTRY_CODE` 類別變數自動決定。
 
 ### 常用指令
 
@@ -171,8 +171,8 @@ from core.geodata import get_handler
 
 handler = get_handler("TW")()
 handler.extract_from_shapefile("path/to/file.shp", "output.csv")
-df = handler.convert_to_cities_schema("output.csv")
-updated_df = handler.replace_in_dataset(cities500_df, "TW")
+df = handler.convert_to_cities_schema("output.csv", base_geoname_id=92_000_000)
+updated_df, max_id = handler.replace_in_dataset(cities500_df, base_geoname_id=92_000_000)
 ```
 
 ### 擴充新國家

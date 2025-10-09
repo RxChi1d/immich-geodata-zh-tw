@@ -38,35 +38,6 @@ class TaiwanGeoDataHandler(GeoDataHandler):
     COUNTRY_CODE = "TW"
     TIMEZONE = "Asia/Taipei"
 
-    # 臺灣行政區代碼映射（一級行政區）
-    ADMIN1_MAPPING = {
-        # 直轄市
-        "臺北市": "TW.01",
-        "新北市": "TW.02",
-        "桃園市": "TW.03",
-        "臺中市": "TW.04",
-        "臺南市": "TW.05",
-        "高雄市": "TW.06",
-        # 省轄市
-        "基隆市": "TW.07",
-        "新竹市": "TW.08",
-        "嘉義市": "TW.09",
-        # 縣
-        "宜蘭縣": "TW.10",
-        "新竹縣": "TW.11",
-        "苗栗縣": "TW.12",
-        "彰化縣": "TW.13",
-        "南投縣": "TW.14",
-        "雲林縣": "TW.15",
-        "嘉義縣": "TW.16",
-        "屏東縣": "TW.17",
-        "臺東縣": "TW.18",
-        "花蓮縣": "TW.19",
-        "澎湖縣": "TW.20",
-        "金門縣": "TW.21",
-        "連江縣": "TW.22",
-    }
-
     MUNICIPALITIES = _MUNICIPALITIES
 
     def extract_from_shapefile(self, shapefile_path: str, output_csv: str) -> None:
@@ -167,6 +138,9 @@ class TaiwanGeoDataHandler(GeoDataHandler):
                     .alias(col)
                 )
 
+        # 獲取 admin1_mapping（自動生成或從緩存讀取）
+        admin1_mapping = self.get_admin1_mapping(csv_path)
+
         # 生成唯一的 geoname_id
         df = df.with_columns(
             pl.Series(
@@ -179,7 +153,7 @@ class TaiwanGeoDataHandler(GeoDataHandler):
         df = df.with_columns(
             pl.col("admin_1")
             .map_elements(
-                lambda name: self.ADMIN1_MAPPING.get(name, None),
+                lambda name: admin1_mapping.get(name, None),
                 return_dtype=pl.String,
             )
             .alias("admin1_code_full")  # 暫存完整代碼 "TW.XX"
@@ -238,3 +212,60 @@ class TaiwanGeoDataHandler(GeoDataHandler):
 
         logger.info(f"臺灣地理資料轉換完成，共 {new_df.height} 筆資料")
         return new_df
+
+    def generate_admin1_records(
+        self, csv_path: str, base_geoname_id: int
+    ) -> pl.DataFrame:
+        """產生臺灣的一級行政區資料（縣市層級）。
+
+        從 tw_geodata.csv 提取唯一的 admin_1（縣市），
+        生成對應的 admin1 記錄以取代 GeoNames 原始的省級資料。
+
+        Args:
+            csv_path: extract_from_shapefile 產生的 CSV 路徑。
+            base_geoname_id: geoname_id 起始值。
+
+        Returns:
+            符合 ADMIN1_SCHEMA 的 DataFrame，包含臺灣所有縣市的 admin1 記錄。
+        """
+        logger.info(f"正在從 {csv_path} 產生臺灣 admin1 記錄...")
+
+        input_file = Path(csv_path)
+        if not input_file.exists():
+            logger.error(f"輸入檔案不存在: {input_file}")
+            sys.exit(1)
+
+        df = pl.read_csv(input_file)
+
+        # 獲取 admin1_mapping（自動生成或從緩存讀取）
+        admin1_mapping = self.get_admin1_mapping(csv_path)
+
+        # 提取唯一的 admin_1（縣市）並排序
+        unique_admin1 = sorted(df["admin_1"].unique().to_list())
+
+        # 建立 admin1 記錄的 DataFrame
+        admin1_records = []
+        for idx, admin1_name in enumerate(unique_admin1):
+            admin1_code = admin1_mapping.get(admin1_name)
+            if admin1_code is None:
+                logger.warning(f"無法找到 {admin1_name} 的 admin1_code，跳過")
+                continue
+
+            admin1_records.append(
+                {
+                    "id": admin1_code,  # 如 "TW.01"
+                    "name": admin1_name,  # 如 "臺北市"
+                    "asciiname": admin1_name,  # 同上（保持中文）
+                    "geoname_id": str(base_geoname_id + idx),  # 分配新的 geoname_id
+                }
+            )
+
+        # 建立 DataFrame
+        admin1_df = pl.DataFrame(admin1_records, schema=self.ADMIN1_SCHEMA)
+
+        logger.info(f"產生了 {admin1_df.height} 筆臺灣 admin1 記錄")
+        logger.info(
+            f"Admin1 geoname_id 範圍: {base_geoname_id} - {base_geoname_id + admin1_df.height - 1}"
+        )
+
+        return admin1_df

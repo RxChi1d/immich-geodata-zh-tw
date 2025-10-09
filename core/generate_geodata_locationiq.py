@@ -180,11 +180,6 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
         schema=CITIES_SCHEMA,
     )
 
-    # 讀取臺灣行政區對照表
-    admin1_map = pl.read_csv(
-        os.path.join("output", "tw_admin1_map.csv"),
-    )
-
     # 篩選指定國家
     specific_country_df = cities_df.filter(pl.col("country_code") == country_code)
 
@@ -229,6 +224,11 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
 
             # 臺灣特殊處理
             if country_code == "TW":
+                # 讀取臺灣行政區對照表
+                admin1_map = pl.read_csv(
+                    os.path.join("output", "tw_admin1_map.csv"),
+                )
+                
                 admin_1 = f"TW.{row['admin1_code']}"
 
                 # 直轄市/省轄市

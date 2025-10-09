@@ -4,10 +4,9 @@ main.py - 專案主要接口
 透過下列子命令可操作不同功能：
   cleanup    清理舊資料
   prepare    下載並處理 geoname 資料
-  enhance    優化 cities500 資料
+  enhance    優化 cities500 與 admin1 資料
   locationiq 使用 LocationIQ API 取得 metadata
   translate  翻譯地名資料
-  modify     修改臺灣行政區代碼
   pack       產生 release 壓縮檔
   release    依序執行所有步驟
 
@@ -31,7 +30,6 @@ from core import (
     enhance_data,
     generate_geodata_locationiq,
     translate,
-    modify_admin1,
     pack_release,
 )
 
@@ -84,13 +82,22 @@ def cmd_extract(args):
 
 def cmd_enhance(args):
     """優化 cities500 資料"""
+    from core.geodata import get_handler
+
     cities_file = args.cities_file or os.path.join("geoname_data", "cities500.txt")
-    extra_files = [
-        os.path.join("geoname_data", "extra_data", f"{cc}.txt")
-        for cc in args.country_code
-    ]
+
+    # 過濾掉有 Handler 的國家（這些國家由 Handler 產生精準資料）
+    extra_files = []
+    for cc in args.country_code:
+        try:
+            get_handler(cc)
+            logger.info(f"跳過 {cc} 的 extra_data（使用 Handler 產生精準資料）")
+        except ValueError:
+            # 沒有 Handler，需要使用 extra_data
+            extra_files.append(os.path.join("geoname_data", "extra_data", f"{cc}.txt"))
+
     output_file = args.output_file or os.path.join("output", "cities500_optimized.txt")
-    enhance_data.update_cities500(
+    enhance_data.update_geodata(
         cities_file, extra_files, output_file, args.min_population
     )
     logger.info("enhance 步驟完成。")
@@ -155,19 +162,6 @@ def cmd_translate(args):
     logger.info("translate 步驟完成。")
 
 
-def cmd_modify(args):
-    """修改臺灣行政區代碼"""
-    data_folder = args.data_folder
-    output_folder = args.output_folder
-    admin1_path = os.path.join(data_folder, "admin1CodesASCII.txt")
-    admin2_path = os.path.join(data_folder, "admin2Codes.txt")
-    new_admin1_path = os.path.join(output_folder, "admin1CodesASCII_optimized.txt")
-    tw_admin1_map_path = os.path.join(output_folder, "tw_admin1_map.csv")
-    modify_admin1.create_new_taiwan_admin1(admin2_path, tw_admin1_map_path)
-    modify_admin1.update_taiwan_admin1(admin1_path, tw_admin1_map_path, new_admin1_path)
-    logger.info("modify 步驟完成。")
-
-
 def cmd_pack(args):
     """產生 release 壓縮檔"""
     pack_release.pack(args.output_folder)
@@ -177,7 +171,6 @@ def cmd_pack(args):
 def cmd_release(args):
     """依序執行所有步驟，支援跳過個別步驟"""
     output_folder = args.output_folder or "output"
-    data_folder = args.data_folder or "geoname_data"
     enhanced_output = os.path.join(output_folder, "cities500_optimized.txt")
 
     # 1. cleanup
@@ -194,33 +187,30 @@ def cmd_release(args):
     else:
         logger.info("跳過 prepare 步驟")
 
-    # 3. modify
-    if not args.pass_modify:
-        logger.info("=== 執行 modify 步驟 ===")
-        admin1_path = os.path.join(data_folder, "admin1CodesASCII.txt")
-        admin2_path = os.path.join(data_folder, "admin2Codes.txt")
-        new_admin1_path = os.path.join(output_folder, "admin1CodesASCII_optimized.txt")
-        tw_admin1_map_path = os.path.join(output_folder, "tw_admin1_map.csv")
-        modify_admin1.create_new_taiwan_admin1(admin2_path, tw_admin1_map_path)
-        modify_admin1.update_taiwan_admin1(
-            admin1_path, tw_admin1_map_path, new_admin1_path
-        )
-    else:
-        logger.info("跳過 modify 步驟")
-
-    # 4. enhance
+    # 3. enhance (整合了 admin1 處理)
     if not args.pass_enhance:
+        from core.geodata import get_handler
+
         logger.info("=== 執行 enhance 步驟 ===")
         cities_file = os.path.join("geoname_data", "cities500.txt")
-        extra_files = [
-            os.path.join("geoname_data", "extra_data", f"{cc}.txt")
-            for cc in args.country_code
-        ]
-        enhance_data.update_cities500(cities_file, extra_files, enhanced_output, 100)
+
+        # 過濾掉有 Handler 的國家（這些國家由 Handler 產生精準資料）
+        extra_files = []
+        for cc in args.country_code:
+            try:
+                get_handler(cc)
+                logger.info(f"跳過 {cc} 的 extra_data（使用 Handler 產生精準資料）")
+            except ValueError:
+                # 沒有 Handler，需要使用 extra_data
+                extra_files.append(
+                    os.path.join("geoname_data", "extra_data", f"{cc}.txt")
+                )
+
+        enhance_data.update_geodata(cities_file, extra_files, enhanced_output, 100)
     else:
         logger.info("跳過 enhance 步驟")
 
-    # 5. locationiq
+    # 4. locationiq
     if not args.pass_locationiq:
         logger.info("=== 執行 locationiq 步驟 ===")
         api_key = args.locationiq_api_key or os.environ.get("LOCATIONIQ_API_KEY")
@@ -248,7 +238,7 @@ def cmd_release(args):
     else:
         logger.info("跳過 locationiq 步驟")
 
-    # 6. translate
+    # 5. translate
     if not args.pass_translate:
         logger.info("=== 執行 translate 步驟 ===")
         metadata_folder = "./meta_data"
@@ -264,7 +254,7 @@ def cmd_release(args):
     else:
         logger.info("跳過 translate 步驟")
 
-    # 7. pack (release 壓縮檔)
+    # 6. pack (release 壓縮檔)
     if not args.pass_pack:
         logger.info("=== 執行 pack 步驟 ===")
         pack_release.pack(output_folder)
@@ -379,16 +369,6 @@ def main():
     )
     parser_translate.set_defaults(func=cmd_translate)
 
-    # modify 子命令
-    parser_modify = subparsers.add_parser("modify", help="修改臺灣行政區代碼")
-    parser_modify.add_argument(
-        "--data-folder", type=str, default="./geoname_data", help="原始資料夾"
-    )
-    parser_modify.add_argument(
-        "--output-folder", type=str, default="./output", help="輸出資料夾"
-    )
-    parser_modify.set_defaults(func=cmd_modify)
-
     # pack 子命令
     parser_pack = subparsers.add_parser("pack", help="產生 release 壓縮檔")
     parser_pack.add_argument(
@@ -431,9 +411,6 @@ def main():
     )
     parser_release.add_argument(
         "--pass-prepare", action="store_true", help="跳過前置處理"
-    )
-    parser_release.add_argument(
-        "--pass-modify", action="store_true", help="跳過 modify 步驟"
     )
     parser_release.add_argument(
         "--pass-enhance", action="store_true", help="跳過 enhance 步驟"

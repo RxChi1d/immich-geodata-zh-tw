@@ -12,10 +12,11 @@ from datetime import date
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from core.utils import logger
-from core.geodata.base import GeoDataHandler, register_handler
+from core.geodata.base import GeoDataHandler  # , register_handler
 
 
-@register_handler("JP")
+# TODO: 日本 handler 開發中，完成後取消註解以啟用
+# @register_handler("JP")
 class JapanGeoDataHandler(GeoDataHandler):
     """日本地理資料處理器。
 
@@ -26,7 +27,6 @@ class JapanGeoDataHandler(GeoDataHandler):
     COUNTRY_NAME = "日本"
     COUNTRY_CODE = "JP"
     TIMEZONE = "Asia/Tokyo"
-    ADMIN1_MAPPING = None
 
     def _get_utm_epsg_from_lon(self, longitude: float) -> int:
         """根據經度計算 UTM 區的 EPSG 代碼。"""
@@ -205,12 +205,41 @@ class JapanGeoDataHandler(GeoDataHandler):
 
         df = pl.read_csv(input_file)
 
+        # 獲取 admin1_mapping（自動生成或從緩存讀取）
+        admin1_mapping = self.__class__.get_admin1_mapping(csv_path)
+
         # 生成唯一的 geoname_id
         df = df.with_columns(
             pl.Series(
                 "geoname_id",
                 [base_geoname_id + i for i in range(df.height)],
             ).cast(pl.Int64)
+        )
+
+        # 將 admin_1（都道府縣名稱）映射到 admin1_code
+        df = df.with_columns(
+            pl.col("admin_1")
+            .map_elements(
+                lambda name: admin1_mapping.get(name, None),
+                return_dtype=pl.String,
+            )
+            .alias("admin1_code_full")  # 暫存完整代碼 "JP.XX"
+        )
+
+        # 檢查是否有無法映射的 admin_1
+        null_admin1_codes = df.filter(pl.col("admin1_code_full").is_null())
+        if null_admin1_codes.height > 0:
+            missing_names = null_admin1_codes["admin_1"].unique().to_list()
+            logger.warning(
+                f"以下都道府縣名稱無法映射到 admin1_code（將設為 None）: {missing_names}"
+            )
+
+        # 提取 admin1_code 的數字/字母部分 "XX"
+        df = df.with_columns(
+            pl.when(pl.col("admin1_code_full").is_not_null())
+            .then(pl.col("admin1_code_full").str.split(".").list.last())
+            .otherwise(None)
+            .alias("admin1_code_mapped")
         )
 
         # 獲取今天的日期字串
@@ -229,7 +258,7 @@ class JapanGeoDataHandler(GeoDataHandler):
                 "feature_code": "ADM2",  # 市區町村層級
                 "country_code": self.COUNTRY_CODE,
                 "cc2": None,
-                "admin1_code": None,  # 暫不提供都道府縣代碼
+                "admin1_code": df["admin1_code_mapped"],  # 使用提取後的 "XX" 部分
                 "admin2_code": None,  # 暫不提供市區町村代碼
                 "admin3_code": None,  # 暫不提供更低級別代碼
                 "admin4_code": None,
