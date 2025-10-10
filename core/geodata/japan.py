@@ -140,8 +140,9 @@ class JapanGeoDataHandler(GeoDataHandler):
                     pl.col("longitude"),
                     pl.col("latitude"),
                     pl.col("N03_001"),  # 都道府縣
-                    pl.col("N03_003"),  # 郡名 or 政令市名
-                    pl.col("N03_004"),  # 市區町村名 or 區名
+                    pl.col("N03_003"),  # 郡名 or 政令市名（舊版資料格式）
+                    pl.col("N03_004"),  # 市區町村名
+                    pl.col("N03_005"),  # 政令市之區（新版資料格式）
                 ]
             )
 
@@ -166,6 +167,15 @@ class JapanGeoDataHandler(GeoDataHandler):
                     .then(pl.col("N03_004"))
                     .otherwise(None)
                     .alias("clean_n03_004"),
+                    pl.when(
+                        pl.col("N03_005").is_not_null()
+                        & (pl.col("N03_005") != "")
+                        & (pl.col("N03_005") != "None")
+                        & (pl.col("N03_005") != "nan")
+                    )
+                    .then(pl.col("N03_005"))
+                    .otherwise(None)
+                    .alias("clean_n03_005"),
                 ]
             )
 
@@ -173,6 +183,7 @@ class JapanGeoDataHandler(GeoDataHandler):
             df = df.filter(
                 pl.col("clean_n03_003").is_not_null()
                 | pl.col("clean_n03_004").is_not_null()
+                | pl.col("clean_n03_005").is_not_null()
             )
 
             # 識別行政區類型
@@ -183,15 +194,13 @@ class JapanGeoDataHandler(GeoDataHandler):
                     .str.ends_with("郡")
                     .fill_null(False)
                     .alias("is_gun"),
-                    # 政令指定都市：N03_003 以「市」結尾
-                    pl.col("clean_n03_003")
-                    .str.ends_with("市")
-                    .fill_null(False)
-                    .alias("is_seirei_shi"),
-                    # 普通市：N03_003 為空且 N03_004 以「市」結尾
+                    # 政令指定都市：新版資料以 N03_005 標示區名
+                    pl.col("clean_n03_005").is_not_null().alias("is_seirei_shi"),
+                    # 普通市：N03_003 為空、N03_004 以「市」結尾且無區名欄位
                     (
                         pl.col("clean_n03_003").is_null()
                         & pl.col("clean_n03_004").str.ends_with("市").fill_null(False)
+                        & pl.col("clean_n03_005").is_null()
                     ).alias("is_regular_shi"),
                 ]
             )
@@ -245,7 +254,8 @@ class JapanGeoDataHandler(GeoDataHandler):
                 .then(pl.col("clean_n03_004"))  # R1: 普通市 → 直接顯示市名
                 .when(pl.col("is_seirei_shi"))
                 .then(
-                    pl.col("clean_n03_003") + pl.col("clean_n03_004")
+                    pl.col("clean_n03_004").fill_null("")
+                    + pl.col("clean_n03_005").fill_null("")
                 )  # R3: 政令市の区 → 政令市名＋區名
                 .when(pl.col("needs_gun_prefix"))
                 .then(
