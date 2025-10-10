@@ -259,7 +259,7 @@ class JapanGeoDataHandler(GeoDataHandler):
                 )  # R3: 政令市の区 → 政令市名＋區名
                 .when(pl.col("needs_gun_prefix"))
                 .then(
-                    pl.col("clean_n03_003") + pl.lit(" ") + pl.col("clean_n03_004")
+                    pl.col("clean_n03_003") + pl.col("clean_n03_004")
                 )  # R2': 郡轄町/村（有真正同名衝突）→ 郡名＋町/村名
                 .when(pl.col("is_gun"))
                 .then(pl.col("clean_n03_004"))  # R2': 郡轄町/村（預設簡潔）→ 僅町/村名
