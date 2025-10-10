@@ -14,7 +14,6 @@ from core.utils import logger
 from core.geodata.base import GeoDataHandler, register_handler
 
 
-# TODO: 日本 handler 開發中，完成後取消註解以啟用
 @register_handler("JP")
 class JapanGeoDataHandler(GeoDataHandler):
     """日本地理資料處理器。
@@ -107,7 +106,6 @@ class JapanGeoDataHandler(GeoDataHandler):
 
         return gdf
 
-    # TODO: Extract - 從 Shapefile 提取地理資料並轉換為標準化 CSV
     def extract_from_shapefile(self, shapefile_path: str, output_csv: str) -> None:
         try:
             logger.info(f"正在讀取 Shapefile: {shapefile_path}")
@@ -136,34 +134,137 @@ class JapanGeoDataHandler(GeoDataHandler):
             # 轉換為 Polars DataFrame
             df = pl.from_pandas(gdf)
 
-            # 選擇需要的欄位並進行欄位對應
-            # admin_2: 合併郡名（N03_003）和市區町村名（N03_004）
-            # 如果有郡名，則合併為「郡名+市區町村名」；否則僅使用市區町村名
+            # 選擇基本欄位
+            df = df.select(
+                [
+                    pl.col("longitude"),
+                    pl.col("latitude"),
+                    pl.col("N03_001"),  # 都道府縣
+                    pl.col("N03_003"),  # 郡名 or 政令市名
+                    pl.col("N03_004"),  # 市區町村名 or 區名
+                ]
+            )
+
+            # 標準化空值：將 null、空字串、"None"、"nan" 統一轉為 None
+            df = df.with_columns(
+                [
+                    pl.when(
+                        pl.col("N03_003").is_not_null()
+                        & (pl.col("N03_003") != "")
+                        & (pl.col("N03_003") != "None")
+                        & (pl.col("N03_003") != "nan")
+                    )
+                    .then(pl.col("N03_003"))
+                    .otherwise(None)
+                    .alias("clean_n03_003"),
+                    pl.when(
+                        pl.col("N03_004").is_not_null()
+                        & (pl.col("N03_004") != "")
+                        & (pl.col("N03_004") != "None")
+                        & (pl.col("N03_004") != "nan")
+                    )
+                    .then(pl.col("N03_004"))
+                    .otherwise(None)
+                    .alias("clean_n03_004"),
+                ]
+            )
+
+            # 過濾無效資料：移除兩者都為空的記錄
+            df = df.filter(
+                pl.col("clean_n03_003").is_not_null()
+                | pl.col("clean_n03_004").is_not_null()
+            )
+
+            # 識別行政區類型
+            df = df.with_columns(
+                [
+                    # 郡轄町/村：N03_003 以「郡」結尾
+                    pl.col("clean_n03_003")
+                    .str.ends_with("郡")
+                    .fill_null(False)
+                    .alias("is_gun"),
+                    # 政令指定都市：N03_003 以「市」結尾
+                    pl.col("clean_n03_003")
+                    .str.ends_with("市")
+                    .fill_null(False)
+                    .alias("is_seirei_shi"),
+                    # 普通市：N03_003 為空且 N03_004 以「市」結尾
+                    (
+                        pl.col("clean_n03_003").is_null()
+                        & pl.col("clean_n03_004").str.ends_with("市").fill_null(False)
+                    ).alias("is_regular_shi"),
+                ]
+            )
+
+            # R2' 規則：檢測真正的同名町/村衝突
+            # Reason: 根據 PRP，預設應簡潔（僅顯示町/村名），
+            #         只有在同一都道府縣內存在多個郡有「完全同名」的町/村時才補郡。
+            #         「釧路市 vs 釧路町」不需補郡（尾碼已區分），
+            #         「A郡 X村 vs B郡 X村」才需補郡（真正同名）。
+
+            # 步驟 1：先按 (都道府縣, 郡名, 町/村名) 去重，避免同一町/村的多個幾何體被重複計算
+            # Reason: 同一個行政區可能有多個多邊形（飛地、離島等），
+            #         這些不應被視為「不同的町/村」
+            unique_gun_towns = (
+                df.filter(pl.col("is_gun"))
+                .select(["N03_001", "clean_n03_003", "clean_n03_004"])
+                .unique()
+            )
+
+            # 步驟 2：統計每個都道府縣內每個町/村名稱對應的郡數量
+            gun_town_counts = unique_gun_towns.group_by(
+                ["N03_001", "clean_n03_004"]
+            ).agg(pl.count().alias("gun_count"))
+
+            # 步驟 3：找出 gun_count > 1 的（表示有多個郡有同名町/村）
+            duplicate_gun_towns = gun_town_counts.filter(pl.col("gun_count") > 1)
+
+            # 步驟 4：與原 df join，標記需要補郡的記錄
+            df = df.join(
+                duplicate_gun_towns.select(
+                    [
+                        pl.col("N03_001"),
+                        pl.col("clean_n03_004"),
+                        pl.lit(True).alias("has_duplicate_name"),
+                    ]
+                ),
+                how="left",
+                on=["N03_001", "clean_n03_004"],
+            )
+
+            # 步驟 5：標記需要加郡名的郡轄町/村
+            df = df.with_columns(
+                (
+                    pl.col("is_gun") & pl.col("has_duplicate_name").fill_null(False)
+                ).alias("needs_gun_prefix")
+            )
+
+            # 生成 admin_2：根據 R1-R4 規則（R2 使用 R2' 預設簡潔模式）
+            df = df.with_columns(
+                pl.when(pl.col("is_regular_shi"))
+                .then(pl.col("clean_n03_004"))  # R1: 普通市 → 直接顯示市名
+                .when(pl.col("is_seirei_shi"))
+                .then(
+                    pl.col("clean_n03_003") + pl.col("clean_n03_004")
+                )  # R3: 政令市の区 → 政令市名＋區名
+                .when(pl.col("needs_gun_prefix"))
+                .then(
+                    pl.col("clean_n03_003") + pl.lit(" ") + pl.col("clean_n03_004")
+                )  # R2': 郡轄町/村（有真正同名衝突）→ 郡名＋町/村名
+                .when(pl.col("is_gun"))
+                .then(pl.col("clean_n03_004"))  # R2': 郡轄町/村（預設簡潔）→ 僅町/村名
+                .otherwise(pl.col("clean_n03_003"))  # R4: 僅有郡名（罕見情況）
+                .alias("admin_2")
+            )
+
+            # 選擇最終需要的欄位
             df = df.select(
                 [
                     pl.col("longitude"),
                     pl.col("latitude"),
                     pl.col("N03_001").alias("admin_1"),  # 都道府縣
-                    (
-                        pl.when(
-                            pl.col("N03_003").is_not_null()
-                            & (pl.col("N03_003") != "")
-                            & (pl.col("N03_003") != "None")
-                            & (pl.col("N03_003") != "nan")
-                        )
-                        .then(pl.col("N03_003") + pl.col("N03_004"))
-                        .otherwise(pl.col("N03_004"))
-                    ).alias("admin_2"),  # 郡+市區町村 或 市區町村
-                    (
-                        pl.when(
-                            pl.col("N03_005").is_not_null()
-                            & (pl.col("N03_005") != "")
-                            & (pl.col("N03_005") != "None")
-                            & (pl.col("N03_005") != "nan")
-                        )
-                        .then(pl.col("N03_005"))
-                        .otherwise(pl.lit(""))
-                    ).alias("admin_3"),  # 政令指定都市的行政區
+                    pl.col("admin_2"),  # 市區町村（根據 R1-R4 規則生成）
+                    pl.lit("").alias("admin_3"),  # 空字串
                     pl.lit("").alias("admin_4"),  # 空字串
                     pl.lit("日本").alias("country"),  # 國家
                 ]
