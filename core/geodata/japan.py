@@ -288,6 +288,9 @@ class JapanGeoDataHandler(GeoDataHandler):
                 pl.col("longitude").is_not_null() & pl.col("latitude").is_not_null()
             )
 
+            # 固定經緯度小數位數以確保輸出穩定性
+            df = self.standardize_coordinate_precision(df)
+
             # 儲存 CSV
             output_path = Path(output_csv)
             output_path.parent.mkdir(parents=True, exist_ok=True)

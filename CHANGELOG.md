@@ -37,6 +37,7 @@
 - **Geoname ID 管理**: `replace_in_dataset` 改為根據現有資料動態計算編號起點，避免硬編碼造成的 geoname ID 衝突。
 - **Schema 與常數來源**: Polars schema 集中於 `core/schemas.py`，常數整合進 `core/constants.py`，降低重複定義並解除循環匯入問題。
 - **CLI 行為**: `enhance` 指令自動跳過已由 Handler 支援的國家，並整合原有 modify 流程；相關操作說明同步更新 README。
+- **GeoData 座標精度**: `GeoDataHandler` 統一經緯度小數位設定為 8 位，確保多次執行 Extract 時輸出結果保持一致且避免浮點誤差造成的大量差異。
 
 ### Fixed
 - **輸出路徑處理**：確保資料寫入前輸出資料夾存在，避免路徑不存在時寫入失敗。
