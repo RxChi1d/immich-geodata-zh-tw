@@ -202,10 +202,17 @@ class JapanGeoDataHandler(GeoDataHandler):
                         & pl.col("clean_n03_004").str.ends_with("市").fill_null(False)
                         & pl.col("clean_n03_005").is_null()
                     ).alias("is_regular_shi"),
+                    # 直轄町/村：N03_003 為空、N03_004 仍有值（町或村），且無區名
+                    (
+                        pl.col("clean_n03_003").is_null()
+                        & pl.col("clean_n03_004").is_not_null()
+                        & pl.col("clean_n03_004").str.ends_with("市").fill_null(False).not_()
+                        & pl.col("clean_n03_005").is_null()
+                    ).alias("is_direct_town"),
                 ]
             )
 
-            # R2' 規則：檢測真正的同名町/村衝突
+            # R4 規則：檢測真正的同名町/村衝突
             # Reason: 根據 PRP，預設應簡潔（僅顯示町/村名），
             #         只有在同一都道府縣內存在多個郡有「完全同名」的町/村時才補郡。
             #         「釧路市 vs 釧路町」不需補郡（尾碼已區分），
@@ -248,22 +255,24 @@ class JapanGeoDataHandler(GeoDataHandler):
                 ).alias("needs_gun_prefix")
             )
 
-            # 生成 admin_2：根據 R1-R4 規則（R2 使用 R2' 預設簡潔模式）
+            # 生成 admin_2：根據 R1-R5 規則（R4 保留簡潔模式，僅在需要時補郡）
             df = df.with_columns(
                 pl.when(pl.col("is_regular_shi"))
                 .then(pl.col("clean_n03_004"))  # R1: 普通市 → 直接顯示市名
+                .when(pl.col("is_direct_town"))
+                .then(pl.col("clean_n03_004"))  # R2: 直轄町/村 → 直接顯示町/村名
                 .when(pl.col("is_seirei_shi"))
                 .then(
                     pl.col("clean_n03_004").fill_null("")
                     + pl.col("clean_n03_005").fill_null("")
-                )  # R3: 政令市の区 → 政令市名＋區名
+                )  # R3: 政令市區 → 政令市名＋區名
                 .when(pl.col("needs_gun_prefix"))
                 .then(
                     pl.col("clean_n03_003") + pl.col("clean_n03_004")
-                )  # R2': 郡轄町/村（有真正同名衝突）→ 郡名＋町/村名
+                )  # R4: 郡轄町/村（真正同名衝突）→ 郡名＋町/村名
                 .when(pl.col("is_gun"))
-                .then(pl.col("clean_n03_004"))  # R2': 郡轄町/村（預設簡潔）→ 僅町/村名
-                .otherwise(pl.col("clean_n03_003"))  # R4: 僅有郡名（罕見情況）
+                .then(pl.col("clean_n03_004"))  # R4: 郡轄町/村（預設簡潔）→ 僅町/村名
+                .otherwise(pl.col("clean_n03_003"))  # R5: 僅有郡名（罕見情況）
                 .alias("admin_2")
             )
 
@@ -273,7 +282,7 @@ class JapanGeoDataHandler(GeoDataHandler):
                     pl.col("longitude"),
                     pl.col("latitude"),
                     pl.col("N03_001").alias("admin_1"),  # 都道府縣
-                    pl.col("admin_2"),  # 市區町村（根據 R1-R4 規則生成）
+                    pl.col("admin_2"),  # 市區町村（根據 R1-R5 規則生成）
                     pl.lit("").alias("admin_3"),  # 空字串
                     pl.lit("").alias("admin_4"),  # 空字串
                     pl.lit("日本").alias("country"),  # 國家
