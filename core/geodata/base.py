@@ -19,16 +19,18 @@ class GeoDataHandler(ABC):
         COUNTRY_CODE: ISO 3166-1 alpha-2 代碼
         TIMEZONE: IANA 時區名稱
     """
-
-    # Schema 引用（從 core.schemas 匯入，供子類繼承）
-    ADMIN1_SCHEMA = ADMIN1_SCHEMA
-    GEODATA_SCHEMA = GEODATA_SCHEMA
-    CITIES_SCHEMA = CITIES_SCHEMA
-
+    # 基底共用設定，可由子類視需求覆寫
+    COORD_DECIMAL_PLACES: int = 8
+    
     # 子類必須覆寫的類別變數
     COUNTRY_NAME: str = ""
     COUNTRY_CODE: str = ""
     TIMEZONE: str = ""
+    
+    # Schema 引用（從 core.schemas 匯入，供子類繼承）
+    ADMIN1_SCHEMA = ADMIN1_SCHEMA
+    GEODATA_SCHEMA = GEODATA_SCHEMA
+    CITIES_SCHEMA = CITIES_SCHEMA
 
     def __init__(self):
         if not self.COUNTRY_NAME:
@@ -178,6 +180,45 @@ class GeoDataHandler(ABC):
         )
 
         return result
+
+    @classmethod
+    def standardize_coordinate_precision(
+        cls,
+        df: pl.DataFrame,
+        latitude_column: str = "latitude",
+        longitude_column: str = "longitude",
+    ) -> pl.DataFrame:
+        """統一經緯度小數位數。
+
+        Args:
+            df: 需要處理的資料框。
+            latitude_column: 緯度欄位名稱。
+            longitude_column: 經度欄位名稱。
+
+        Returns:
+            已套用標準小數位數的資料框。
+
+        Raises:
+            ValueError: 當指定欄位不存在時。
+        """
+        required_cols = [latitude_column, longitude_column]
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            error_msg = (
+                f"缺少必要欄位: {missing_cols}\n"
+                "建議：請確認 extract_from_shapefile 的輸出欄位名稱"
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        return df.with_columns(
+            pl.col(latitude_column)
+            .round(cls.COORD_DECIMAL_PLACES)
+            .alias(latitude_column),
+            pl.col(longitude_column)
+            .round(cls.COORD_DECIMAL_PLACES)
+            .alias(longitude_column),
+        )
 
     @classmethod
     def prepare_cities_source(cls, df: pl.DataFrame) -> pl.DataFrame:
