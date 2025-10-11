@@ -8,12 +8,12 @@
 
 1. **Claude.md 內容**：使用zh-tw
 2. **對話語言**：使用zh-tw
-3. **程式碼註解**：使用en
+3. **程式碼註解**：使用zh-tw
 4. **函數/變數命名**：使用en
-5. **Git commit 訊息**：使用en
-6. **文件字串 (docstrings)**：使用en
-7. **專案文檔**：使用en
-8. **其他發布用文件**：使用en
+5. **Git commit 訊息**：使用zh-tw
+6. **文件字串 (docstrings)**：使用zh-tw
+7. **專案文檔**：使用zh-tw
+8. **其他發布用文件**：使用zh-tw
 
 ## 撰寫風格與格式
 
@@ -124,6 +124,68 @@
 - **Python 套件管理工具**：uv
 - **uv 管理的虛擬環境**：`.venv/`
 
+## 架構說明
+
+### 地理資料處理流程（ETL 模式）
+
+本專案採用 **Extract-Transform-Load (ETL)** 模式處理地理資料：
+
+```
+core/geodata/
+├── base.py         # GeoDataHandler 抽象基類
+├── taiwan.py       # TaiwanGeoDataHandler
+└── japan.py        # JapanGeoDataHandler
+```
+
+每個國家的 Handler 包含三個階段的方法：
+
+#### 1. Extract（提取）
+- **方法**：`extract_from_shapefile(shapefile_path, output_csv)`
+- **功能**：從 Shapefile 提取資料並轉換為標準化 CSV
+- **輸入**：原始 Shapefile 檔案
+- **輸出**：`meta_data/{country}_geodata.csv`
+- **處理內容**：
+  - 讀取 Shapefile（使用 geopandas）
+  - 計算多邊形中心點（使用適當的投影）
+  - 轉換為 WGS84 座標
+  - 輸出標準化欄位：longitude, latitude, admin_1-4, country
+
+#### 2. Transform（轉換）
+- `convert_to_cities_schema(csv_path)`: 將標準 CSV 轉成 CITIES_SCHEMA，負責生成 geoname_id、對應行政區與補齊時區、國家代碼。
+
+#### 3. Load（載入）
+- `replace_in_dataset(input_df, base_geoname_id)`: 以新資料覆蓋 cities500 中對應國家的紀錄並回傳更新結果。國家代碼由 Handler 實例的 `COUNTRY_CODE` 類別變數自動決定。
+
+### 常用指令
+
+```bash
+python main.py extract --country TW --shapefile <path_to_tw_shapefile>
+python main.py extract --country JP --shapefile <path_to_jp_shapefile>
+python main.py enhance --country-code <country_code>
+```
+
+### 在程式中使用
+
+```python
+from core.geodata import get_handler
+
+handler = get_handler("TW")()
+handler.extract_from_shapefile("path/to/file.shp", "output.csv")
+df = handler.convert_to_cities_schema("output.csv", base_geoname_id=92_000_000)
+updated_df, max_id = handler.replace_in_dataset(cities500_df, base_geoname_id=92_000_000)
+```
+
+### 擴充新國家
+
+1. 建立 `core/geodata/<country>.py`，繼承 `GeoDataHandler` 並加上 `@register_handler("<CC>")`。
+2. 實作 `extract_from_shapefile` 與 `convert_to_cities_schema`：
+   - `geoname_id` 從 `92_000_000` 起算。
+   - 填寫正確時區與 `country_code`。
+   - 輸出需符合 `CITIES_SCHEMA`。
+3. 執行 `python main.py extract --country <CC> ...` 與 `python main.py enhance --country-code <CC>` 驗證流程。
+
+Registry 會自動載入新處理器，毋須調整其他檔案。
+
 ### 核心開發循環
 
 #### Git Hooks（pre-commit）
@@ -176,3 +238,6 @@ uv run pytest              # 4. 執行單元測試
 - **除非有明確指示，或任務需求（見 `TASK.md`），**否則**不得刪除或覆蓋現有程式碼。**
 - **需要分析或拆解問題，通過 sequential thinking 進行更深度思考**
 - **與 GitHub 互動需使用 gh CLI**
+- **不准在未經允許的情況下，擅自在任何的文檔、訊息等文字中，包含 AI 編輯器或是 AI 模型的名稱**，例如:
+  - Generated with [Claude Code]
+  - Co-Authored-By: Claude

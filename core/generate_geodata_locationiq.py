@@ -11,7 +11,12 @@ from tqdm import tqdm
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from core.utils import logger, ensure_folder_exists
-from core.define import CITIES_SCHEMA, GEODATA_SCHEMA, MUNICIPALITIES
+from core.schemas import CITIES_SCHEMA, GEODATA_SCHEMA
+from core.geodata import get_handler
+
+# 取得臺灣處理器的 MUNICIPALITIES
+TaiwanHandler = get_handler("TW")
+MUNICIPALITIES = TaiwanHandler.MUNICIPALITIES
 
 
 s = requests.Session()
@@ -175,11 +180,6 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
         schema=CITIES_SCHEMA,
     )
 
-    # 讀取臺灣行政區對照表
-    admin1_map = pl.read_csv(
-        os.path.join("output", "tw_admin1_map.csv"),
-    )
-
     # 篩選指定國家
     specific_country_df = cities_df.filter(pl.col("country_code") == country_code)
 
@@ -224,6 +224,11 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
 
             # 臺灣特殊處理
             if country_code == "TW":
+                # 讀取臺灣行政區對照表
+                admin1_map = pl.read_csv(
+                    os.path.join("output", "tw_admin1_map.csv"),
+                )
+
                 admin_1 = f"TW.{row['admin1_code']}"
 
                 # 直轄市/省轄市
