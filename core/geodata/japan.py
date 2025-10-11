@@ -107,34 +107,53 @@ class JapanGeoDataHandler(GeoDataHandler):
         return gdf
 
     def extract_from_shapefile(self, shapefile_path: str, output_csv: str) -> None:
+        """從日本行政區 Shapefile 提取地理資料並轉換為標準化 CSV。
+
+        處理日本國土數值情報的行政區域資料，計算中心點座標並按照
+        R1-R5 規則生成 admin_2 欄位。詳細處理邏輯請參考 japan-admin-guidelines.md。
+
+        Args:
+            shapefile_path: 輸入 Shapefile 的路徑
+            output_csv: 輸出 CSV 檔案的路徑
+
+        處理步驟：
+            1. 讀取 Shapefile 並使用動態 UTM 區選擇計算中心點
+            2. 標準化空值處理（統一 null、空字串、"None"、"nan"）
+            3. 識別五種行政區類型（R1-R5）
+            4. 檢測郡轄町/村的同名衝突（R4 規則）
+            5. 生成 admin_2 欄位並輸出標準化 CSV
+
+        Raises:
+            Exception: Shapefile 讀取失敗或資料處理錯誤時拋出
+        """
         try:
             logger.info(f"正在讀取 Shapefile: {shapefile_path}")
 
-            # 使用 geopandas 讀取 Shapefile
+            # === 步驟 1: 讀取 Shapefile 並計算中心點 ===
             gdf = gpd.read_file(shapefile_path)
             logger.info(
                 f"成功讀取 Shapefile，資料集大小: {gdf.shape[0]} 行 x {gdf.shape[1]} 列"
             )
-
-            # 檢查原始座標系統
             logger.info(f"原始座標系統: {gdf.crs}")
 
-            # 使用動態 UTM 區選擇方法（結合 Albers 投影）
+            # 使用動態 UTM 區選擇方法（結合 Albers 投影）計算中心點
+            # Reason: 日本橫跨多個 UTM 區（53N, 54N, 55N），
+            #         需要根據每個幾何體的實際位置動態選擇 UTM 區以確保精確度
             logger.info("使用方法：動態 UTM 區選擇（結合 Albers 投影進行 UTM 區判定）")
             gdf = self._calculate_centroids_utm(gdf)
 
-            # 移除 geometry 欄位
+            # 移除不需要的幾何欄位
             gdf = gdf.drop(columns=["geometry"])
 
-            # 將所有 object 類型的欄位轉換為字串，並將 None/NaN 轉為空字串
+            # 統一資料型態：將 object 類型轉為字串並填充 NaN
             for col in gdf.columns:
                 if gdf[col].dtype == "object":
                     gdf[col] = gdf[col].fillna("").astype(str)
 
-            # 轉換為 Polars DataFrame
+            # 轉換為 Polars DataFrame 以進行高效的資料處理
             df = pl.from_pandas(gdf)
 
-            # 選擇基本欄位
+            # === 步驟 2: 選擇並標準化欄位 ===
             df = df.select(
                 [
                     pl.col("longitude"),
@@ -146,7 +165,9 @@ class JapanGeoDataHandler(GeoDataHandler):
                 ]
             )
 
-            # 標準化空值：將 null、空字串、"None"、"nan" 統一轉為 None
+            # 標準化空值處理：將 null、空字串、"None"、"nan" 統一轉為 None
+            # Reason: 原始資料可能包含多種形式的空值表示，
+            #         統一處理後才能正確執行後續的 is_null() 判斷
             df = df.with_columns(
                 [
                     pl.when(
@@ -179,63 +200,76 @@ class JapanGeoDataHandler(GeoDataHandler):
                 ]
             )
 
-            # 過濾無效資料：移除兩者都為空的記錄
+            # 過濾無效資料：至少需要有一個行政區名稱欄位
             df = df.filter(
                 pl.col("clean_n03_003").is_not_null()
                 | pl.col("clean_n03_004").is_not_null()
                 | pl.col("clean_n03_005").is_not_null()
             )
 
-            # 識別行政區類型
+            # === 步驟 3: 識別五種行政區類型（R1-R5）===
+            # 根據 N03_003、N03_004、N03_005 的組合判斷行政區類型
             df = df.with_columns(
                 [
-                    # 郡轄町/村：N03_003 以「郡」結尾
-                    pl.col("clean_n03_003")
-                    .str.ends_with("郡")
-                    .fill_null(False)
-                    .alias("is_gun"),
-                    # 政令指定都市：新版資料以 N03_005 標示區名
-                    pl.col("clean_n03_005").is_not_null().alias("is_seirei_shi"),
-                    # 普通市：N03_003 為空、N03_004 以「市」結尾且無區名欄位
+                    # R1: 普通市
+                    # 條件：N03_003 為空、N03_004 以「市」結尾、N03_005 為空
+                    # 範例：北海道釧路市
                     (
                         pl.col("clean_n03_003").is_null()
                         & pl.col("clean_n03_004").str.ends_with("市").fill_null(False)
                         & pl.col("clean_n03_005").is_null()
                     ).alias("is_regular_shi"),
-                    # 直轄町/村/特別區：N03_003 為空、N03_004 仍有值（町/村/區），且無區名
+                    # R2: 直轄町/村/特別區
+                    # 條件：N03_003 為空、N03_004 有值但不以「市」結尾、N03_005 為空
+                    # 範例：東京都小笠原村（離島）、東京都千代田區（23 區）
                     (
                         pl.col("clean_n03_003").is_null()
                         & pl.col("clean_n03_004").is_not_null()
-                        & pl.col("clean_n03_004").str.ends_with("市").fill_null(False).not_()
+                        & pl.col("clean_n03_004")
+                        .str.ends_with("市")
+                        .fill_null(False)
+                        .not_()
                         & pl.col("clean_n03_005").is_null()
                     ).alias("is_direct_town"),
+                    # R3: 政令指定都市的區
+                    # 條件：N03_005 有值（新版資料格式）
+                    # 範例：神奈川県横浜市中区
+                    pl.col("clean_n03_005").is_not_null().alias("is_seirei_shi"),
+                    # R4: 郡轄町/村
+                    # 條件：N03_003 以「郡」結尾
+                    # 範例：新潟県岩船郡関川村
+                    pl.col("clean_n03_003")
+                    .str.ends_with("郡")
+                    .fill_null(False)
+                    .alias("is_gun"),
                 ]
             )
 
-            # R4 規則：檢測真正的同名町/村衝突
-            # Reason: 根據 PRP，預設應簡潔（僅顯示町/村名），
-            #         只有在同一都道府縣內存在多個郡有「完全同名」的町/村時才補郡。
-            #         「釧路市 vs 釧路町」不需補郡（尾碼已區分），
-            #         「A郡 X村 vs B郡 X村」才需補郡（真正同名）。
+            # === 步驟 4: R4 規則特別處理 - 檢測郡轄町/村的同名衝突 ===
+            # 預設策略：簡潔優先（僅顯示町/村名）
+            # 衝突判定：同一都道府縣內，多個郡擁有完全同名的町/村時才補郡名
+            # 範例說明：
+            #   - 不衝突：「釧路市 vs 釧路町」（尾碼不同）-> 不補郡
+            #   - 真衝突：「古宇郡泊村 vs 国後郡泊村」（完全同名）-> 補郡
 
-            # 步驟 1：先按 (都道府縣, 郡名, 町/村名) 去重，避免同一町/村的多個幾何體被重複計算
-            # Reason: 同一個行政區可能有多個多邊形（飛地、離島等），
-            #         這些不應被視為「不同的町/村」
+            # 步驟 4.1：去重處理
+            # Reason: 同一行政區可能有多個多邊形（飛地、離島），
+            #         需先去重以避免重複計算
             unique_gun_towns = (
                 df.filter(pl.col("is_gun"))
                 .select(["N03_001", "clean_n03_003", "clean_n03_004"])
                 .unique()
             )
 
-            # 步驟 2：統計每個都道府縣內每個町/村名稱對應的郡數量
+            # 步驟 4.2：統計每個都道府縣內，每個町/村名稱對應的郡數量
             gun_town_counts = unique_gun_towns.group_by(
                 ["N03_001", "clean_n03_004"]
             ).agg(pl.count().alias("gun_count"))
 
-            # 步驟 3：找出 gun_count > 1 的（表示有多個郡有同名町/村）
+            # 步驟 4.3：篩選出真正的同名衝突（gun_count > 1）
             duplicate_gun_towns = gun_town_counts.filter(pl.col("gun_count") > 1)
 
-            # 步驟 4：與原 df join，標記需要補郡的記錄
+            # 步驟 4.4：標記需要補郡名的記錄
             df = df.join(
                 duplicate_gun_towns.select(
                     [
@@ -248,59 +282,61 @@ class JapanGeoDataHandler(GeoDataHandler):
                 on=["N03_001", "clean_n03_004"],
             )
 
-            # 步驟 5：標記需要加郡名的郡轄町/村
+            # 步驟 4.5：生成最終標記（僅郡轄町/村且存在同名衝突時為 True）
             df = df.with_columns(
                 (
                     pl.col("is_gun") & pl.col("has_duplicate_name").fill_null(False)
                 ).alias("needs_gun_prefix")
             )
 
-            # 生成 admin_2：根據 R1-R5 規則（R4 保留簡潔模式，僅在需要時補郡）
+            # === 步驟 5: 生成 admin_2 欄位（依 R1-R5 規則）===
+            # 使用 when-then-otherwise 鏈式判斷，優先級由上至下
             df = df.with_columns(
                 pl.when(pl.col("is_regular_shi"))
-                .then(pl.col("clean_n03_004"))  # R1: 普通市 → 直接顯示市名
+                .then(pl.col("clean_n03_004"))  # R1: 普通市 -> 市名
                 .when(pl.col("is_direct_town"))
-                .then(pl.col("clean_n03_004"))  # R2: 直轄町/村/特別區 → 直接顯示名稱
+                .then(pl.col("clean_n03_004"))  # R2: 直轄町/村/特別區 -> 名稱
                 .when(pl.col("is_seirei_shi"))
                 .then(
                     pl.col("clean_n03_004").fill_null("")
                     + pl.col("clean_n03_005").fill_null("")
-                )  # R3: 政令市區 → 可用則使用政令市名＋區名，否則落回後續分支
+                )  # R3: 政令市區 -> 市名＋區名
                 .when(pl.col("needs_gun_prefix"))
                 .then(
                     pl.col("clean_n03_003") + pl.col("clean_n03_004")
-                )  # R4: 郡轄町/村（真正同名衝突）→ 郡名＋町/村名
+                )  # R4: 郡轄町/村（同名衝突）-> 郡名＋町/村名
                 .when(pl.col("is_gun"))
-                .then(pl.col("clean_n03_004"))  # R4: 郡轄町/村（預設簡潔）→ 僅町/村名
-                .otherwise(pl.col("clean_n03_003"))  # R5: 僅有郡名（罕見情況）
+                .then(pl.col("clean_n03_004"))  # R4: 郡轄町/村（預設）-> 町/村名
+                .otherwise(pl.col("clean_n03_003"))  # R5: 僅郡名（罕見）
                 .alias("admin_2")
             )
 
-            # 選擇最終需要的欄位
+            # === 步驟 6: 輸出標準化 CSV ===
+            # 選擇最終欄位並轉換為 CITIES_SCHEMA 格式
             df = df.select(
                 [
                     pl.col("longitude"),
                     pl.col("latitude"),
                     pl.col("N03_001").alias("admin_1"),  # 都道府縣
-                    pl.col("admin_2"),  # 市區町村（根據 R1-R5 規則生成）
-                    pl.lit("").alias("admin_3"),  # 空字串
-                    pl.lit("").alias("admin_4"),  # 空字串
-                    pl.lit("日本").alias("country"),  # 國家
+                    pl.col("admin_2"),  # 市區町村（已按 R1-R5 規則生成）
+                    pl.lit("").alias("admin_3"),  # 空字串（保留欄位）
+                    pl.lit("").alias("admin_4"),  # 空字串（保留欄位）
+                    pl.lit("日本").alias("country"),  # 國家名稱
                 ]
             )
 
-            # 按照 country, admin_1, admin_2 進行排序
+            # 排序：便於版本控制差異比對
             df = df.sort(["country", "admin_1", "admin_2"])
 
-            # 移除無效的資料點
+            # 過濾：移除無效座標
             df = df.filter(
                 pl.col("longitude").is_not_null() & pl.col("latitude").is_not_null()
             )
 
-            # 固定經緯度小數位數以確保輸出穩定性
+            # 標準化座標精度（預設 8 位小數）
             df = self.standardize_coordinate_precision(df)
 
-            # 儲存 CSV
+            # 建立輸出目錄並寫入 CSV
             output_path = Path(output_csv)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -308,7 +344,7 @@ class JapanGeoDataHandler(GeoDataHandler):
             df.write_csv(output_path)
             logger.info(f"成功儲存 CSV 檔案，共 {len(df)} 筆資料")
 
-            # 顯示前五筆資料供檢查
+            # 顯示前五筆供檢查
             logger.info(df.head(5))
 
         except Exception as e:
