@@ -19,14 +19,15 @@ class GeoDataHandler(ABC):
         COUNTRY_CODE: ISO 3166-1 alpha-2 代碼
         TIMEZONE: IANA 時區名稱
     """
+
     # 基底共用設定，可由子類視需求覆寫
     COORD_DECIMAL_PLACES: int = 8
-    
+
     # 子類必須覆寫的類別變數
     COUNTRY_NAME: str = ""
     COUNTRY_CODE: str = ""
     TIMEZONE: str = ""
-    
+
     # Schema 引用（從 core.schemas 匯入，供子類繼承）
     ADMIN1_SCHEMA = ADMIN1_SCHEMA
     GEODATA_SCHEMA = GEODATA_SCHEMA
