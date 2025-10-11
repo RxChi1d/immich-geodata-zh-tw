@@ -54,7 +54,7 @@ jobs:
       - name: Set current date as env variable
         run: echo "TODAY=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
       - name: Build
-        run: uv run python main.py release --locationiq-api-key "${{ secrets.LOCATIONIQ_API_KEY }}" --country-code "JP" "KR" "TH"
+        run: uv run python main.py release --locationiq-api-key "${{ secrets.LOCATIONIQ_API_KEY }}" --country-code "KR" "TH"
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
