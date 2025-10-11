@@ -28,26 +28,23 @@
 ## [未發佈版本]
 
 ### Added
-- **Japan GeoData 處理器**: 新增 `JapanGeoDataHandler` 與 `meta_data/jp_geodata.csv`，支援日本官方行政區 Shapefile 的自動 ETL 流程。
-- **Handler Registry**: 建立 `register_handler` 與 `get_handler` 架構，允許依 ISO 國碼載入對應處理器供 `extract` 與 `enhance` 指令使用。
-- **Enhance 流程整合**: 新增 `update_geodata()` 將 admin1 與 cities500 優化合併執行，集中管理 geoname ID 範圍與日誌追蹤。
-- **日本行政區處理文檔**: 新增 `docs/zh-tw/japan-admin-processing.md` 詳細說明行政區顯示規則、資料流程與範例，作為 README 的延伸參考。
-- **臺灣行政區處理文檔**: 新增 `docs/zh-tw/taiwan-admin-processing.md` 梳理 NLSC 資料來源、層級對應與轉換步驟，協助開發者掌握臺灣優化策略。
-- **行政區處理英文文檔**: 新增 `docs/en/taiwan-admin-processing.md` 與 `docs/en/japan-admin-processing.md`，提供國際貢獻者參考的英文說明。
+- **Japan GeoData 處理器**：引入 `JapanGeoDataHandler` 與 `meta_data/jp_geodata.csv`，使用官方行政區資料提供日本地區全自動 ETL。
+- **Handler Registry**：`register_handler` 與 `get_handler` 讓 `extract` 與 `enhance` 指令依國碼載入專用處理器，減少手動切換設定。
+- **GeoData Handler 架構**：建立共用基底類別與鉤子機制，整合原本分散的流程並提供一致的擴充介面。
+- **Enhance 工作流程整合**：`update_geodata()` 同步更新 admin1 與 cities500，集中管理 geoname ID 範圍與處理日誌。
+- **Geoname ID 管理**：以動態計算方式分配 geoname ID，確保新資料集不與既有編號衝突。
+- **行政區處理指南**：新增臺灣與日本行政區處理文件的中英文版本，說明資料來源、層級對應與轉換策略。
 
 ### Changed
-- **GeoData Handler 架構**: 基底類別統一 `convert_to_cities_schema` 與 admin1 產生流程，透過鉤子方法保留國別前處理彈性並提供一致的錯誤診斷。
-- **Geoname ID 管理**: `replace_in_dataset` 改為根據現有資料動態計算編號起點，避免硬編碼造成的 geoname ID 衝突。
-- **Schema 與常數來源**: Polars schema 集中於 `core/schemas.py`，常數整合進 `core/constants.py`，降低重複定義並解除循環匯入問題。
-- **CLI 行為**: `enhance` 指令自動跳過已由 Handler 支援的國家，並整合原有 modify 流程；相關操作說明同步更新 README。
-- **GeoData 座標精度**: `GeoDataHandler` 統一經緯度小數位設定為 8 位，確保多次執行 Extract 時輸出結果保持一致且避免浮點誤差造成的大量差異。
-- **README 結構**: 重寫導覽與設計理念章節，新增支援地區語言策略表格並連結詳細處理文檔，讓使用者更易掌握多國優化內容。
-- **README.en**: 與中文版同步重構導覽內容，補充支援地區語言策略與英文文檔連結。
+- **Schema 與常數來源**：將資料表 schema 與常數集中於 `core/schemas.py` 與 `core/constants.py`，降低重複定義與匯入依賴。
+- **國別處理器整合**：既有國家處理器改為透過新基底類別運行，擴充流程與錯誤訊息更一致。
+- **CLI 行為**：`enhance` 指令自動略過已由 Handler 支援的國家並整合原有 modify 流程，降低重複執行風險。
+- **經緯度精度**：`GeoDataHandler` 統一輸出經緯度為 8 位小數，確保重複匯出時差異最小化。
+- **執行環境設定**：移除多餘的 `SHAPE_RESTORE_SHX` 參數，簡化預設值與除錯流程。
+- **專案文件結構**：重寫 README 與 README.en 導覽章節，並建立 `docs/zh-tw/` 與英文對應路徑以統一文件架構。
 
 ### Fixed
-- **輸出路徑處理**：確保資料寫入前輸出資料夾存在，避免路徑不存在時寫入失敗。
-- **日本資料格式**：統一空值表示方式（admin_3 欄位），確保 Extract 階段輸出的資料格式一致性。
-
+- **輸出路徑處理**：建立輸出資料夾後再寫入，避免因路徑不存在而失敗。
 
 ## [1.2.2] - 2025-09-19
 
