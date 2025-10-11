@@ -1,5 +1,12 @@
 # Immich Reverse Geocoding - Taiwan Localization  
 
+> [!IMPORTANT]
+> Upgrade notice: If you already deploy this project and your media library includes photos taken in Japan, please run "[Re-extract photo metadata](#integrated-deployment-recommended-convenient-for-future-updates)" after upgrading to v2.0.0 to apply the latest Japanese dataset.
+
+> [!WARNING]
+> If you still use `exec /bin/bash start.sh` as the `entrypoint` in an integrated deployment, Immich 1.142.0+ will fail on startup with `Error: /usr/src/dist/main.js not found` and enter a reboot loop.
+> Switch to `exec start.sh` instead (see [Integrated Deployment](#integrated-deployment-recommended-convenient-for-future-updates) for the updated example and notes).
+
 [繁體中文](README.md) | [English](README.en.md)
 
 This project delivers reverse geocoding enhancements tailored for users in Taiwan, providing natural and accurate location display that reflects local reading habits.
@@ -13,10 +20,6 @@ We focus on the Taiwan user experience and apply the most suitable language stra
 - **Taiwan**: Uses NLSC datasets to fix country and administrative naming issues
 - **Japan**: Uses 国土数値情報 datasets and preserves native names (漢字 + かな)
 - **Other regions**: Provides Traditional Chinese translations, falling back to English when no common translation exists
-
-> [!WARNING]
-> If integrated deployment continues to use `exec /bin/bash start.sh` as the `entrypoint`, Immich 1.142.0+ will exit on startup with `Error: /usr/src/dist/main.js not found`, leading to a reboot loop.
-> Switch to `exec start.sh` instead (the Integrated Deployment section provides updated examples and guidance).
 
 > [!TIP]
 > Compatibility Notice
