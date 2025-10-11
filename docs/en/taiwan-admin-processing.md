@@ -39,7 +39,7 @@ The pipeline trusts the NLSC source without additional transformations:
 - **Township/district (admin_2)**: Directly uses `TOWNNAME`
 - **Village (admin_3)**: Directly uses `VILLNAME`
 
-> **NOTE**
+> [!NOTE]
 > The NLSC dataset already contains complete administrative attributes. The implementation reuses these official values without injecting custom overrides or validation logic.
 
 ## Processing Details
@@ -51,7 +51,7 @@ The pipeline trusts the NLSC source without additional transformations:
 - Centroids are calculated in the projected system and converted back to WGS84 (EPSG:4326)
 - Coordinates are rounded to eight decimal places (roughly 1.1 mm precision)
 
-> **NOTE**
+> [!NOTE]
 > Working in a projected coordinate system avoids distortion that would otherwise occur when computing centroids directly in geographic coordinates.
 
 ### Data Cleaning

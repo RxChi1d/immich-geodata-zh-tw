@@ -79,7 +79,7 @@
 4.  **LocationIQ**: 用於處理非臺灣、非日本地區的反向地理編碼請求，校準行政區劃層級與翻譯。
 5.  **中華民國經濟部國際貿易署 & 中華民國外交部**: 作為部分國家/地區中文譯名的參考來源。
 
-> **NOTE**:  
+> [!NOTE]
 > 由於 Immich 的反向地理解析功能基於其載入的資料庫，並採用最近距離原則匹配地名，部分結果可能無法完全精確，或與預期不同。例如：
 > - 邊界附近的座標可能被判定為鄰近的行政區
 > - 某些小型島嶼或特殊地理位置可能無法精確對應
@@ -105,7 +105,7 @@
 
       entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/update_data.sh) --install && exec start.sh" ]
    ```  
-   > **NOTE**:  
+   > [!NOTE]
    > - `entrypoint` 會在容器啟動時先執行本專案的 `update_data.sh` 腳本，自動下載並配置臺灣特化資料，隨後執行 Immich 伺服器的 `start.sh` 啟動服務。
    > - 整合式部署也支援指定特定版本下載，詳情請參考 [指定特定版本](#指定特定版本) 章節。
 
@@ -131,7 +131,7 @@
      - /mnt/user/appdata/immich/geodata:/build/geodata:ro
      - /mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/server/node_modules/i18n-iso-countries/langs:ro
    ```
-   > **NOTE**:  
+   > [!NOTE]
    > 若使用 Immich < 1.136.0 版本，請將第二行改為：  
    > `/mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs:ro`
   
@@ -143,7 +143,7 @@
       ```bash
       bash update_data.sh
       ```  
-      > **NOTE**:  
+      > [!NOTE] 
       > - 手動部署也支援指定特定版本下載，詳情請參考 [指定特定版本](#指定特定版本) 章節。
       > - UnRAID 使用者可以通過 User Scripts 插件執行腳本。
      
@@ -176,7 +176,8 @@
     ```
     將 `<tag_name>` 替換為你想要下載的具體 tag 名稱。如果省略 `--tag`，則預設下載最新的 release (`latest`)。
 
-> **NOTE**: 腳本會先驗證指定的 tag 是否存在於 GitHub Releases，如果 tag 無效則會提示錯誤並終止執行，因此請在執行前確保 tag 有效。
+> [!NOTE]
+> 腳本會先驗證指定的 tag 是否存在於 GitHub Releases，如果 tag 無效則會提示錯誤並終止執行，因此請在執行前確保 tag 有效。
   
 ## 行政區優化策略
 
@@ -266,11 +267,11 @@ uv run python main.py extract --country JP \
 uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH"
 ```
 
-> **NOTE:**
+> [!NOTE]
 > - 可以通過 `uv run python main.py --help` 或 `uv run python main.py release --help` 查看更多選項。
 > - `--country-code` 參數可指定需要處理的國家代碼，多個代碼之間使用空格分隔。(目前僅測試過 "KR" "TH")
 
-> **WARNING:**
+> [!WARNING]
 > - 由於 LocationIQ 的 API 有請求次數限制 (可登入後於後台查看)，因此請注意要處理的國家的地名數量，以免超出限制。
 > - 本專案允許 LocationIQ 反向地理編碼查詢的進度恢復，若超過當日請求限制，可於更換 api 金鑰或次日繼續執行。
 >   - 需加上 `--pass-cleanup`參數，以取消重設資料夾功能： `uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH" --pass-cleanup`。
