@@ -1,9 +1,6 @@
 import os
-import sys
 import shutil
 from datetime import datetime
-
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from core.utils import logger
 
