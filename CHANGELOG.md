@@ -25,15 +25,15 @@
 
 ---
 
-## [未發佈版本]
+## [2.0.0] - 2025-10-11
 
 ### Added
-- **Japan GeoData 處理器**：引入 `JapanGeoDataHandler` 與 `meta_data/jp_geodata.csv`，使用官方行政區資料提供日本地區全自動 ETL。
 - **Handler Registry**：`register_handler` 與 `get_handler` 讓 `extract` 與 `enhance` 指令依國碼載入專用處理器，減少手動切換設定。
 - **GeoData Handler 架構**：建立共用基底類別與鉤子機制，整合原本分散的流程並提供一致的擴充介面。
 - **Enhance 工作流程整合**：`update_geodata()` 同步更新 admin1 與 cities500，集中管理 geoname ID 範圍與處理日誌。
 - **Geoname ID 管理**：以動態計算方式分配 geoname ID，確保新資料集不與既有編號衝突。
 - **行政區處理指南**：新增臺灣與日本行政區處理文件的中英文版本，說明資料來源、層級對應與轉換策略。
+- **Japan GeoData 處理器**：引入 `JapanGeoDataHandler` 與 `meta_data/jp_geodata.csv`，使用官方行政區資料提供日本地區全自動 ETL。
 
 ### Changed
 - **Schema 與常數來源**：將資料表 schema 與常數集中於 `core/schemas.py` 與 `core/constants.py`，降低重複定義與匯入依賴。
@@ -188,7 +188,8 @@
 
 特定變更的詳細資訊請參閱 [提交歷史](https://github.com/RxChi1d/immich-geodata-zh-tw/commits/main) 或 [發佈頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases)。
 
-[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.2...HEAD
+[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.2...v2.0.0
 [1.2.2]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.1.4...v1.2.0
