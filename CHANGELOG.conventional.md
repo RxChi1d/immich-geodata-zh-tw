@@ -21,6 +21,7 @@
 - **城市轉換流程**：透過鉤子統一城市資料轉換流程，提升輸出穩定度。
 - **座標精度**：統一經緯度為 8 位小數，減少重複匯出差異。
 - **Admin1 鉤子**：共用行政區前處理實作，降低國別程式碼重複。
+- **工具模組重構**：拆分 `core/utils.py` 為獨立套件，包含 `logging`、`filesystem`、`alternate_names`、`geoname_ids` 子模組並移除 `sys.path` hack。
 
 ### Documentation
 - **README（中文）**：重寫專案概覽與設計理念，新增語言策略表格與指引連結。

@@ -6,8 +6,6 @@ import regex
 import opencc
 import polars as pl
 
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-
 from core.schemas import ADMIN1_SCHEMA, GEODATA_SCHEMA, CITIES_SCHEMA
 from core.utils import ensure_folder_exists, logger, load_alternate_names
 

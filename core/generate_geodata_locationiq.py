@@ -8,8 +8,6 @@ from requests.adapters import HTTPAdapter, Retry
 import polars as pl
 from tqdm import tqdm
 
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-
 from core.utils import logger, ensure_folder_exists
 from core.schemas import CITIES_SCHEMA, GEODATA_SCHEMA
 from core.geodata import get_handler
