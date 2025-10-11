@@ -82,7 +82,7 @@ The geographic data used in this project mainly comes from the following sources
 3.  **LocationIQ**: Used for processing reverse geocoding requests for non-Taiwan regions, calibrating administrative division levels.
 4.  **Ministry of Economic Affairs International Trade Administration & Ministry of Foreign Affairs of Taiwan**: As reference sources for Chinese translations of some countries/regions.
 
-> **NOTE**:  
+> [!NOTE]
 > Since Immich's reverse geocoding functionality is based on its loaded database (this project mainly relies on GeoNames and NLSC data) and uses nearest distance principle to match place names, some results may not be completely precise or may differ from expectations.  
 
 ## Usage
@@ -106,7 +106,7 @@ This project supports the following two deployment methods:
 
       entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/update_data.sh) --install && exec start.sh" ]
    ```  
-   > **NOTE**:  
+   > [!NOTE]
    > - The `entrypoint` will first execute this project's `update_data.sh` script when the container starts, automatically downloading and configuring Taiwan localization data, then execute Immich server's `start.sh` to start the service.
    > - Integrated deployment also supports specifying specific version downloads. For details, please refer to the [Specify Specific Version](#specify-specific-version) section.
 
@@ -132,7 +132,7 @@ This project supports the following two deployment methods:
      - /mnt/user/appdata/immich/geodata:/build/geodata:ro
      - /mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/server/node_modules/i18n-iso-countries/langs:ro
    ```
-     > **NOTE**:  
+  > [!NOTE]
   > For Immich < 1.136.0, please change the second line to:  
   > `/mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs:ro`
   
@@ -144,7 +144,7 @@ This project supports the following two deployment methods:
       ```bash
       bash update_data.sh
       ```  
-      > **NOTE**:  
+      > [!NOTE]
       > - Manual deployment also supports specifying specific version downloads. For details, please refer to the [Specify Specific Version](#specify-specific-version) section.
       > - UnRAID users can execute the script through the User Scripts plugin.
      
@@ -177,7 +177,8 @@ Please go to this project's [Releases page](https://github.com/RxChi1d/immich-ge
     ```
     Replace `<tag_name>` with the specific tag name you want to download. If `--tag` is omitted, the latest release (`latest`) is downloaded by default.
 
-> **NOTE**: The script will first verify whether the specified tag exists in GitHub Releases. If the tag is invalid, it will prompt an error and terminate execution, so please ensure the tag is valid before execution.
+> [!NOTE]
+> The script will first verify whether the specified tag exists in GitHub Releases. If the tag is invalid, it will prompt an error and terminate execution, so please ensure the tag is valid before execution.
   
 ## Administrative Optimization Strategy
 
@@ -267,11 +268,11 @@ Register an account at [LocationIQ](https://locationiq.com/) and obtain an API K
 uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH"
 ```
 
-> **NOTE:**
+> [!NOTE]
 > - You can view more options through `uv run python main.py --help` or `uv run python main.py release --help`.
 > - The `--country-code` parameter can specify country codes to process, multiple codes separated by spaces. (Currently only tested with "KR" "TH")
 
-> **WARNING:**
+> [!WARNING]
 > - Since LocationIQ API has request limits (can be checked in the backend after login), please pay attention to the number of place names in the countries to be processed to avoid exceeding limits.
 > - This project allows LocationIQ reverse geocoding query progress recovery. If daily request limits are exceeded, you can continue execution after changing API keys or the next day.
 >   - Need to add `--pass-cleanup` parameter to cancel folder reset function: `uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH" --pass-cleanup`.
