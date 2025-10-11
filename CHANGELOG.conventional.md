@@ -19,3 +19,11 @@
 - **environment cleanup**: 移除多餘的 `SHAPE_RESTORE_SHX` 設定，簡化執行環境預設值。
 - **cities conversion**: 透過鉤子統一城市資料轉換流程，提供穩定輸出與一致的空值處理。
 - **coordinate precision**: `GeoDataHandler` 將經緯度固定為 8 位小數，避免重複計算時產生大量浮點誤差差異。
+
+### Documentation
+- **readme**: 重寫頂層概覽與設計理念，新增支援地區語言策略表格並連結詳細處理文檔。
+- **admin docs**: 新增 `docs/zh-tw/taiwan-admin-processing.md` 與 `docs/zh-tw/japan-admin-processing.md`，整理資料來源、層級對應與資料流程。
+- **guidelines cleanup**: 移除根目錄 `japan-admin-guidelines.md`，統一改以 docs/zh-tw 版本維護內容。
+- **admin docs en**: 新增 `docs/en/taiwan-admin-processing.md` 與 `docs/en/japan-admin-processing.md`，提供英文版行政區處理說明。
+- **readme en**: README.en.md 同步更新支援地區語言策略與英文文檔連結。
+- **doc locale structure**: 建立 `docs/zh-tw/` 對應中文主語言資料，與英文版資料夾保持一致結構。

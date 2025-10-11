@@ -2,11 +2,17 @@
 
 [繁體中文](README.md) | [English](README.en.md)
 
-This project provides Taiwan-localized optimization for Immich's reverse geocoding functionality, aiming to improve geographical information accuracy and user experience. Main features include:  
+This project delivers reverse geocoding enhancements tailored for users in Taiwan, providing natural and accurate location display that reflects local reading habits.
 
-- **Chinese Localization**: Converting geographical names from home and abroad to Traditional Chinese conforming to Taiwan terminology.  
-- **Administrative Division Optimization**: Solving the issue where Taiwan's municipalities and provincial cities/counties only display region names.  
-- **Enhanced Taiwan Data Accuracy**: Utilizing official map data from **National Land Surveying and Mapping Center (NLSC)** of Taiwan to process geographical names and boundary data for Taiwan region, ensuring authoritative data sources.  
+Currently supports: 🇹🇼 **Taiwan** | 🇯🇵 **Japan** | 🌏 **Traditional Chinese localization for other regions**
+
+## Design Philosophy
+
+We focus on the Taiwan user experience and apply the most suitable language strategy per region:
+
+- **Taiwan**: Uses NLSC datasets to fix country and administrative naming issues
+- **Japan**: Uses 国土数値情報 datasets and preserves native names (漢字 + かな)
+- **Other regions**: Provides Traditional Chinese translations, falling back to English when no common translation exists
 
 > [!WARNING]
 > If integrated deployment continues to use `exec /bin/bash start.sh` as the `entrypoint`, Immich 1.142.0+ will exit on startup with `Error: /usr/src/dist/main.js not found`, leading to a reboot loop.
@@ -19,26 +25,50 @@ This project provides Taiwan-localized optimization for Immich's reverse geocodi
 > - If you're on 1.135.x or earlier and use Manual Deployment, adjust the `volumes` mapping as described in the [Manual Deployment](#manual-deployment) section.
 > - If you use this project's integrated auto-deployment (update_data.sh), no changes are required; the script has been updated to support both old and new versions.
 
-### Before and After Comparison  
+### Before and After Comparison
 ![Before and After Comparison](./image/example.png) 
 
 ## Table of Contents
 
 - [Immich Reverse Geocoding - Taiwan Localization](#immich-reverse-geocoding---taiwan-localization)
+  - [Design Philosophy](#design-philosophy)
     - [Before and After Comparison](#before-and-after-comparison)
   - [Table of Contents](#table-of-contents)
+  - [Supported Regions and Language Strategy](#supported-regions-and-language-strategy)
   - [Data Sources](#data-sources)
   - [Usage](#usage)
     - [Integrated Deployment (Recommended, convenient for future updates)](#integrated-deployment-recommended-convenient-for-future-updates)
     - [Manual Deployment](#manual-deployment)
   - [Specify Specific Version](#specify-specific-version)
-  - [Taiwan Localization Logic](#taiwan-localization-logic)
+  - [Administrative Optimization Strategy](#administrative-optimization-strategy)
+    - [🇹🇼 Taiwan](#-taiwan)
+    - [🇯🇵 Japan](#-japan)
   - [Update Geographic Data](#update-geographic-data)
     - [Integrated Deployment](#integrated-deployment)
     - [Manual Deployment](#manual-deployment-1)
   - [Developer: Local Data Processing](#developer-local-data-processing)
+    - [1. Install Dependencies](#1-install-dependencies)
+    - [2. Extract Raw Geographic Data (Optional)](#2-extract-raw-geographic-data-optional)
+      - [Taiwan Data Extraction](#taiwan-data-extraction)
+      - [Japan Data Extraction](#japan-data-extraction)
+    - [3. Complete Data Processing Workflow](#3-complete-data-processing-workflow)
+      - [Register LocationIQ API](#register-locationiq-api)
+      - [Execute Data Processing](#execute-data-processing)
   - [Acknowledgments](#acknowledgments)
   - [License](#license)
+
+## Supported Regions and Language Strategy
+
+The project applies region-specific language handling to reflect the expectations of users in Taiwan:
+
+| Region | Language Strategy | Data Source | Notes |
+| --- | --- | --- | --- |
+| 🇹🇼 Taiwan | Official Traditional Chinese names | NLSC (National Land Surveying and Mapping Center) | Fixes incorrect country labels and missing municipality names |
+| 🇯🇵 Japan | Native Japanese (漢字 + かな) | 国土数値情報ダウンロードサービス | Displays official Japanese names without translating them |
+| 🌏 Others | Traditional Chinese translations | Custom glossary → GeoNames translations → GeoNames English | Prioritizes Taiwan-style translations; falls back when unavailable |
+
+> **Why keep Japanese in Japanese?**
+> Taiwanese users are familiar with Japanese kanji and kana in combination. Names such as 「横浜市」 or 「うるま市」 remain understandable without romanization or Chinese conversion.
   
 ## Data Sources
 
@@ -149,25 +179,23 @@ Please go to this project's [Releases page](https://github.com/RxChi1d/immich-ge
 
 > **NOTE**: The script will first verify whether the specified tag exists in GitHub Releases. If the tag is invalid, it will prompt an error and terminate execution, so please ensure the tag is valid before execution.
   
-## Taiwan Localization Logic  
-  
-This project adopts more precise and locally-tailored localization logic for Taiwan region geographic information processing:  
-  
-1.  **NLSC data as the core**:  
-     *   Taiwan's administrative boundaries and names are mainly based on **village boundary map data published by the National Land Surveying and Mapping Center (NLSC)**. This ensures **accuracy** of geographic information.  
-     *   By processing NLSC village data, we can reverse-resolve geographic coordinates accurately to the village level, thus providing more precise township and county/city levels.  
-  
-2.  **Administrative division level definitions**:  
-     *   **Level 1 Administrative Division (Admin1)**: Corresponds to Taiwan's **22 municipalities and provincial cities/counties** (e.g., Taipei City, Keelung City, Changhua County).  
-     *   **Level 2 Administrative Division (Admin2)**: Corresponds to **townships, towns, cities, districts** under each county/city (e.g., Banqiao District in New Taipei City, Changhua City in Changhua County).  
-     *   **Level 3 Administrative Division (Admin3)**: Corresponds to **villages and wards** in NLSC data.  
-     *   **Level 4 Administrative Division (Admin4)**: Currently not used.  
-  
-3.  **Chinese name processing**:  
-     *   Geographic names within Taiwan (counties/cities, townships/towns/cities/districts, villages/wards) **directly adopt official names provided by NLSC map data**.  
-     *   Geographic names outside Taiwan mainly refer to the **GeoNames** database, where country name translations adopt official translations provided by **Ministry of Economic Affairs International Trade Administration** and **Ministry of Foreign Affairs of Taiwan**, ensuring Traditional Chinese names that conform to Taiwan terminology habits.
-  
-Through the above logic, this project aims to provide reverse geocoding results that are more aligned with Taiwan's actual situation and more accurate.
+## Administrative Optimization Strategy
+
+### 🇹🇼 Taiwan
+
+- **Official datasets as the foundation**: Uses NLSC village boundaries to guarantee authoritative data
+- **Correct country and division names**: Fixes Immich defaults such as "China Taiwan Province" and missing municipalities
+- **Administrative hierarchy refinement**: Admin1 = municipalities/counties, Admin2 = districts/townships
+
+> 📖 See [Taiwan Administrative Processing (English)](docs/en/taiwan-admin-processing.md)
+
+### 🇯🇵 Japan
+
+- **Preserve native names**: Keeps the original kanji + kana combinations (e.g., 「静岡県」 instead of "Shizuoka Prefecture")
+- **Context-aware subdivision handling**: Handles standard cities, special wards, designated cities, and Tokyo’s special wards
+- **Intelligent district prefixes**: Adds district names only when multiple towns share the same name within a prefecture
+
+> 📖 See [Japan Administrative Processing (zh-TW)](docs/zh-tw/japan-admin-processing.md) • [Japan Administrative Processing (English)](docs/en/japan-admin-processing.md)
 
 ## Update Geographic Data
 

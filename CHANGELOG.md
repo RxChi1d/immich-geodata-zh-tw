@@ -31,6 +31,9 @@
 - **Japan GeoData 處理器**: 新增 `JapanGeoDataHandler` 與 `meta_data/jp_geodata.csv`，支援日本官方行政區 Shapefile 的自動 ETL 流程。
 - **Handler Registry**: 建立 `register_handler` 與 `get_handler` 架構，允許依 ISO 國碼載入對應處理器供 `extract` 與 `enhance` 指令使用。
 - **Enhance 流程整合**: 新增 `update_geodata()` 將 admin1 與 cities500 優化合併執行，集中管理 geoname ID 範圍與日誌追蹤。
+- **日本行政區處理文檔**: 新增 `docs/zh-tw/japan-admin-processing.md` 詳細說明行政區顯示規則、資料流程與範例，作為 README 的延伸參考。
+- **臺灣行政區處理文檔**: 新增 `docs/zh-tw/taiwan-admin-processing.md` 梳理 NLSC 資料來源、層級對應與轉換步驟，協助開發者掌握臺灣優化策略。
+- **行政區處理英文文檔**: 新增 `docs/en/taiwan-admin-processing.md` 與 `docs/en/japan-admin-processing.md`，提供國際貢獻者參考的英文說明。
 
 ### Changed
 - **GeoData Handler 架構**: 基底類別統一 `convert_to_cities_schema` 與 admin1 產生流程，透過鉤子方法保留國別前處理彈性並提供一致的錯誤診斷。
@@ -38,6 +41,8 @@
 - **Schema 與常數來源**: Polars schema 集中於 `core/schemas.py`，常數整合進 `core/constants.py`，降低重複定義並解除循環匯入問題。
 - **CLI 行為**: `enhance` 指令自動跳過已由 Handler 支援的國家，並整合原有 modify 流程；相關操作說明同步更新 README。
 - **GeoData 座標精度**: `GeoDataHandler` 統一經緯度小數位設定為 8 位，確保多次執行 Extract 時輸出結果保持一致且避免浮點誤差造成的大量差異。
+- **README 結構**: 重寫導覽與設計理念章節，新增支援地區語言策略表格並連結詳細處理文檔，讓使用者更易掌握多國優化內容。
+- **README.en**: 與中文版同步重構導覽內容，補充支援地區語言策略與英文文檔連結。
 
 ### Fixed
 - **輸出路徑處理**：確保資料寫入前輸出資料夾存在，避免路徑不存在時寫入失敗。
