@@ -1,9 +1,6 @@
 import os
-import sys
 import polars as pl
 from pathlib import Path
-
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from core.utils import logger, calculate_global_max_geoname_id
 from core.schemas import CITIES_SCHEMA, ADMIN1_SCHEMA

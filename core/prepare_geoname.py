@@ -1,10 +1,7 @@
 import os
-import sys
 import requests
 import zipfile
 from core.geodata import get_handler
-
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from core.utils import logger, rebuild_folder
 

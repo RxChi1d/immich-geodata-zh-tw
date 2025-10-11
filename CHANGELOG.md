@@ -42,6 +42,7 @@
 - **經緯度精度**：`GeoDataHandler` 統一輸出經緯度為 8 位小數，確保重複匯出時差異最小化。
 - **執行環境設定**：移除多餘的 `SHAPE_RESTORE_SHX` 參數，簡化預設值與除錯流程。
 - **專案文件結構**：重寫 README 與 README.en 導覽章節，並建立 `docs/zh-tw/` 與英文對應路徑以統一文件架構。
+- **工具模組架構**：將 `core/utils.py` 重構為模組化套件，拆分為 `logging`、`filesystem`、`alternate_names`、`geoname_ids` 四個子模組，改善程式碼組織與可維護性，並移除所有 `sys.path` 操作改用標準相對匯入。
 
 ### Fixed
 - **輸出路徑處理**：建立輸出資料夾後再寫入，避免因路徑不存在而失敗。
