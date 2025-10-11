@@ -26,6 +26,11 @@ class JapanGeoDataHandler(GeoDataHandler):
     COUNTRY_CODE = "JP"
     TIMEZONE = "Asia/Tokyo"
 
+    # 彈性設定：政令市 admin_2 顯示策略
+    # True: 僅顯示市名（例：横浜市）- 提升顯示一致性，降低 Immich 誤判率
+    # False: 顯示市名＋區名（例：横浜市中区）- 提供更細緻的行政區資訊
+    SEIREI_SHI_CITY_NAME_ONLY = True
+
     def _get_utm_epsg_from_lon(self, longitude: float) -> int:
         """根據經度計算 UTM 區的 EPSG 代碼。"""
         zone = int((longitude + 180) / 6) + 1
@@ -234,6 +239,8 @@ class JapanGeoDataHandler(GeoDataHandler):
                     # R3: 政令指定都市的區
                     # 條件：N03_005 有值（新版資料格式）
                     # 範例：神奈川県横浜市中区
+                    # 註：admin_2 僅輸出市名以提升顯示一致性與降低 Immich 誤判率，
+                    #     但保留各區的獨立記錄與中心點以維持定位精度
                     pl.col("clean_n03_005").is_not_null().alias("is_seirei_shi"),
                     # R4: 郡轄町/村
                     # 條件：N03_003 以「郡」結尾
@@ -291,16 +298,24 @@ class JapanGeoDataHandler(GeoDataHandler):
 
             # === 步驟 5: 生成 admin_2 欄位（依 R1-R5 規則）===
             # 使用 when-then-otherwise 鏈式判斷，優先級由上至下
+
+            # R3 分支根據 SEIREI_SHI_CITY_NAME_ONLY 常數決定輸出格式
+            seirei_shi_output = (
+                pl.col("clean_n03_004")
+                if self.SEIREI_SHI_CITY_NAME_ONLY
+                else (
+                    pl.col("clean_n03_004").fill_null("")
+                    + pl.col("clean_n03_005").fill_null("")
+                )
+            )
+
             df = df.with_columns(
                 pl.when(pl.col("is_regular_shi"))
                 .then(pl.col("clean_n03_004"))  # R1: 普通市 -> 市名
                 .when(pl.col("is_direct_town"))
                 .then(pl.col("clean_n03_004"))  # R2: 直轄町/村/特別區 -> 名稱
                 .when(pl.col("is_seirei_shi"))
-                .then(
-                    pl.col("clean_n03_004").fill_null("")
-                    + pl.col("clean_n03_005").fill_null("")
-                )  # R3: 政令市區 -> 市名＋區名
+                .then(seirei_shi_output)  # R3: 政令市 -> 依設定輸出市名或市名＋區名
                 .when(pl.col("needs_gun_prefix"))
                 .then(
                     pl.col("clean_n03_003") + pl.col("clean_n03_004")
