@@ -1,12 +1,8 @@
 """臺灣地理資料處理器。"""
 
-import os
-import sys
 import polars as pl
 import geopandas as gpd
 from pathlib import Path
-
-sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 from core.utils import logger
 from core.geodata.base import GeoDataHandler, register_handler
