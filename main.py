@@ -79,14 +79,18 @@ def cmd_extract(args):
         logger.error(str(e))
         sys.exit(1)
 
-    # 驗證 Shapefile
+    # 驗證地理資料檔案
     shapefile_path = Path(args.shapefile)
     if not shapefile_path.exists():
-        logger.error(f"Shapefile 不存在: {shapefile_path}")
+        logger.error(f"地理資料檔案不存在: {shapefile_path}")
         sys.exit(1)
 
-    if shapefile_path.suffix.lower() != ".shp":
-        logger.error(f"請提供 .shp 檔案，而非: {shapefile_path.suffix}")
+    # 支援 Shapefile (.shp) 和 GeoJSON (.geojson, .json)
+    allowed_extensions = {".shp", ".geojson", ".json"}
+    if shapefile_path.suffix.lower() not in allowed_extensions:
+        logger.error(
+            f"不支援的檔案格式: {shapefile_path.suffix}，請提供 .shp 或 .geojson 檔案"
+        )
         sys.exit(1)
 
     # 執行提取
