@@ -139,8 +139,7 @@ def cmd_locationiq(args):
 
 
 def cmd_translate(args):
-    """翻譯地名資料，包含 cities500 與 admin1/admin2"""
-    source_folder = args.source_folder
+    """翻譯地名資料，包含 cities500 與 admin1"""
     output_folder = args.output_folder
     metadata_folder = "./meta_data"
 
@@ -154,11 +153,9 @@ def cmd_translate(args):
         metadata_folder, cities500_file, output_file, alternate_name_file
     )
 
-    # 處理 admin1 與 admin2 翻譯
+    # 處理 admin1 翻譯
     admin1_file = os.path.join(output_folder, "admin1CodesASCII_optimized.txt")
-    admin2_file = os.path.join(source_folder, "admin2Codes.txt")
     translate.translate_admin1(admin1_file, alternate_name_file, output_folder)
-    translate.translate_admin1(admin2_file, alternate_name_file, output_folder)
     logger.info("translate 步驟完成。")
 
 
@@ -248,9 +245,7 @@ def cmd_release(args):
             metadata_folder, enhanced_output, translated_cities, alternate_name_file
         )
         admin1_file = os.path.join(output_folder, "admin1CodesASCII_optimized.txt")
-        admin2_file = os.path.join("geoname_data", "admin2Codes.txt")
         translate.translate_admin1(admin1_file, alternate_name_file, output_folder)
-        translate.translate_admin1(admin2_file, alternate_name_file, output_folder)
     else:
         logger.info("跳過 translate 步驟")
 
