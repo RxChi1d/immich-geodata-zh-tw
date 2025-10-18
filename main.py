@@ -32,6 +32,30 @@ from core import (
     translate,
     pack_release,
 )
+from core.geodata import get_handler
+from pathlib import Path
+
+
+def filter_countries_without_handler(country_codes: list[str]) -> list[str]:
+    """過濾掉已有 Handler 的國家代碼。
+
+    對於已有 Handler 的國家，會發出警告訊息，因為這些國家會自動通過 Handler 處理。
+
+    Args:
+        country_codes: 國家代碼列表。
+
+    Returns:
+        過濾後的國家代碼列表（不包含已有 Handler 的國家）。
+    """
+    filtered: list[str] = []
+    for cc in country_codes:
+        try:
+            get_handler(cc)
+            logger.warning(f"{cc} 已有 Handler，將自動使用官方資料處理")
+        except ValueError:
+            filtered.append(cc)
+
+    return filtered
 
 
 def cmd_cleanup(args):
@@ -48,9 +72,6 @@ def cmd_prepare(args):
 
 def cmd_extract(args):
     """提取原始地理資料（Shapefile → CSV）"""
-    from core.geodata import get_handler
-    from pathlib import Path
-
     # 取得 Handler
     try:
         handler_class = get_handler(args.country)
@@ -82,19 +103,12 @@ def cmd_extract(args):
 
 def cmd_enhance(args):
     """優化 cities500 資料"""
-    from core.geodata import get_handler
-
     cities_file = args.cities_file or os.path.join("geoname_data", "cities500.txt")
 
-    # 過濾掉有 Handler 的國家（這些國家由 Handler 產生精準資料）
-    extra_files = []
-    for cc in args.country_code:
-        try:
-            get_handler(cc)
-            logger.info(f"跳過 {cc} 的 extra_data（使用 Handler 產生精準資料）")
-        except ValueError:
-            # 沒有 Handler，需要使用 extra_data
-            extra_files.append(os.path.join("geoname_data", "extra_data", f"{cc}.txt"))
+    extra_files = [
+        os.path.join("geoname_data", "extra_data", f"{cc}.txt")
+        for cc in args.country_code
+    ]
 
     output_file = args.output_file or os.path.join("output", "cities500_optimized.txt")
     enhance_data.update_geodata(
@@ -186,22 +200,13 @@ def cmd_release(args):
 
     # 3. enhance (整合了 admin1 處理)
     if not args.pass_enhance:
-        from core.geodata import get_handler
-
         logger.info("=== 執行 enhance 步驟 ===")
         cities_file = os.path.join("geoname_data", "cities500.txt")
 
-        # 過濾掉有 Handler 的國家（這些國家由 Handler 產生精準資料）
-        extra_files = []
-        for cc in args.country_code:
-            try:
-                get_handler(cc)
-                logger.info(f"跳過 {cc} 的 extra_data（使用 Handler 產生精準資料）")
-            except ValueError:
-                # 沒有 Handler，需要使用 extra_data
-                extra_files.append(
-                    os.path.join("geoname_data", "extra_data", f"{cc}.txt")
-                )
+        extra_files = [
+            os.path.join("geoname_data", "extra_data", f"{cc}.txt")
+            for cc in args.country_code
+        ]
 
         enhance_data.update_geodata(cities_file, extra_files, enhanced_output, 100)
     else:
@@ -422,6 +427,11 @@ def main():
     parser_release.set_defaults(func=cmd_release)
 
     args = parser.parse_args()
+
+    # 統一過濾已有 Handler 的國家代碼
+    if hasattr(args, "country_code"):
+        args.country_code = filter_countries_without_handler(args.country_code)
+
     args.func(args)
 
 
