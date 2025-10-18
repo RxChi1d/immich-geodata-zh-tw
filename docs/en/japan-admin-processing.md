@@ -18,7 +18,10 @@ The project again follows the GeoNames administrative schema and maps it to Japa
 
 - **Admin1**: All 47 prefectures (e.g., 東京都, 北海道, 神奈川県)
 - **Admin2**: Cities, wards, towns, and villages under each prefecture (e.g., 横浜市, 渋谷区, 鎌倉市)
-- **Admin3 / Admin4**: Not currently used
+- **Admin3**: Ward names for designated cities only
+  - When `SEIREI_SHI_CITY_NAME_ONLY = True`, admin_2 shows only the city name (e.g., "横浜市") and admin_3 contains the ward name (e.g., "中区")
+  - For all other administrative types, admin_3 remains empty
+- **Admin4**: Not used (no corresponding data available)
 
 ## Column Mapping to GeoNames
 
@@ -27,7 +30,8 @@ When extracting the shapefile, the following columns are used:
 - **country**: "日本"
 - **admin_1**: `N03_001` (prefecture name)
 - **admin_2**: Derived from `N03_003`, `N03_004`, and `N03_005` following the rules below
-- **admin_3 / admin_4**: Left empty
+- **admin_3**: Ward name (`N03_005`) for designated cities when `SEIREI_SHI_CITY_NAME_ONLY = True`
+- **admin_4**: Left empty
 
 ## Display Rules
 
@@ -47,12 +51,12 @@ Different administrative categories have distinct display rules to balance reada
 ### 3. Designated Cities (政令指定都市)
 
 - **Condition**: `N03_005` has a value (ward name)
-- **Display**: Show the city name only (e.g., 神奈川県, 横浜市, 中区 → 横浜市)
+- **Display**: admin_2 shows only the city name, admin_3 contains the ward name (e.g., 神奈川県, 横浜市, 中区 → admin_2="横浜市", admin_3="中区")
 - **Rationale**:
   - Matches common behavior on services such as Google Maps and OpenStreetMap, which show prefecture + city
   - Avoids misclassification when district centroids lie close together
-  - Keeps centroids for each ward so spatial precision is preserved even though the label omits the ward
-- **Configuration**: Set `SEIREI_SHI_CITY_NAME_ONLY = False` in `JapanGeoDataHandler` to revert to the "city + ward" display
+  - Preserves complete information: individual ward records, centroids, and ward names (admin_3) are all retained in the dataset
+- **Configuration**: Set `SEIREI_SHI_CITY_NAME_ONLY = False` in `JapanGeoDataHandler` to revert to the "city + ward" display in admin_2. In this case, admin_3 will remain empty.
 
 ### 4. District-Governed Towns and Villages (郡轄町村)
 
@@ -100,14 +104,14 @@ Refer to the [developer workflow](../../README.md#開發者本地資料處理) f
 
 ## Reference Examples
 
-| Category | N03_001 | N03_003 | N03_004 | N03_005 | admin_2 Display | Notes |
-| --- | --- | --- | --- | --- | --- | --- |
-| Standard city | 北海道 |  | 釧路市 |  | 釧路市 | City not governed by a district |
-| Direct-controlled village | 東京都 |  | 小笠原村 |  | 小笠原村 | Island directly managed by 東京都 |
-| Special ward | 東京都 |  | 渋谷区 |  | 渋谷区 | Tokyo special ward |
-| Designated city ward | 神奈川県 | 横浜市 | 横浜市 | 中区 | 横浜市 | Ward label collapses to the city |
-| District town (unique) | 新潟県 | 岩船郡 | 関川村 |  | 関川村 | Name is unique, no district prefix |
-| District village (duplicate) | 北海道 | 古宇郡 | 泊村 |  | 古宇郡泊村 | Prefix resolves duplicate with 国後郡泊村 |
+| Category | N03_001 | N03_003 | N03_004 | N03_005 | admin_2 | admin_3 | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Standard city | 北海道 |  | 釧路市 |  | 釧路市 |  | City not governed by a district |
+| Direct-controlled village | 東京都 |  | 小笠原村 |  | 小笠原村 |  | Island directly managed by 東京都 |
+| Special ward | 東京都 |  | 渋谷区 |  | 渋谷区 |  | Tokyo special ward |
+| Designated city ward | 神奈川県 | 横浜市 | 横浜市 | 中区 | 横浜市 | 中区 | admin_2 shows city name, admin_3 preserves ward name |
+| District town (unique) | 新潟県 | 岩船郡 | 関川村 |  | 関川村 |  | Name is unique, no district prefix |
+| District village (duplicate) | 北海道 | 古宇郡 | 泊村 |  | 古宇郡泊村 |  | Prefix resolves duplicate with 国後郡泊村 |
 
 ## References
 

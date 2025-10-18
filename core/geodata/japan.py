@@ -122,7 +122,13 @@ class JapanGeoDataHandler(GeoDataHandler):
             2. 標準化空值處理（統一 null、空字串、"None"、"nan"）
             3. 識別五種行政區類型（R1-R5）
             4. 檢測郡轄町/村的同名衝突（R4 規則）
-            5. 生成 admin_2 欄位並輸出標準化 CSV
+            5. 生成 admin_2 和 admin_3 欄位並輸出標準化 CSV
+
+        Admin 欄位填充邏輯：
+            - admin_1: 都道府縣（N03_001）
+            - admin_2: 市區町村名（依 R1-R5 規則生成）
+            - admin_3: 僅政令市在 SEIREI_SHI_CITY_NAME_ONLY=True 時填入區名（N03_005）
+            - admin_4: 保持空白
 
         Raises:
             Exception: Shapefile 讀取失敗或資料處理錯誤時拋出
@@ -330,7 +336,13 @@ class JapanGeoDataHandler(GeoDataHandler):
                     pl.col("latitude"),
                     pl.col("N03_001").alias("admin_1"),  # 都道府縣
                     pl.col("admin_2"),  # 市區町村（已按 R1-R5 規則生成）
-                    pl.lit("").alias("admin_3"),  # 空字串（保留欄位）
+                    # admin_3：僅政令市在 SEIREI_SHI_CITY_NAME_ONLY=True 時填入區名
+                    pl.when(
+                        pl.col("is_seirei_shi") & pl.lit(self.SEIREI_SHI_CITY_NAME_ONLY)
+                    )
+                    .then(pl.col("clean_n03_005"))
+                    .otherwise(pl.lit(""))
+                    .alias("admin_3"),
                     pl.lit("").alias("admin_4"),  # 空字串（保留欄位）
                     pl.lit("日本").alias("country"),  # 國家名稱
                 ]
