@@ -27,6 +27,10 @@
 
 ## [未發佈版本]
 
+---
+
+## [2.1.0] - 2025-10-18
+
 ### Changed
 - **日本政令市區名**：政令市記錄的 admin_3 欄位填入區名，保留來源資料的完整行政層級資訊
 - **Admin2 資料處理簡化**：移除 admin2Codes.txt 翻譯流程，僅保留下載與複製，因該檔案在 Immich 的反向地理編碼中不會被使用
@@ -197,7 +201,8 @@
 
 特定變更的詳細資訊請參閱 [提交歷史](https://github.com/RxChi1d/immich-geodata-zh-tw/commits/main) 或 [發佈頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases)。
 
-[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.0.0...HEAD
+[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.2...v2.0.0
 [1.2.2]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.0...v1.2.1
