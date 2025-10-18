@@ -416,7 +416,6 @@ def translate_admin1(input_file, alternate_name_file, output_folder):
 
 
 def test():
-    source_folder = "./geoname_data"
     output_folder = "./output"
     metadata_folder = "./meta_data"
 
@@ -431,12 +430,10 @@ def test():
         metadata_folder, cities500_file, output_file, alternate_name_file
     )
 
-    # 翻譯 admin1 和 admin2
+    # 翻譯 admin1
     admin1_file = os.path.join(output_folder, "admin1CodesASCII_optimized.txt")
-    admin2_file = os.path.join(source_folder, "admin2Codes.txt")
 
     translate_admin1(admin1_file, alternate_name_file, output_folder)
-    translate_admin1(admin2_file, alternate_name_file, output_folder)
 
 
 if __name__ == "__main__":

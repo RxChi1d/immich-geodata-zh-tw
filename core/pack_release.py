@@ -37,9 +37,7 @@ def pack(output_dir):
         "output/admin1CodesASCII_translated.txt": os.path.join(
             geodata_dir, "admin1CodesASCII.txt"
         ),
-        "output/admin2Codes_translated.txt": os.path.join(
-            geodata_dir, "admin2Codes.txt"
-        ),
+        "geoname_data/admin2Codes.txt": os.path.join(geodata_dir, "admin2Codes.txt"),
         "output/cities500_translated.txt": os.path.join(geodata_dir, "cities500.txt"),
     }
 
