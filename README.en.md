@@ -189,7 +189,7 @@ Please go to this project's [Releases page](https://github.com/RxChi1d/immich-ge
 
 - **Official datasets as the foundation**: Uses NLSC village boundaries to guarantee authoritative data
 - **Correct country and division names**: Fixes Immich defaults such as "China Taiwan Province" and missing municipalities
-- **Administrative hierarchy refinement**: Admin1 = municipalities/counties, Admin2 = districts/townships
+- **Administrative hierarchy optimization**: Optimized Admin1 (municipalities/counties) and cities500 (place names data)
 
 > 📖 See [Taiwan Administrative Processing (English)](docs/en/taiwan-admin-processing.md)
 
