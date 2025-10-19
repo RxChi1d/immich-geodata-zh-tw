@@ -107,7 +107,13 @@ class JapanGeoDataHandler(GeoDataHandler):
 
         return gdf
 
-    def extract_from_shapefile(self, shapefile_path: str, output_csv: str) -> None:
+    def extract_from_shapefile(
+        self,
+        shapefile_path: str,
+        output_csv: str,
+        *,
+        google_api_key: str | None = None,
+    ) -> None:
         """從日本行政區 Shapefile 提取地理資料並轉換為標準化 CSV。
 
         處理日本國土數值情報的行政區域資料，計算中心點座標並按照
@@ -116,6 +122,7 @@ class JapanGeoDataHandler(GeoDataHandler):
         Args:
             shapefile_path: 輸入 Shapefile 的路徑
             output_csv: 輸出 CSV 檔案的路徑
+            google_api_key: Google Geocoding API 金鑰（本處理器不使用，保留介面一致性）
 
         處理步驟：
             1. 讀取 Shapefile 並使用動態 UTM 區選擇計算中心點
@@ -134,6 +141,8 @@ class JapanGeoDataHandler(GeoDataHandler):
             Exception: Shapefile 讀取失敗或資料處理錯誤時拋出
         """
         try:
+            _ = google_api_key
+
             logger.info(f"正在讀取 Shapefile: {shapefile_path}")
 
             # === 步驟 1: 讀取 Shapefile 並計算中心點 ===
