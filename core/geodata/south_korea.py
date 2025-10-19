@@ -7,11 +7,11 @@ import numpy as np
 from pathlib import Path
 
 from core.utils import logger
+from core.utils.google_geocoding import GoogleGeocodingClient
 from core.geodata.base import GeoDataHandler, register_handler
 
 
-# TODO: 註冊處理器
-# @register_handler("KR")
+@register_handler("KR")
 class SouthKoreaGeoDataHandler(GeoDataHandler):
     """南韓地理資料處理器。
 
@@ -23,7 +23,104 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
     COUNTRY_CODE = "KR"
     TIMEZONE = "Asia/Seoul"
 
-    # TODO: 未來實作韓文→繁體中文地名對照表
+    # 廣域市/道名稱對照表（韓文 → 台灣常用繁體中文名稱）
+    # Reason: 使用台灣地圖常見的簡潔名稱，而非 Google Maps 的正式官方名稱
+    ADMIN1_NAME_MAP = {
+        # 特別市
+        "서울특별시": "首爾",
+        # 廣域市（6個）
+        "부산광역시": "釜山",
+        "대구광역시": "大邱",
+        "인천광역시": "仁川",
+        "광주광역시": "光州",
+        "대전광역시": "大田",
+        "울산광역시": "蔚山",
+        # 特別自治市
+        "세종특별자치시": "世宗",
+        # 道（8個）
+        "경기도": "京畿道",
+        "강원특별자치도": "江原道",
+        "충청북도": "忠清北道",
+        "충청남도": "忠清南道",
+        "전북특별자치도": "全羅北道",
+        "전라남도": "全羅南道",
+        "경상북도": "慶尚北道",
+        "경상남도": "慶尚南道",
+        "제주특별자치도": "濟州",
+    }
+
+    def _translate_to_chinese(
+        self,
+        latitude: float,
+        longitude: float,
+        korean_admin1: str,
+        korean_admin2: str,
+        korean_admin3: str,
+        google_client: GoogleGeocodingClient | None,
+    ) -> tuple[str, str, str]:
+        """將韓文地名轉換為繁體中文。
+
+        翻譯策略：
+        - admin_1: 使用內建對照表（確保使用台灣常見的簡潔名稱）
+        - admin_2/admin_3: 使用 Google Geocoding API（利用其翻譯能力）
+
+        Args:
+            latitude: 緯度
+            longitude: 經度
+            korean_admin1: 韓文 admin_1 (廣域市/道)
+            korean_admin2: 韓文 admin_2 (市/區/郡)
+            korean_admin3: 韓文 admin_3 (洞/邑/面)
+            google_client: Google Geocoding API 客戶端（若為 None 則保留韓文原名）
+
+        Returns:
+            (中文 admin_1, 中文 admin_2, 中文 admin_3) 元組
+        """
+        # admin_1: 使用對照表翻譯（確保使用台灣慣用名稱）
+        chinese_admin1 = self.ADMIN1_NAME_MAP.get(korean_admin1, korean_admin1)
+
+        # admin_2/admin_3: 未提供 API 金鑰時，保留韓文原名
+        if not google_client:
+            return chinese_admin1, korean_admin2, korean_admin3
+
+        try:
+            # 使用反向地理編碼查詢 admin_2 和 admin_3 的繁體中文地名
+            data = google_client.geocode(
+                latlng=(latitude, longitude), language="zh-TW"
+            )
+
+            if not data:
+                logger.warning(f"無法取得繁體中文地名: ({latitude}, {longitude})")
+                return chinese_admin1, korean_admin2, korean_admin3
+
+            # 提取 admin_2 和 admin_3 的繁體中文地名
+            # Reason: 優先尋找縣市等級行政區（locality 或等同層級），若無再回退
+            chinese_admin2 = google_client.extract_component(
+                data,
+                [
+                    "administrative_area_level_2",
+                    "locality",
+                    "sublocality_level_1",
+                ],
+            )
+            chinese_admin3 = google_client.extract_component(
+                data,
+                [
+                    "sublocality_level_2",
+                    "administrative_area_level_3",
+                    "neighborhood",
+                ],
+            )
+
+            # Reason: 使用韓文原名作為備援（若 API 未回傳對應組件）
+            return (
+                chinese_admin1,
+                chinese_admin2 or korean_admin2,
+                chinese_admin3 or korean_admin3,
+            )
+
+        except Exception as e:
+            logger.error(f"Google API 查詢失敗: ({latitude}, {longitude}) - {e}")
+            return chinese_admin1, korean_admin2, korean_admin3
 
     def _get_utm_epsg_from_lon(self, longitude: float) -> int:
         """根據經度計算 UTM 區的 EPSG 代碼。"""
@@ -105,7 +202,13 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
 
         return gdf
 
-    def extract_from_shapefile(self, shapefile_path: str, output_csv: str) -> None:
+    def extract_from_shapefile(
+        self,
+        shapefile_path: str,
+        output_csv: str,
+        *,
+        google_api_key: str | None = None,
+    ) -> None:
         """從南韓行政區 GeoJSON 提取地理資料並轉換為標準化 CSV。
 
         處理南韓行政區域資料，計算中心點座標並按照行政區層級映射。
@@ -113,17 +216,19 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
         Args:
             shapefile_path: 輸入 GeoJSON 檔案的路徑
             output_csv: 輸出 CSV 檔案的路徑
+            google_api_key: Google Cloud API 金鑰（選填，用於繁體中文翻譯）
 
         處理步驟：
             1. 讀取 GeoJSON 並使用動態 UTM 區選擇計算中心點
             2. 提取行政區欄位（sidonm, sggnm, adm_nm）
             3. 解析 admin_3（從 adm_nm 移除 sidonm 和 sggnm）
-            4. 生成標準化 CSV
+            4. 使用 Google Geocoding API 轉換為繁體中文（選填）
+            5. 生成標準化 CSV
 
         Admin 欄位填充邏輯：
-            - admin_1: 廣域市/道（sidonm）
-            - admin_2: 市/區/郡（sggnm）
-            - admin_3: 洞/邑/面（解析 adm_nm）
+            - admin_1: 廣域市/道（sidonm → 繁體中文）
+            - admin_2: 市/區/郡（sggnm → 繁體中文）
+            - admin_3: 洞/邑/面（解析 adm_nm → 繁體中文）
             - admin_4: 保持空白
 
         Raises:
@@ -195,14 +300,53 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
                 ]
             )
 
+            # === 步驟 3: 使用 Google Geocoding API 翻譯為繁體中文（選填）===
+            # 初始化 Google API 客戶端（如果有提供 API 金鑰）
+            google_client = None
+            if google_api_key:
+                logger.info("正在初始化 Google Geocoding API 客戶端...")
+                google_client = GoogleGeocodingClient(google_api_key)
+                logger.info(f"將使用 Google API 翻譯 {len(df)} 筆地名為繁體中文")
+            else:
+                logger.info("未提供 Google API 金鑰，將保留韓文原名")
+
+            # 應用翻譯（逐列處理）
+            logger.info("正在翻譯地名...")
+            chinese_df = df.select(
+                ["latitude", "longitude", "sidonm", "sggnm", "admin_3"]
+            ).map_rows(
+                lambda row: tuple(
+                    self._translate_to_chinese(
+                        latitude=row[0],
+                        longitude=row[1],
+                        korean_admin1=row[2],
+                        korean_admin2=row[3],
+                        korean_admin3=row[4],
+                        google_client=google_client,
+                    )
+                )
+            )
+
+            df = df.with_columns(
+                [
+                    chinese_df.to_series(0).alias("chinese_admin_1"),
+                    chinese_df.to_series(1).alias("chinese_admin_2"),
+                    chinese_df.to_series(2).alias("chinese_admin_3"),
+                ]
+            )
+
+            # 顯示 API 使用統計
+            if google_client:
+                logger.info(f"Google API 總查詢次數: {google_client.request_count}")
+
             # 重組為標準格式
             df = df.select(
                 [
                     pl.col("longitude"),
                     pl.col("latitude"),
-                    pl.col("sidonm").alias("admin_1"),  # 廣域市/道
-                    pl.col("sggnm").alias("admin_2"),  # 市/區/郡
-                    pl.col("admin_3"),  # 洞/邑/面
+                    pl.col("chinese_admin_1").alias("admin_1"),  # 繁體中文廣域市/道
+                    pl.col("chinese_admin_2").alias("admin_2"),  # 繁體中文市/區/郡
+                    pl.col("chinese_admin_3").alias("admin_3"),  # 繁體中文洞/邑/面
                     pl.lit("").alias("admin_4"),  # 空字串（保留欄位）
                     pl.lit("南韓").alias("country"),  # 國家名稱
                 ]

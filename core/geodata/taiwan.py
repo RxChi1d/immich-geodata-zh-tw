@@ -35,8 +35,16 @@ class TaiwanGeoDataHandler(GeoDataHandler):
 
     MUNICIPALITIES = _MUNICIPALITIES
 
-    def extract_from_shapefile(self, shapefile_path: str, output_csv: str) -> None:
+    def extract_from_shapefile(
+        self,
+        shapefile_path: str,
+        output_csv: str,
+        *,
+        google_api_key: str | None = None,
+    ) -> None:
         try:
+            _ = google_api_key
+
             logger.info(f"正在讀取 Shapefile: {shapefile_path}")
 
             # 使用 geopandas 讀取 Shapefile

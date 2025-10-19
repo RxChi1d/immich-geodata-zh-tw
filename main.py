@@ -99,8 +99,15 @@ def cmd_extract(args):
     logger.info(f"  輸入: {shapefile_path}")
     logger.info(f"  輸出: {output_csv}")
 
+    # 取得 Google API 金鑰（優先從參數取得，否則從環境變數）
+    google_api_key = args.google_api_key or os.environ.get("GOOGLE_GEOCODING_API_KEY")
+
     handler = handler_class()
-    handler.extract_from_shapefile(str(shapefile_path), output_csv)
+    handler.extract_from_shapefile(
+        str(shapefile_path),
+        output_csv,
+        google_api_key=google_api_key,
+    )
 
     logger.info("extract 步驟完成。")
 
@@ -298,19 +305,28 @@ def main():
 
     # extract 子命令
     parser_extract = subparsers.add_parser(
-        "extract", help="提取原始地理資料（Shapefile → CSV）"
+        "extract", help="提取原始地理資料（Shapefile/GeoJSON → CSV）"
     )
     parser_extract.add_argument(
-        "--country", type=str, required=True, help="國家代碼（例如: TW, JP）"
+        "--country", type=str, required=True, help="國家代碼（例如: TW, JP, KR）"
     )
     parser_extract.add_argument(
-        "-s", "--shapefile", type=str, required=True, help="Shapefile (.shp) 檔案路徑"
+        "-s",
+        "--shapefile",
+        type=str,
+        required=True,
+        help="Shapefile (.shp) 或 GeoJSON (.geojson) 檔案路徑",
     )
     parser_extract.add_argument(
         "-o",
         "--output",
         type=str,
         help="輸出 CSV 檔案路徑（預設: meta_data/{country}_geodata.csv）",
+    )
+    parser_extract.add_argument(
+        "--google-api-key",
+        type=str,
+        help="Google Geocoding API 金鑰（用於南韓地名繁體中文翻譯）",
     )
     parser_extract.set_defaults(func=cmd_extract)
 
