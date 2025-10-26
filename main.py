@@ -99,14 +99,10 @@ def cmd_extract(args):
     logger.info(f"  輸入: {shapefile_path}")
     logger.info(f"  輸出: {output_csv}")
 
-    # 取得 Google API 金鑰（優先從參數取得，否則從環境變數）
-    google_api_key = args.google_api_key or os.environ.get("GOOGLE_GEOCODING_API_KEY")
-
     handler = handler_class()
     handler.extract_from_shapefile(
         str(shapefile_path),
         output_csv,
-        google_api_key=google_api_key,
     )
 
     logger.info("extract 步驟完成。")
@@ -322,11 +318,6 @@ def main():
         "--output",
         type=str,
         help="輸出 CSV 檔案路徑（預設: meta_data/{country}_geodata.csv）",
-    )
-    parser_extract.add_argument(
-        "--google-api-key",
-        type=str,
-        help="Google Geocoding API 金鑰（用於南韓地名繁體中文翻譯）",
     )
     parser_extract.set_defaults(func=cmd_extract)
 

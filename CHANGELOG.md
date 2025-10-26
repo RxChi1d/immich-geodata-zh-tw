@@ -28,13 +28,11 @@
 ## [未發佈版本]
 
 ### Added
-- **南韓地理資料處理器**：新增 `SouthKoreaGeoDataHandler`，提供更精確的南韓行政區資料，並利用 Google Geocoding API 進行繁體中文行政區翻譯。
-- **Google Geocoding 客戶端**：加入通用的 `GoogleGeocodingClient`，集中處理速率限制、錯誤處理與地址組件抽取，支援韓國行政區翻譯。
+- **Wikidata 翻譯器**：新增通用翻譯工具支援任意語言對翻譯，使用 P131 關係驗證確保地理實體準確性，並提供候選過濾機制排除非行政區實體
+- **南韓地理資料處理器**：提供南韓行政區資料處理，使用 Wikidata 進行繁體中文翻譯，並針對世宗特別自治市等特殊行政區結構進行優化
 
 ### Changed
-- **南韓行政區翻譯**：整合廣域市/道繁中對照表並優化 Google Geocoding 組件優先順序，以產出「麟蹄郡」等符合臺灣用語的 admin_2 與 admin_3。
-- **GeoData Handler 介面**：`extract_from_shapefile` 統一採用 `google_api_key` 關鍵字參數，未使用者可忽略，確保各國處理器介面一致。
-- **CLI 參數**：`extract` 指令新增 `--google-api-key` 選項並支援 GeoJSON 檔案描述，方便使用南韓翻譯流程。
+- **南韓翻譯策略**：整合廣域市/道繁中對照表，使用 Wikidata 翻譯 Admin 2 層級，產出符合臺灣用語的行政區名稱
 
 ---
 

@@ -4,10 +4,11 @@ import polars as pl
 import geopandas as gpd
 import pyproj
 import numpy as np
+from collections.abc import Callable
 from pathlib import Path
 
 from core.utils import logger
-from core.utils.google_geocoding import GoogleGeocodingClient
+from core.utils.wikidata_translator import WikidataTranslator
 from core.geodata.base import GeoDataHandler, register_handler
 
 
@@ -48,79 +49,6 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
         "경상남도": "慶尚南道",
         "제주특별자치도": "濟州",
     }
-
-    def _translate_to_chinese(
-        self,
-        latitude: float,
-        longitude: float,
-        korean_admin1: str,
-        korean_admin2: str,
-        korean_admin3: str,
-        google_client: GoogleGeocodingClient | None,
-    ) -> tuple[str, str, str]:
-        """將韓文地名轉換為繁體中文。
-
-        翻譯策略：
-        - admin_1: 使用內建對照表（確保使用台灣常見的簡潔名稱）
-        - admin_2/admin_3: 使用 Google Geocoding API（利用其翻譯能力）
-
-        Args:
-            latitude: 緯度
-            longitude: 經度
-            korean_admin1: 韓文 admin_1 (廣域市/道)
-            korean_admin2: 韓文 admin_2 (市/區/郡)
-            korean_admin3: 韓文 admin_3 (洞/邑/面)
-            google_client: Google Geocoding API 客戶端（若為 None 則保留韓文原名）
-
-        Returns:
-            (中文 admin_1, 中文 admin_2, 中文 admin_3) 元組
-        """
-        # admin_1: 使用對照表翻譯（確保使用台灣慣用名稱）
-        chinese_admin1 = self.ADMIN1_NAME_MAP.get(korean_admin1, korean_admin1)
-
-        # admin_2/admin_3: 未提供 API 金鑰時，保留韓文原名
-        if not google_client:
-            return chinese_admin1, korean_admin2, korean_admin3
-
-        try:
-            # 使用反向地理編碼查詢 admin_2 和 admin_3 的繁體中文地名
-            data = google_client.geocode(
-                latlng=(latitude, longitude), language="zh-TW"
-            )
-
-            if not data:
-                logger.warning(f"無法取得繁體中文地名: ({latitude}, {longitude})")
-                return chinese_admin1, korean_admin2, korean_admin3
-
-            # 提取 admin_2 和 admin_3 的繁體中文地名
-            # Reason: 優先尋找縣市等級行政區（locality 或等同層級），若無再回退
-            chinese_admin2 = google_client.extract_component(
-                data,
-                [
-                    "administrative_area_level_2",
-                    "locality",
-                    "sublocality_level_1",
-                ],
-            )
-            chinese_admin3 = google_client.extract_component(
-                data,
-                [
-                    "sublocality_level_2",
-                    "administrative_area_level_3",
-                    "neighborhood",
-                ],
-            )
-
-            # Reason: 使用韓文原名作為備援（若 API 未回傳對應組件）
-            return (
-                chinese_admin1,
-                chinese_admin2 or korean_admin2,
-                chinese_admin3 or korean_admin3,
-            )
-
-        except Exception as e:
-            logger.error(f"Google API 查詢失敗: ({latitude}, {longitude}) - {e}")
-            return chinese_admin1, korean_admin2, korean_admin3
 
     def _get_utm_epsg_from_lon(self, longitude: float) -> int:
         """根據經度計算 UTM 區的 EPSG 代碼。"""
@@ -202,12 +130,110 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
 
         return gdf
 
+    def _normalize_special_admin_structures(self, df: pl.DataFrame) -> pl.DataFrame:
+        """正規化特殊行政區結構（如世宗特別自治市）。
+
+        世宗特別自治市是南韓唯一的單層制特別自治市，沒有傳統的市/郡/區層級。
+        行政層級直接從廣域市到讀/面/洞。
+
+        為了確保 cities500 資料的 name 欄位有值（預設使用 admin_2），
+        需要將 admin_3（읍/면/동）上移到 admin_2，以便翻譯和顯示。
+
+        Args:
+            df: 包含 sidonm, sggnm, admin_3 欄位的 DataFrame
+
+        Returns:
+            正規化後的 DataFrame
+        """
+        # 檢測條件：sidonm == "세종특별자치시" 且 sggnm 不是真實的行政區名稱
+        # Reason: 世宗的真實行政區應該是읍/면/동，如果不是就表示是機構名稱（議會、市廳等）
+        sejong_mask = (pl.col("sidonm") == "세종특별자치시") & (
+            ~pl.col("sggnm").str.ends_with("읍")
+            & ~pl.col("sggnm").str.ends_with("면")
+            & ~pl.col("sggnm").str.ends_with("동")
+        )
+
+        sejong_count = df.filter(sejong_mask).height
+        if sejong_count > 0:
+            logger.info(
+                f"偵測到 {sejong_count} 筆世宗特別自治市記錄，正在正規化行政層級..."
+            )
+
+            df = df.with_columns(
+                [
+                    # 將 admin_3 上移到 sggnm
+                    pl.when(sejong_mask)
+                    .then(pl.col("admin_3"))
+                    .otherwise(pl.col("sggnm"))
+                    .alias("sggnm"),
+                    # 將原 admin_3 清空（世宗沒有更下層級）
+                    pl.when(sejong_mask)
+                    .then(pl.lit(""))
+                    .otherwise(pl.col("admin_3"))
+                    .alias("admin_3"),
+                ]
+            )
+
+            logger.info(
+                "世宗特別自治市行政層級正規化完成：읍/면/동 已上移到 admin_2 層級"
+            )
+
+        return df
+
+    @staticmethod
+    def _build_candidate_filter() -> Callable[[str, dict], bool]:
+        """建立候選過濾器，排除議會機構等非行政區實體。
+
+        Returns:
+            過濾器函式，接收 (name, metadata) 並回傳 bool
+        """
+        # 需要排除的關鍵字（多語言）
+        # Reason: 防止將議會機構、政府機關誤判為行政區
+        EXCLUDED_KEYWORDS = [
+            "의회",  # 韓文：議會
+            "議會",  # 中文：議會
+            "council",  # 英文：議會
+            "assembly",  # 英文：議會
+            "委員會",  # 中文：委員會
+            "legislature",  # 英文：立法機構
+            "청",  # 韓文：廳
+            "廳",  # 中文：廳
+            "government",  # 英文：政府
+            "교육청",  # 韓文：教育廳
+            "시청",  # 韓文：市廳
+        ]
+
+        def filter_func(name: str, metadata: dict) -> bool:
+            """過濾候選項：排除包含議會相關關鍵字的候選。
+
+            Args:
+                name: 地名（未使用，保留以符合介面）
+                metadata: 包含 qid 和 labels 的字典
+
+            Returns:
+                True 保留此候選，False 排除此候選
+            """
+            labels = metadata.get("labels", {})
+
+            # 檢查所有語言的標籤
+            for lang_code, label in labels.items():
+                label_lower = label.lower()
+                for keyword in EXCLUDED_KEYWORDS:
+                    if keyword.lower() in label_lower:
+                        logger.debug(
+                            f"過濾掉候選 {metadata.get('qid')}: "
+                            f"標籤 [{lang_code}] '{label}' 包含關鍵字 '{keyword}'"
+                        )
+                        return False  # 排除此候選
+
+            return True  # 保留此候選
+
+        return filter_func
+
     def extract_from_shapefile(
         self,
         shapefile_path: str,
         output_csv: str,
-        *,
-        google_api_key: str | None = None,
     ) -> None:
         """從南韓行政區 GeoJSON 提取地理資料並轉換為標準化 CSV。
 
@@ -216,19 +242,18 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
         Args:
             shapefile_path: 輸入 GeoJSON 檔案的路徑
             output_csv: 輸出 CSV 檔案的路徑
-            google_api_key: Google Cloud API 金鑰（選填，用於繁體中文翻譯）
 
         處理步驟：
             1. 讀取 GeoJSON 並使用動態 UTM 區選擇計算中心點
             2. 提取行政區欄位（sidonm, sggnm, adm_nm）
             3. 解析 admin_3（從 adm_nm 移除 sidonm 和 sggnm）
-            4. 使用 Google Geocoding API 轉換為繁體中文（選填）
+            4. 使用 Wikidata 翻譯為繁體中文（Admin_1 和 Admin_2）
             5. 生成標準化 CSV
 
         Admin 欄位填充邏輯：
-            - admin_1: 廣域市/道（sidonm → 繁體中文）
-            - admin_2: 市/區/郡（sggnm → 繁體中文）
-            - admin_3: 洞/邑/面（解析 adm_nm → 繁體中文）
+            - admin_1: 廣域市/道（sidonm → 繁體中文，優先使用內建對照表）
+            - admin_2: 市/區/郡（sggnm → 繁體中文，使用 Wikidata）
+            - admin_3: 洞/邑/面（保留韓文原文）
             - admin_4: 保持空白
 
         Raises:
@@ -300,44 +325,119 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
                 ]
             )
 
-            # === 步驟 3: 使用 Google Geocoding API 翻譯為繁體中文（選填）===
-            # 初始化 Google API 客戶端（如果有提供 API 金鑰）
-            google_client = None
-            if google_api_key:
-                logger.info("正在初始化 Google Geocoding API 客戶端...")
-                google_client = GoogleGeocodingClient(google_api_key)
-                logger.info(f"將使用 Google API 翻譯 {len(df)} 筆地名為繁體中文")
-            else:
-                logger.info("未提供 Google API 金鑰，將保留韓文原名")
+            # === 步驟 2.5: 正規化特殊行政區結構（世宗特別自治市）===
+            df = self._normalize_special_admin_structures(df)
 
-            # 應用翻譯（逐列處理）
-            logger.info("正在翻譯地名...")
-            chinese_df = df.select(
-                ["latitude", "longitude", "sidonm", "sggnm", "admin_3"]
-            ).map_rows(
-                lambda row: tuple(
-                    self._translate_to_chinese(
-                        latitude=row[0],
-                        longitude=row[1],
-                        korean_admin1=row[2],
-                        korean_admin2=row[3],
-                        korean_admin3=row[4],
-                        google_client=google_client,
-                    )
-                )
+            # === 步驟 3: 使用 Wikidata 翻譯為繁體中文 ===
+            logger.info("正在初始化 Wikidata 翻譯工具...")
+            translator = WikidataTranslator(
+                source_lang="ko",
+                target_lang="zh-tw",
+                fallback_langs=["zh-hant", "zh", "en", "ko"],
+                cache_path="geoname_data/KR_wikidata_cache.json",
+                use_opencc=True,
             )
 
+            # 建立候選過濾器（用於排除議會機構等非行政區實體）
+            candidate_filter = self._build_candidate_filter()
+
+            # 步驟 3.1: 批次翻譯 Admin_1（廣域市/道）
+            logger.info("正在批次翻譯 Admin_1（廣域市/道）...")
+            unique_admin1 = df["sidonm"].unique().to_list()
+            admin1_qids = {}  # 儲存 Admin_1 的 QID 用於 P131 驗證
+
+            # 批次翻譯所有 Admin_1（主要為批次取得 QID）
+            admin1_translations = translator.batch_translate(
+                unique_admin1, show_progress=True
+            )
+
+            # 套用內建對照表覆蓋翻譯結果
+            for ko_name, result in admin1_translations.items():
+                # Reason: 使用內建對照表優先，確保使用台灣慣用簡稱
+                if ko_name in self.ADMIN1_NAME_MAP:
+                    admin1_qids[ko_name] = {
+                        "translated": self.ADMIN1_NAME_MAP[ko_name],
+                        "qid": result.get("qid"),
+                    }
+                else:
+                    admin1_qids[ko_name] = {
+                        "translated": result.get("translated", ko_name),
+                        "qid": result.get("qid"),
+                    }
+
+            # 步驟 3.2: 按 Admin_1 分組批次翻譯 Admin_2（市/區/郡）
+            logger.info("正在按 Admin_1 分組批次翻譯 Admin_2（市/區/郡）...")
+            admin2_translations = {}
+
+            # Reason: 按 Admin_1 分組翻譯，確保同名 Admin_2 使用正確的 parent QID
+            for admin1_ko_name, admin1_data in admin1_qids.items():
+                admin1_qid = admin1_data.get("qid")
+                if not admin1_qid:
+                    continue
+
+                # 取得此 Admin_1 下的所有 Admin_2
+                admin2_list = (
+                    df.filter(pl.col("sidonm") == admin1_ko_name)["sggnm"]
+                    .unique()
+                    .to_list()
+                )
+
+                logger.info(
+                    f"正在翻譯 {admin1_data['translated']} 下的 {len(admin2_list)} 個 Admin_2..."
+                )
+
+                # 為這組 Admin_2 建立統一的 parent_qids
+                parent_qids = {name: admin1_qid for name in admin2_list}
+
+                # 批次翻譯這組 Admin_2
+                group_translations = translator.batch_translate(
+                    admin2_list,
+                    parent_qids=parent_qids,
+                    show_progress=False,  # 避免進度條混亂
+                    candidate_filter=candidate_filter,  # 過濾議會機構等非行政區實體
+                )
+
+                # 合併到總翻譯結果
+                admin2_translations.update(group_translations)
+
+            logger.info(f"Admin_2 翻譯完成，共 {len(admin2_translations)} 個唯一名稱")
+
+            # 步驟 3.3: 建立對照字典並應用到 DataFrame
+            logger.info("正在應用翻譯結果...")
+
+            # 建立 Admin_1 對照字典
+            admin1_map = {
+                ko_name: data["translated"] for ko_name, data in admin1_qids.items()
+            }
+
+            # 建立 Admin_2 對照字典
+            admin2_map = {
+                ko_name: data.get("translated", ko_name)
+                for ko_name, data in admin2_translations.items()
+            }
+
+            # 應用翻譯到 DataFrame
             df = df.with_columns(
                 [
-                    chinese_df.to_series(0).alias("chinese_admin_1"),
-                    chinese_df.to_series(1).alias("chinese_admin_2"),
-                    chinese_df.to_series(2).alias("chinese_admin_3"),
+                    pl.col("sidonm")
+                    .map_elements(
+                        lambda x: admin1_map.get(x, x), return_dtype=pl.String
+                    )
+                    .alias("chinese_admin_1"),
+                    pl.col("sggnm")
+                    .map_elements(
+                        lambda x: admin2_map.get(x, x), return_dtype=pl.String
+                    )
+                    .alias("chinese_admin_2"),
+                    # Reason: Admin_3 保留韓文原文以降低 API 請求次數
+                    pl.col("admin_3").alias("chinese_admin_3"),
                 ]
             )
 
-            # 顯示 API 使用統計
-            if google_client:
-                logger.info(f"Google API 總查詢次數: {google_client.request_count}")
+            # 顯示翻譯統計
+            logger.info(f"Admin_1 翻譯數量: {len(admin1_qids)}")
+            logger.info(f"Admin_2 翻譯數量: {len(admin2_translations)}")
+            logger.info("Admin_3 保留韓文原文（未翻譯）")
 
             # 重組為標準格式
             df = df.select(
