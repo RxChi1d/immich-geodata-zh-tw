@@ -57,15 +57,12 @@ class GeoDataHandler(ABC):
         self,
         shapefile_path: str,
         output_csv: str,
-        *,
-        google_api_key: str | None = None,
     ) -> None:
         """從 Shapefile 提取資料並儲存為標準化 CSV。
 
         Args:
             shapefile_path: Shapefile 檔案路徑。
             output_csv: 輸出 CSV 檔案路徑。
-            google_api_key: Google Geocoding API 金鑰。若處理器不使用，可直接忽略。
         """
         pass
 
