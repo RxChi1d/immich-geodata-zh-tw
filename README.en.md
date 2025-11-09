@@ -77,13 +77,28 @@ The project applies region-specific language handling to reflect the expectation
 
 The geographic data used in this project mainly comes from the following sources:
 
-1.  **GeoNames** ([geonames.org](https://www.geonames.org/)): As the global geographic location database foundation.
-2.  **National Land Surveying and Mapping Center (NLSC)** of Taiwan:
-    - Source: [NLSC Open Data Platform](https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx)
-    - Dataset: Village Boundaries (TWD97 Latitude/Longitude), Version 1140620
-    - Purpose: As the primary data source for Taiwan region village boundaries and administrative district names, ensuring data accuracy and authority.
-3.  **LocationIQ**: Used for processing reverse geocoding requests for non-Taiwan regions, calibrating administrative division levels.
-4.  **Ministry of Economic Affairs International Trade Administration & Ministry of Foreign Affairs of Taiwan**: As reference sources for Chinese translations of some countries/regions.
+1.  **GeoNames** ([geonames.org](https://www.geonames.org/))
+    - **License**: Creative Commons Attribution 4.0 International (CC-BY 4.0)
+    - **Purpose**: As the global geographic location database foundation
+2.  **OpenStreetMap** (via LocationIQ)
+    - **License**: Open Database License (ODbL) 1.0
+    - **Purpose**: Via LocationIQ API for reverse geocoding requests for non-Taiwan, non-Japan regions
+    - **Attribution**: Data © OpenStreetMap contributors, ODbL 1.0
+3.  **National Land Surveying and Mapping Center (NLSC)** of Taiwan
+    - **Source**: [NLSC Open Data Platform](https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx)
+    - **Dataset**: Village Boundaries (TWD97 Latitude/Longitude), Version 1140620
+    - **License**: Government Open Data License, Version 1.0
+    - **Purpose**: As the primary data source for Taiwan region village boundaries and administrative district names, ensuring data accuracy and authority
+4.  **国土数値情報ダウンロードサイト** (Japan)
+    - **Source**: [国土数値情報ダウンロードサービス](https://nlftp.mlit.go.jp/ksj/)
+    - **Dataset**: Administrative Area Data (World Geodetic System)
+    - **License**: Japanese Government Open Data
+    - **Purpose**: As the primary data source for Japan administrative boundaries and names
+5.  **Other References**
+    - **Ministry of Economic Affairs International Trade Administration & Ministry of Foreign Affairs of Taiwan**: As reference sources for Chinese translations of some countries/regions
+
+> [!NOTE]
+> For complete data source attributions and licensing information, please refer to [NOTICE.md](NOTICE.md).
 
 > [!NOTE]
 > Since Immich's reverse geocoding functionality is based on its loaded database (this project mainly relies on GeoNames and NLSC data) and uses nearest distance principle to match place names, some results may not be completely precise or may differ from expectations.  
