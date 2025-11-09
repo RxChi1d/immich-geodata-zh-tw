@@ -136,7 +136,7 @@ def cmd_locationiq(args):
     qps = (
         args.locationiq_qps
         if args.locationiq_qps is not None
-        else int(os.environ.get("LOCATIONIQ_QPS", "1"))
+        else int(os.environ.get("LOCATIONIQ_QPS", "2"))
     )
 
     # 設定 LocationIQ 配置
@@ -231,7 +231,7 @@ def cmd_release(args):
         qps = (
             args.locationiq_qps
             if args.locationiq_qps is not None
-            else int(os.environ.get("LOCATIONIQ_QPS", "1"))
+            else int(os.environ.get("LOCATIONIQ_QPS", "2"))
         )
         generate_geodata_locationiq.set_locationiq_config(api_key, qps)
 
@@ -363,7 +363,7 @@ def main():
         "--locationiq-api-key", type=str, help="LocationIQ API Key"
     )
     parser_locationiq.add_argument(
-        "--locationiq-qps", type=int, default=1, help="LocationIQ 每秒查詢次數限制"
+        "--locationiq-qps", type=int, default=2, help="LocationIQ 每秒查詢次數限制"
     )
     parser_locationiq.set_defaults(func=cmd_locationiq)
 
@@ -415,7 +415,7 @@ def main():
         "--locationiq-api-key", type=str, help="LocationIQ API Key"
     )
     parser_release.add_argument(
-        "--locationiq-qps", type=int, default=1, help="LocationIQ 每秒查詢次數限制"
+        "--locationiq-qps", type=int, default=2, help="LocationIQ 每秒查詢次數限制"
     )
     parser_release.add_argument(
         "--pass-cleanup", action="store_true", help="跳過 cleanup 步驟"
