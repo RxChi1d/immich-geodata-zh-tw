@@ -35,6 +35,7 @@
 ### Changed
 - **南韓翻譯策略**：整合廣域市/道繁中對照表，使用 Wikidata 翻譯 Admin 2/3 層級，產出符合臺灣用語的行政區名稱
 - **資料來源授權聲明**：新增 NOTICE.md 完整聲明第三方資料授權,符合 GeoNames (CC-BY 4.0) 與 OpenStreetMap (ODbL 1.0) 等授權要求
+- **LocationIQ QPS 預設值**：從 1 調整為 2，提升資料處理效率
 
 ---
 

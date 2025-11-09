@@ -25,7 +25,7 @@ s.mount("https://", HTTPAdapter(max_retries=retries))
 
 # 預設值（若沒有設定，可能會在使用時出現錯誤）
 LOCATIONIQ_API_KEY = None
-LOCATIONIQ_QPS = 1
+LOCATIONIQ_QPS = 2  # LocationIQ 免費方案：5,000 次/天，2 次/秒
 
 
 def set_locationiq_config(api_key, qps):
@@ -281,7 +281,7 @@ def test():
         "--locationiq-api-key", type=str, required=True, help="LocationIQ API Key"
     )
     parser.add_argument(
-        "--locationiq-qps", type=int, default=1, help="LocationIQ 每秒查詢次數限制"
+        "--locationiq-qps", type=int, default=2, help="LocationIQ 每秒查詢次數限制"
     )
 
     parser.add_argument("--overwrite", action="store_true")
