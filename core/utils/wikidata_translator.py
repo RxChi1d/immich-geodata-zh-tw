@@ -28,6 +28,7 @@
 """
 
 import json
+import random
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -119,20 +120,21 @@ class WikidataTranslator:
         """建立空白快取結構。
 
         Returns:
-            新版快取結構（v1.0）
+            新版快取結構（v1.1）
         """
         return {
             "metadata": {
                 "source_lang": self.source_lang,
                 "target_lang": self.target_lang,
                 "created_at": datetime.now().isoformat(),
-                "version": "1.0",
+                "version": "1.1",
             },
             "translations": {},
             "cache": {
                 "search": {},
                 "labels": {},
                 "p131": {},
+                "instance_of": {},
             },
         }
 
@@ -219,15 +221,20 @@ class WikidataTranslator:
         return new_cache
 
     def _save_cache(self) -> None:
-        """儲存快取檔案。"""
+        """儲存快取檔案（使用原子寫入）。"""
         if not self.cache_path:
             return
 
         try:
             self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-            self.cache_path.write_text(
+
+            # Reason: 使用原子寫入（tmp + rename）防止寫入過程中斷導致快取損毀
+            tmp_path = self.cache_path.with_suffix(self.cache_path.suffix + ".tmp")
+            tmp_path.write_text(
                 json.dumps(self.cache, ensure_ascii=False, indent=2), encoding="utf-8"
             )
+            tmp_path.replace(self.cache_path)
+
         except Exception as e:
             logger.warning(f"快取儲存失敗: {e}")
 
@@ -269,9 +276,12 @@ class WikidataTranslator:
 
             except requests.RequestException as e:
                 last_err = e
-                wait_time = 2 * (attempt + 1)
+                base_wait_time = 2 * (attempt + 1)
+                # Reason: 加入 ±20% 抖動避免多個請求同時重試（羊群效應）
+                jitter = random.uniform(-0.2, 0.2)
+                wait_time = base_wait_time * (1 + jitter)
                 logger.warning(
-                    f"請求失敗（第 {attempt + 1} 次），等待 {wait_time} 秒後重試..."
+                    f"請求失敗（第 {attempt + 1} 次），等待 {wait_time:.2f} 秒後重試..."
                 )
                 time.sleep(wait_time)
 
@@ -528,7 +538,92 @@ class WikidataTranslator:
             if qid in self.cache["cache"]["labels"]
         }
 
-    def _select_best_label(self, labels: dict, name: str) -> tuple[str, str]:
+    def _batch_get_instance_of(
+        self, qids: list[str], batch_size: int = 50
+    ) -> dict[str, list[str]]:
+        """批次取得多個 QID 的 P31（instance of）屬性。
+
+        Args:
+            qids: QID 列表
+            batch_size: 每批查詢數量（Wikidata API 限制最多 50）
+
+        Returns:
+            {qid: [P31_qid1, P31_qid2, ...]} 對照表
+        """
+        # 步驟 1: 去重
+        unique_qids = list(set(qids))
+
+        # 步驟 2: 檢查快取，過濾未快取的 QID
+        uncached_qids = [
+            qid
+            for qid in unique_qids
+            if qid not in self.cache.get("cache", {}).get("instance_of", {})
+        ]
+
+        # 步驟 3: 分批查詢（每批最多 50 個）
+        if uncached_qids:
+            logger.info(
+                f"需要批次查詢 {len(uncached_qids)} 個 QID 的 P31 屬性"
+                f"（分 {(len(uncached_qids) + batch_size - 1) // batch_size} 批）"
+            )
+
+            for i in range(0, len(uncached_qids), batch_size):
+                batch = uncached_qids[i : i + batch_size]
+                ids_str = "|".join(batch)
+
+                try:
+                    # 批次 API 請求
+                    js = self._wd_api(
+                        {
+                            "action": "wbgetentities",
+                            "ids": ids_str,
+                            "props": "claims",
+                            "languages": "en",  # P31 不需要多語言
+                        }
+                    )
+
+                    # 解析結果並快取
+                    for qid, entity in js.get("entities", {}).items():
+                        claims = entity.get("claims", {})
+                        p31_claims = claims.get("P31", [])
+
+                        # 提取 P31 的 QID 列表
+                        instance_of_qids = []
+                        for claim in p31_claims:
+                            try:
+                                mainsnak = claim.get("mainsnak", {})
+                                if mainsnak.get("snaktype") == "value":
+                                    datavalue = mainsnak.get("datavalue", {})
+                                    if datavalue.get("type") == "wikibase-entityid":
+                                        p31_qid = datavalue["value"]["id"]
+                                        instance_of_qids.append(p31_qid)
+                            except (KeyError, TypeError):
+                                continue
+
+                        # 快取 P31 資訊
+                        self.cache.setdefault("cache", {}).setdefault(
+                            "instance_of", {}
+                        )[qid] = instance_of_qids
+
+                    logger.debug(
+                        f"批次 {i // batch_size + 1}: 成功查詢 {len(batch)} 個 QID 的 P31"
+                    )
+
+                except Exception as e:
+                    logger.warning(
+                        f"批次取得 P31 失敗（批次 {i // batch_size + 1}）: {e}"
+                    )
+                    # Reason: 批次查詢失敗時繼續處理下一批，避免全部失敗
+                    continue
+
+        # 步驟 4: 回傳所有 QID 的 P31（含快取）
+        return {
+            qid: self.cache["cache"]["instance_of"][qid]
+            for qid in unique_qids
+            if qid in self.cache["cache"]["instance_of"]
+        }
+
+    def _select_best_label(self, labels: dict, name: str) -> tuple[str, str, str]:
         """從多語言標籤中選擇最佳翻譯。
 
         Args:
@@ -536,11 +631,11 @@ class WikidataTranslator:
             name: 原始名稱（作為最終備案）
 
         Returns:
-            (翻譯結果, 來源標記)
+            (翻譯結果, 來源標記, 使用的語言)
         """
         # 1. 優先使用目標語言
         if self.target_lang in labels:
-            return labels[self.target_lang], "wikidata"
+            return labels[self.target_lang], "wikidata", self.target_lang
 
         # 2. 使用回退語言
         for lang in self.fallback_langs:
@@ -549,22 +644,22 @@ class WikidataTranslator:
                 if lang == "zh" and self.use_opencc:
                     try:
                         traditional = self.opencc.convert(labels[lang])
-                        return traditional, "opencc"
+                        return traditional, "opencc", "zh→zh-tw"
                     except Exception as e:
                         logger.warning(f"OpenCC 轉換失敗: {e}")
-                        return labels[lang], "wikidata-zh"
-                return labels[lang], f"wikidata-{lang}"
+                        return labels[lang], "wikidata-zh", "zh"
+                return labels[lang], f"wikidata-{lang}", lang
 
         # 3. 使用中文維基百科標題（並轉換成繁體）
         if "zhwiki" in labels:
             try:
                 converted = self._zhwiki_convert_title(labels["zhwiki"])
-                return converted, "zhwiki-convert"
+                return converted, "zhwiki-convert", "zhwiki"
             except Exception:
-                return labels["zhwiki"], "zhwiki"
+                return labels["zhwiki"], "zhwiki", "zhwiki"
 
         # 4. 最終備案：使用原始名稱
-        return name, "original"
+        return name, "original", "original"
 
     def translate(
         self,
@@ -583,7 +678,9 @@ class WikidataTranslator:
             {
                 'translated': '翻譯結果',
                 'qid': 'Q12345' or None,
-                'source': 'wikidata' | 'opencc' | 'zhwiki-convert' | 'original'
+                'source': 'wikidata' | 'opencc' | 'zhwiki-convert' | 'original',
+                'used_lang': '實際使用的語言代碼',
+                'parent_verified': 是否通過 P131 驗證
             }
         """
         # Reason: 統一使用 batch_translate 實作，避免重複邏輯
@@ -593,7 +690,14 @@ class WikidataTranslator:
             [name], parent_qids=parent_qids, show_progress=False
         )
         return results.get(
-            name, {"translated": name, "qid": None, "source": "original"}
+            name,
+            {
+                "translated": name,
+                "qid": None,
+                "source": "original",
+                "used_lang": "original",
+                "parent_verified": False,
+            },
         )
 
     def batch_translate(
@@ -616,11 +720,11 @@ class WikidataTranslator:
             parent_qids: {地名: 父級QID} 對照表（用於 P131 驗證）
             show_progress: 是否顯示進度條
             candidate_filter: 候選過濾器函式，接收 (name, metadata) 並回傳 bool。
-                metadata 包含 {"qid": str, "labels": dict}。
+                metadata 包含 {"qid": str, "labels": dict, "instance_of": list[str]}。
                 回傳 True 保留候選，False 排除候選。
 
         Returns:
-            {地名: {translated, qid, source}}
+            {地名: {translated, qid, source, used_lang, parent_verified}}
         """
         parent_qids = parent_qids or {}
 
@@ -640,6 +744,8 @@ class WikidataTranslator:
                             "translated": cached.get("translated", name),
                             "qid": cached.get("qid"),
                             "source": cached.get("source", "cache"),
+                            "used_lang": cached.get("used_lang", "unknown"),
+                            "parent_verified": cached.get("parent_verified", False),
                         },
                     }
                     continue
@@ -654,7 +760,7 @@ class WikidataTranslator:
             filtered_count = 0
             total_candidates = 0
 
-            # 收集需要取得標籤的 QID（用於過濾）
+            # 收集需要取得標籤和 P31 的 QID（用於過濾）
             qids_for_filtering: list[str] = []
             for name, data in search_results.items():
                 if not data.get("cached"):
@@ -662,10 +768,12 @@ class WikidataTranslator:
                     if isinstance(qids_list, list):
                         qids_for_filtering.extend(qids_list)
 
-            # 批次取得標籤用於過濾
+            # 批次取得標籤和 P31 用於過濾
             filter_labels: dict[str, dict] = {}
+            filter_instance_of: dict[str, list[str]] = {}
             if qids_for_filtering:
                 filter_labels = self._batch_get_labels(qids_for_filtering)
+                filter_instance_of = self._batch_get_instance_of(qids_for_filtering)
 
             # 應用過濾器到每個名稱的候選列表
             for name, data in search_results.items():
@@ -683,7 +791,12 @@ class WikidataTranslator:
                 filtered_qids = []
                 for qid in qids_list:
                     labels = filter_labels.get(qid, {})
-                    metadata = {"qid": qid, "labels": labels}
+                    instance_of = filter_instance_of.get(qid, [])
+                    metadata = {
+                        "qid": qid,
+                        "labels": labels,
+                        "instance_of": instance_of,
+                    }
                     if candidate_filter(name, metadata):
                         filtered_qids.append(qid)
                     else:
@@ -731,7 +844,13 @@ class WikidataTranslator:
             qids_data = data.get("qids", [])
             qids: list[str] = qids_data if isinstance(qids_data, list) else []
             if not qids:
-                result = {"translated": name, "qid": None, "source": "original"}
+                result = {
+                    "translated": name,
+                    "qid": None,
+                    "source": "original",
+                    "used_lang": "original",
+                    "parent_verified": False,
+                }
                 results[name] = result
                 self.cache.setdefault("translations", {})[name] = {
                     **result,
@@ -742,11 +861,13 @@ class WikidataTranslator:
             # 選擇最佳 QID（P131 驗證）
             selected_qid = None
             parent_qid = parent_qids.get(name)
+            parent_verified = False
 
             if parent_qid:
                 for qid in qids:
                     if self._verify_p131(qid, parent_qid):
                         selected_qid = qid
+                        parent_verified = True
                         break
 
             if not selected_qid:
@@ -754,9 +875,15 @@ class WikidataTranslator:
 
             # 使用批次查詢的標籤選擇最佳翻譯
             labels = all_labels.get(selected_qid, {})
-            translated, source = self._select_best_label(labels, name)
+            translated, source, used_lang = self._select_best_label(labels, name)
 
-            result = {"translated": translated, "qid": selected_qid, "source": source}
+            result = {
+                "translated": translated,
+                "qid": selected_qid,
+                "source": source,
+                "used_lang": used_lang,
+                "parent_verified": parent_verified,
+            }
             results[name] = result
 
             # 快取結果
