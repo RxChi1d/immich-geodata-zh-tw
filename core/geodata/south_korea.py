@@ -14,7 +14,7 @@ from core.utils.wikidata_translator import WikidataTranslator
 from core.geodata.base import GeoDataHandler, register_handler
 
 
-# @register_handler("KR")
+@register_handler("KR")
 class SouthKoreaGeoDataHandler(GeoDataHandler):
     """南韓地理資料處理器。
 
