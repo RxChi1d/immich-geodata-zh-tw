@@ -8,7 +8,7 @@ from requests.adapters import HTTPAdapter, Retry
 import polars as pl
 from tqdm import tqdm
 
-from core.utils import logger, ensure_folder_exists
+from core.utils import logger, ensure_folder_exists, fill_admin_columns
 from core.schemas import CITIES_SCHEMA, GEODATA_SCHEMA
 from core.geodata import get_handler
 
@@ -97,7 +97,9 @@ def save_to_csv(data: pl.DataFrame, output_file: str):
         return  # 避免寫入空檔案
 
     if os.path.exists(output_file):
-        existing_data = pl.read_csv(output_file, schema=GEODATA_SCHEMA)
+        existing_data = fill_admin_columns(
+            pl.read_csv(output_file, schema=GEODATA_SCHEMA)
+        )
         data = existing_data.vstack(data)
 
     # 一次性寫入（覆蓋舊檔案）
@@ -121,15 +123,17 @@ def reverse_query(coordinate):
     if response:
         address = response["address"]
 
+        admin_2_value = address.get("city") or address.get("county")
+
         return pl.DataFrame(
             {
                 "latitude": [coordinate["lat"]],
                 "longitude": [coordinate["lon"]],
                 "country": [address["country"]],
-                "admin_1": [address.get("state", "")],
-                "admin_2": [address.get("city", address.get("county", ""))],
-                "admin_3": [address.get("suburb", "")],
-                "admin_4": [address.get("neighbourhood", "")],
+                "admin_1": [address.get("state")],
+                "admin_2": [admin_2_value],
+                "admin_3": [address.get("suburb")],
+                "admin_4": [address.get("neighbourhood")],
             },
             schema=GEODATA_SCHEMA,
             strict=False,
@@ -159,9 +163,11 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
 
     # 嘗試讀取已存在的 meta_data (恢復進度)
     existing_data = (
-        pl.read_csv(
-            output_file,
-            schema=GEODATA_SCHEMA,
+        fill_admin_columns(
+            pl.read_csv(
+                output_file,
+                schema=GEODATA_SCHEMA,
+            )
         )
         if os.path.exists(output_file)
         else pl.DataFrame(schema=GEODATA_SCHEMA)
@@ -239,7 +245,7 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
                         ).alias("admin_1"),
                         pl.col("admin_3").alias("admin_2"),
                         pl.col("admin_4").alias("admin_3"),
-                        pl.lit(None).alias("admin_4"),
+                        pl.lit(None, dtype=pl.String).alias("admin_4"),
                     )
 
                 # 省轄縣

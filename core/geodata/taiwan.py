@@ -90,7 +90,7 @@ class TaiwanGeoDataHandler(GeoDataHandler):
                     pl.col("COUNTYNAME").alias("admin_1"),  # 縣市
                     pl.col("TOWNNAME").alias("admin_2"),  # 鄉鎮市區
                     pl.col("VILLNAME").alias("admin_3"),  # 村里
-                    pl.lit("").alias("admin_4"),  # 鄰 - 設為空字串
+                    pl.lit(None, dtype=pl.String).alias("admin_4"),  # 鄰
                 ]
             )
 
