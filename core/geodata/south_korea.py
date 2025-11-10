@@ -1,5 +1,7 @@
 """南韓地理資料處理器。"""
 
+import re
+
 import polars as pl
 import geopandas as gpd
 import pyproj
@@ -23,6 +25,8 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
     COUNTRY_NAME = "南韓"
     COUNTRY_CODE = "KR"
     TIMEZONE = "Asia/Seoul"
+
+    CITY_DISTRICT_PATTERN = re.compile(r"^(?P<city>.+?시)(?P<district>.+?(?:구|군))$")
 
     # 廣域市/道名稱對照表（韓文 → 台灣常用繁體中文名稱）
     # Reason: 使用台灣地圖常見的簡潔名稱，而非 Google Maps 的正式官方名稱
@@ -214,6 +218,80 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
 
         return df
 
+    def _split_city_district_name(self, name: str) -> tuple[str, str]:
+        """拆分韓文的「市＋區/郡」合併名稱。
+
+        Args:
+            name: sggnm 欄位中的韓文名稱
+
+        Returns:
+            以 (city, district) 形式回傳，若無法拆分則 district 為空字串
+        """
+
+        if not name or "시" not in name:
+            return name, ""
+
+        match = self.CITY_DISTRICT_PATTERN.match(name)
+        if not match:
+            return name, ""
+
+        city = match.group("city")
+        district = match.group("district")
+        if not district.endswith(("구", "군")):
+            return name, ""
+
+        return city, district
+
+    def _normalize_city_district_hierarchy(self, df: pl.DataFrame) -> pl.DataFrame:
+        """將市＋區合併名稱拆分並調整 admin 層級。"""
+
+        if "sggnm" not in df.columns:
+            return df
+
+        if "admin_4" not in df.columns:
+            df = df.with_columns(pl.lit("").alias("admin_4"))
+
+        df = df.with_columns(
+            [
+                pl.col("sggnm")
+                .map_elements(
+                    lambda name: self._split_city_district_name(name)[0],
+                    return_dtype=pl.String,
+                )
+                .alias("_city_part"),
+                pl.col("sggnm")
+                .map_elements(
+                    lambda name: self._split_city_district_name(name)[1],
+                    return_dtype=pl.String,
+                )
+                .alias("_district_part"),
+            ]
+        )
+
+        split_mask = pl.col("_district_part") != ""
+        split_count = df.filter(split_mask).height
+        if split_count > 0:
+            logger.info(f"偵測到 {split_count} 筆市＋區合併名稱，正在拆分階層...")
+
+        df = df.with_columns(
+            [
+                pl.when(split_mask)
+                .then(pl.col("_city_part"))
+                .otherwise(pl.col("sggnm"))
+                .alias("sggnm"),
+                pl.when(split_mask)
+                .then(pl.col("_district_part"))
+                .otherwise(pl.col("admin_3"))
+                .alias("admin_3"),
+                pl.when(split_mask)
+                .then(pl.col("admin_3"))
+                .otherwise(pl.col("admin_4"))
+                .alias("admin_4"),
+            ]
+        )
+
+        return df.drop(["_city_part", "_district_part"])
+
     @staticmethod
     def _build_candidate_filter() -> Callable[[str, dict], bool]:
         """建立候選過濾器，排除議會機構等非行政區實體。
@@ -222,7 +300,8 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
             過濾器函式，接收 (name, metadata) 並回傳 bool
         """
         # 需要排除的關鍵字（多語言）
-        # Reason: 防止將議會機構、政府機關誤判為行政區
+        # Reason: 防止將議會機構、政府機關誤判為行政區；僅保留完整詞彙，
+        #         避免像「청」這類單字誤傷合法地名（例：清道郡）
         EXCLUDED_KEYWORDS = [
             "의회",  # 韓文：議會
             "議會",  # 中文：議會
@@ -230,10 +309,12 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
             "assembly",  # 英文：議會
             "委員會",  # 中文：委員會
             "legislature",  # 英文：立法機構
-            "청",  # 韓文：廳
             "廳",  # 中文：廳
             "government",  # 英文：政府
             "교육청",  # 韓文：教育廳
+            "도청",  # 韓文：道廳
+            "군청",  # 韓文：郡廳
+            "구청",  # 韓文：區公所
             "시청",  # 韓文：市廳
         ]
 
@@ -361,6 +442,9 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
 
             # === 步驟 2.5: 正規化特殊行政區結構（世宗特別自治市）===
             df = self._normalize_special_admin_structures(df)
+
+            # === 步驟 2.6: 拆分市＋區組合名稱並調整層級 ===
+            df = self._normalize_city_district_hierarchy(df)
 
             # === 步驟 3: 使用 Wikidata 翻譯為繁體中文 ===
             logger.info("正在初始化 Wikidata 翻譯工具...")
@@ -512,7 +596,7 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
                     pl.col("chinese_admin_1").alias("admin_1"),  # 繁體中文廣域市/道
                     pl.col("chinese_admin_2").alias("admin_2"),  # 繁體中文市/區/郡
                     pl.col("chinese_admin_3").alias("admin_3"),  # 繁體中文洞/邑/面
-                    pl.lit("").alias("admin_4"),  # 空字串（保留欄位）
+                    pl.col("admin_4"),
                     pl.lit("南韓").alias("country"),  # 國家名稱
                 ]
             )
