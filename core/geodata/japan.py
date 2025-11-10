@@ -172,8 +172,8 @@ class JapanGeoDataHandler(GeoDataHandler):
             # === 步驟 2: 選擇並標準化欄位 ===
             df = df.select(
                 [
-                    pl.col("longitude"),
                     pl.col("latitude"),
+                    pl.col("longitude"),
                     pl.col("N03_001"),  # 都道府縣
                     pl.col("N03_003"),  # 郡名 or 政令市名（舊版資料格式）
                     pl.col("N03_004"),  # 市區町村名
@@ -341,8 +341,9 @@ class JapanGeoDataHandler(GeoDataHandler):
             # 選擇最終欄位並轉換為 CITIES_SCHEMA 格式
             df = df.select(
                 [
-                    pl.col("longitude"),
                     pl.col("latitude"),
+                    pl.col("longitude"),
+                    pl.lit("日本").alias("country"),  # 國家名稱
                     pl.col("N03_001").alias("admin_1"),  # 都道府縣
                     pl.col("admin_2"),  # 市區町村（已按 R1-R5 規則生成）
                     # admin_3：僅政令市在 SEIREI_SHI_CITY_NAME_ONLY=True 時填入區名
@@ -353,7 +354,6 @@ class JapanGeoDataHandler(GeoDataHandler):
                     .otherwise(pl.lit(""))
                     .alias("admin_3"),
                     pl.lit("").alias("admin_4"),  # 空字串（保留欄位）
-                    pl.lit("日本").alias("country"),  # 國家名稱
                 ]
             )
 

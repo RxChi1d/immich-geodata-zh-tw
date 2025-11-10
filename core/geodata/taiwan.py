@@ -84,13 +84,13 @@ class TaiwanGeoDataHandler(GeoDataHandler):
             # 選擇需要的欄位並重新命名
             df = df.select(
                 [
-                    pl.col("longitude"),
                     pl.col("latitude"),
+                    pl.col("longitude"),
+                    pl.lit("臺灣").alias("country"),  # 國家
                     pl.col("COUNTYNAME").alias("admin_1"),  # 縣市
                     pl.col("TOWNNAME").alias("admin_2"),  # 鄉鎮市區
                     pl.col("VILLNAME").alias("admin_3"),  # 村里
                     pl.lit("").alias("admin_4"),  # 鄰 - 設為空字串
-                    pl.lit("臺灣").alias("country"),  # 國家
                 ]
             )
 
