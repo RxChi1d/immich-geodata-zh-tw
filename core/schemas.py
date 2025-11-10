@@ -17,8 +17,8 @@ ADMIN1_SCHEMA = pl.Schema(
 
 GEODATA_SCHEMA = pl.Schema(
     {
-        "longitude": pl.String,
         "latitude": pl.String,
+        "longitude": pl.String,
         "country": pl.String,
         "admin_1": pl.String,
         "admin_2": pl.String,

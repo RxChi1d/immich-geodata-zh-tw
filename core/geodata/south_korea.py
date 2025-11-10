@@ -14,7 +14,7 @@ from core.utils.wikidata_translator import WikidataTranslator
 from core.geodata.base import GeoDataHandler, register_handler
 
 
-@register_handler("KR")
+# @register_handler("KR")
 class SouthKoreaGeoDataHandler(GeoDataHandler):
     """南韓地理資料處理器。
 
@@ -405,8 +405,8 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
             # 先建立所需的基本欄位
             df = df.select(
                 [
-                    pl.col("longitude"),
                     pl.col("latitude"),
+                    pl.col("longitude"),
                     pl.col("sidonm"),
                     pl.col("sggnm"),
                     pl.col("adm_nm"),
@@ -591,13 +591,13 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
             # 重組為標準格式
             df = df.select(
                 [
-                    pl.col("longitude"),
                     pl.col("latitude"),
+                    pl.col("longitude"),
+                    pl.lit("南韓").alias("country"),  # 國家名稱
                     pl.col("chinese_admin_1").alias("admin_1"),  # 繁體中文廣域市/道
                     pl.col("chinese_admin_2").alias("admin_2"),  # 繁體中文市/區/郡
                     pl.col("chinese_admin_3").alias("admin_3"),  # 繁體中文洞/邑/面
                     pl.col("admin_4"),
-                    pl.lit("南韓").alias("country"),  # 國家名稱
                 ]
             )
 

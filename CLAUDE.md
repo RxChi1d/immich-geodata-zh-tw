@@ -148,7 +148,7 @@ core/geodata/
   - 讀取 Shapefile（使用 geopandas）
   - 計算多邊形中心點（使用適當的投影）
   - 轉換為 WGS84 座標
-  - 輸出標準化欄位：longitude, latitude, admin_1-4, country
+  - 輸出標準化欄位：latitude, longitude, country, admin_1-4
 
 #### 2. Transform（轉換）
 - `convert_to_cities_schema(csv_path)`: 將標準 CSV 轉成 CITIES_SCHEMA，負責生成 geoname_id、對應行政區與補齊時區、國家代碼。
