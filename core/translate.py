@@ -7,7 +7,7 @@ import opencc
 import polars as pl
 
 from core.schemas import ADMIN1_SCHEMA, GEODATA_SCHEMA, CITIES_SCHEMA
-from core.utils import ensure_folder_exists, logger, load_alternate_names
+from core.utils import ensure_folder_exists, logger, load_alternate_names, fill_admin_columns
 
 # 初始化簡繁轉換器
 converter_t2s = opencc.OpenCC("t2s")
@@ -107,19 +107,12 @@ def load_metadata_list(metadata_folder):
 
     for file_path in glob(f"{metadata_folder}/*.csv"):
         key = os.path.splitext(os.path.basename(file_path))[0]
-        df = pl.read_csv(
-            file_path,
-            schema=GEODATA_SCHEMA,
-        ).with_columns(
-            [
-                pl.col("admin_1").fill_null(""),
-                pl.col("admin_2").fill_null(""),
-                pl.col("admin_3").fill_null(""),
-                pl.col("admin_4").fill_null(""),
-            ]
+        metadata_dict[key] = fill_admin_columns(
+            pl.read_csv(
+                file_path,
+                schema=GEODATA_SCHEMA,
+            )
         )
-
-        metadata_dict[key] = df
 
     return metadata_dict
 

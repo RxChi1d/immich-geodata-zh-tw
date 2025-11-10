@@ -37,6 +37,7 @@
 - **資料來源授權聲明**：新增 NOTICE.md 完整聲明第三方資料授權,符合 GeoNames (CC-BY 4.0) 與 OpenStreetMap (ODbL 1.0) 等授權要求
 - **LocationIQ QPS 預設值**：從 1 調整為 2，提升資料處理效率
 - **GeoData 欄位順序**：統一 GEODATA_SCHEMA、各國 Handler 與 LocationIQ 流程，並將欄位實際順序調整為 `latitude, longitude, country, admin_1, admin_2, admin_3, admin_4`，同時更新 meta_data CSV 與文件，確保所有 ETL 階段與翻譯腳本依此排列讀寫。
+- **Admin 欄位缺值處理**：meta_data CSV 在產生時保留 Null，不再強制輸出空白字串，並於讀取階段透過共用的 `fill_admin_columns()` 將 `admin_1-4` 的缺值統一補為空字串，避免 Polars 將空欄解析成 `None` 造成翻譯流程異常。
 
 ---
 

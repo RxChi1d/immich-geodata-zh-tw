@@ -351,9 +351,9 @@ class JapanGeoDataHandler(GeoDataHandler):
                         pl.col("is_seirei_shi") & pl.lit(self.SEIREI_SHI_CITY_NAME_ONLY)
                     )
                     .then(pl.col("clean_n03_005"))
-                    .otherwise(pl.lit(""))
+                    .otherwise(pl.lit(None, dtype=pl.String))
                     .alias("admin_3"),
-                    pl.lit("").alias("admin_4"),  # 空字串（保留欄位）
+                    pl.lit(None, dtype=pl.String).alias("admin_4"),  # 空欄保留
                 ]
             )
 

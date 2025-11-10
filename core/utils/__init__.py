@@ -15,6 +15,7 @@ from .logging import logger
 from .filesystem import rebuild_folder, ensure_folder_exists
 from .alternate_names import create_alternate_map, load_alternate_names
 from .geoname_ids import calculate_global_max_geoname_id
+from .dataframe import fill_admin_columns
 
 __all__ = [
     # Logger
@@ -27,4 +28,6 @@ __all__ = [
     "load_alternate_names",
     # GeoName ID 工具
     "calculate_global_max_geoname_id",
+    # DataFrame 工具
+    "fill_admin_columns",
 ]

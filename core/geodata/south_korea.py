@@ -206,7 +206,7 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
                     .alias("sggnm"),
                     # 將原 admin_3 清空（世宗沒有更下層級）
                     pl.when(sejong_mask)
-                    .then(pl.lit(""))
+                    .then(pl.lit(None, dtype=pl.String))
                     .otherwise(pl.col("admin_3"))
                     .alias("admin_3"),
                 ]
@@ -249,7 +249,7 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
             return df
 
         if "admin_4" not in df.columns:
-            df = df.with_columns(pl.lit("").alias("admin_4"))
+            df = df.with_columns(pl.lit(None, dtype=pl.String).alias("admin_4"))
 
         df = df.with_columns(
             [
