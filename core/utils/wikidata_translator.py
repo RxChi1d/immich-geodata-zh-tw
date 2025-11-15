@@ -39,7 +39,8 @@ from types import MappingProxyType
 from typing import Any, Mapping
 
 import requests
-from loguru import logger
+
+from core.utils import logger
 
 
 class AdminLevel(str, Enum):

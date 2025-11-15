@@ -208,6 +208,8 @@ uv run pytest              # 4. 執行單元測試
 
 ## 開發注意事項
 
+- **Logger 使用**：任何檔案/代碼若有使用 logger 紀錄 log（新檔或修改既有程式碼）之需求，務必匯入 `from core.utils import logger` 使用專案統一設定，不可直接 `from loguru import logger`。
+
 ### 模組化設計原則
 - **單一檔案不得超過 500 行程式碼**
 - **每個模組都有清楚的職責分工**
