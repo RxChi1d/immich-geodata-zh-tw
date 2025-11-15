@@ -39,6 +39,7 @@ from types import MappingProxyType
 from typing import Any, Mapping
 
 import requests
+from tqdm import tqdm
 
 from core.utils import logger
 
@@ -173,7 +174,9 @@ class TranslationDataset(Sequence[TranslationItem]):
             target_lang=self.target_lang,
         )
 
-    def as_sorted(self, sorter: Callable[[TranslationItem], Any] | None = None) -> list[TranslationItem]:
+    def as_sorted(
+        self, sorter: Callable[[TranslationItem], Any] | None = None
+    ) -> list[TranslationItem]:
         """依指定排序鍵輸出項目。"""
 
         if sorter is None:
@@ -258,9 +261,7 @@ class TranslationDatasetBuilder:
             parent_name = _normalize_text(row.get(parent_field))
             name = _normalize_text(row.get(name_field))
             if not parent_name or not name:
-                raise ValueError(
-                    f"第 {idx} 列缺少 {parent_field} 或 {name_field}"
-                )
+                raise ValueError(f"第 {idx} 列缺少 {parent_field} 或 {name_field}")
 
             metadata = self._collect_metadata(row, metadata_fields, idx)
             item = TranslationItem.from_values(
@@ -402,19 +403,47 @@ class BatchTranslationRunner:
             f"{dataset.level.value.upper()} 批次翻譯開始，筆數: {dataset.total}，batch_size={batch_size}"
         )
 
-        progress_logger = (
-            ProgressLogger(f"{dataset.level.value.upper()} 翻譯")
-            if show_progress
-            else None
+        progress_bar = None
+        progress_logger = None
+
+        def _noop_callback(processed: int, total: int) -> None:  # pragma: no cover
+            del processed, total
+
+        progress_callback: Callable[[int, int], None] = _noop_callback
+
+        if show_progress:
+            progress_bar = tqdm(
+                total=dataset.total,
+                desc=f"{dataset.level.value.upper()} 翻譯",
+                unit="筆",
+                leave=True,
+            )
+
+            def _progress_callback(processed: int, _: int) -> None:
+                if progress_bar is not None:
+                    progress_bar.update(processed - progress_bar.n)
+
+            progress_callback = _progress_callback
+
+        else:
+            progress_logger = ProgressLogger(f"{dataset.level.value.upper()} 翻譯")
+
+            def _logger_callback(processed: int, total: int) -> None:
+                if progress_logger is not None:
+                    progress_logger(processed, total)
+
+            progress_callback = _logger_callback
+
+        loader = TranslationDataLoader(
+            dataset,
+            batch_size=batch_size,
+            progress_callback=progress_callback,
         )
-        loader = TranslationDataLoader(dataset, batch_size=batch_size)
 
         # === 階段 1 ===
         logger.info("階段 1/3: 搜尋 Wikidata 取得候選 QID...")
         search_results: dict[str, dict[str, Any]] = {}
         cache_hits = 0
-        processed = 0
-
         for batch in loader:
             for item in batch:
                 cache_entry = self.translator.cache.get("translations", {}).get(
@@ -430,9 +459,7 @@ class BatchTranslationRunner:
                             ),
                             "qid": cache_entry.get("qid"),
                             "source": cache_entry.get("source", "cache"),
-                            "used_lang": cache_entry.get(
-                                "used_lang", "unknown"
-                            ),
+                            "used_lang": cache_entry.get("used_lang", "unknown"),
                             "parent_verified": cache_entry.get(
                                 "parent_verified", False
                             ),
@@ -441,18 +468,12 @@ class BatchTranslationRunner:
                     cache_hits += 1
                     continue
 
-                candidate_qids = self.translator._search_wikidata(
-                    item.original_name
-                )
+                candidate_qids = self.translator._search_wikidata(item.original_name)
                 search_results[item.id] = {
                     "item": item,
                     "cached": False,
                     "qids": candidate_qids,
                 }
-
-            processed += len(batch)
-            if progress_logger:
-                progress_logger(processed, dataset.total)
 
         logger.info(f"階段 1 完成：快取命中 {cache_hits}/{dataset.total}")
 
@@ -520,6 +541,11 @@ class BatchTranslationRunner:
 
         # === 階段 3: 處理結果 ===
         logger.info("階段 3/3: 處理翻譯結果...")
+        result_bar = (
+            tqdm(total=len(search_results), desc="處理結果", unit="筆", leave=True)
+            if show_progress and search_results
+            else None
+        )
         results: dict[str, dict] = {}
         success_count = 0
         fallback_count = 0
@@ -550,9 +576,7 @@ class BatchTranslationRunner:
                 fallback_count += 1
                 continue
 
-            parent_qid = parent_qids.get(item_id) or parent_qids.get(
-                item.original_name
-            )
+            parent_qid = parent_qids.get(item_id) or parent_qids.get(item.original_name)
             selected_qid = None
             parent_verified = False
 
@@ -581,12 +605,16 @@ class BatchTranslationRunner:
             results[item_id] = result
             success_count += 1
 
-            self.translator.cache.setdefault("translations", {})[
-                item.original_name
-            ] = {
+            self.translator.cache.setdefault("translations", {})[item.original_name] = {
                 **result,
                 "cached_at": datetime.now().isoformat(),
             }
+
+            if result_bar is not None:
+                result_bar.update(1)
+
+        if result_bar is not None:
+            result_bar.close()
 
         self.translator._save_cache()
         logger.info(

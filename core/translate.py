@@ -7,7 +7,12 @@ import opencc
 import polars as pl
 
 from core.schemas import ADMIN1_SCHEMA, GEODATA_SCHEMA, CITIES_SCHEMA
-from core.utils import ensure_folder_exists, logger, load_alternate_names, fill_admin_columns
+from core.utils import (
+    ensure_folder_exists,
+    logger,
+    load_alternate_names,
+    fill_admin_columns,
+)
 
 # 初始化簡繁轉換器
 converter_t2s = opencc.OpenCC("t2s")
