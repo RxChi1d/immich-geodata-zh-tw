@@ -53,12 +53,13 @@ WikidataTranslator 提供以下核心功能：
 | 功能 | 說明 |
 |------|------|
 | **單一翻譯** | `translate(name, parent_qid)` - 翻譯單一地名 |
-| **批次翻譯** | `batch_translate(names, parent_qids)` - 批次翻譯多個地名，使用批次 API 優化 |
+| **批次翻譯** | `batch_translate(dataset, parent_qids)` - 透過 dataset/dataloader 批次翻譯並驅動統一進度 |
 | **P131 驗證** | 透過 Wikidata P131（located in）關係驗證地名層級關係 |
 | **候選過濾** | 提供自訂過濾器排除不符合條件的候選實體 |
 | **多層快取** | 分層快取搜尋結果、標籤、P131 驗證、翻譯結果 |
 | **簡轉繁** | 透過 OpenCC 將簡體中文標籤轉換為繁體中文 |
 | **維基百科標題轉換** | 使用中文維基百科 API 進行標題簡繁轉換 |
+| **資料集＋進度控制** | 透過 `TranslationDataset` / `TranslationDataLoader` 封裝待翻譯項目，統一追蹤總筆數、進度條與行別快取 |
 
 ---
 
@@ -66,7 +67,7 @@ WikidataTranslator 提供以下核心功能：
 
 ### 單一翻譯流程
 
-`translate()` 方法實際上是 `batch_translate()` 的包裝，內部統一使用批次翻譯邏輯：
+`translate()` 方法實際上是 `batch_translate()` 的包裝（會在內部臨時建立 `TranslationDataset`），因此所有邏輯統一走批次流程：
 
 ```
 輸入地名 → 檢查快取 → 搜尋 Wikidata → 取得標籤 → 選擇最佳翻譯 → 快取結果
@@ -97,6 +98,16 @@ WikidataTranslator 提供以下核心功能：
   ├─ 應用多層回退策略選擇最佳標籤
   ├─ 快取翻譯結果
   └─ 返回翻譯結果
+
+#### 資料集與進度控制
+
+批次翻譯以 `TranslationDatasetBuilder → TranslationDataset → TranslationDataLoader` 為骨架：
+
+1. **Dataset Builder**：處理 handler 提供的 DataFrame，產生 `TranslationItem`（包含 `id`、原始名稱、admin level、parent chain 等 metadata）。Admin_1 與 Admin_2 各自轉成 dataset，以便獨立翻譯。  
+2. **Dataset**：實作 `Sequence` 介面並保留統計資訊（總筆數、唯一 parent 數、語言對），方便 log 與進度輸出。  
+3. **DataLoader**：依 `batch_size` 迭代 dataset，並對接 `progress_callback`。若啟用 `show_progress`，callback 會驅動 `tqdm` 進度條；否則改用 `ProgressLogger` 在 INFO 等級打印進度百分比。
+
+此設計將翻譯邏輯與資料來源解耦：handler 只需負責構建 dataset，翻譯器則專注於批次查詢／回寫快取，進度與 batch 控制也統一集中於 `BatchTranslationRunner`。
 ```
 
 **關鍵優化**：階段 2 使用批次 API（每次最多 50 個 QID），大幅減少請求次數。例如翻譯 250 個地名，使用批次查詢只需約 5 次 API 請求，而非 250 次。
@@ -317,6 +328,16 @@ WikidataTranslator 使用多層快取減少重複的 API 請求，大幅提升�
 4. **cache.p131**：如果已驗證過該層級關係，使用快取的驗證結果
 5. **cache.instance_of**：如果已取得該 QID 的 P31，使用快取的類型資訊
 
+### 快取同步策略
+
+過去快取僅在整個批次翻譯結束時一次性寫入，長時間處理 Admin_2 時若中途中斷便會遺失結果。現在改為「隨寫隨沖」策略：
+
+- 所有會寫入快取的步驟（搜尋、標籤、P31、P131、翻譯結果）都會在記憶體更新後呼叫 `_mark_cache_dirty()`。  
+- `_mark_cache_dirty()` 會累計髒污筆數並透過 `_flush_cache_if_needed()` 判斷是否落盤：預設達到 20 筆或距離上次儲存超過 30 秒就自動 `_save_cache()`。  
+- `BatchTranslationRunner` 在階段 3 完成時一律 `force=True` 進行最後一次 flush，確保批次結果全部寫入。  
+
+如此即便在翻譯過程中遭遇網路中斷或手動終止，也只會損失最後極少數尚未 flush 的筆數，大幅改善長時間作業的可靠性。
+
 ---
 
 ## 批次查詢優化
@@ -441,8 +462,11 @@ result = translator_ja.translate("東京都")
 #  'used_lang': 'zh-tw', 'parent_verified': False}
 
 # 批次翻譯
-results = translator_ja.batch_translate(["東京都", "大阪府", "京都府"])
-# {'東京都': {...}, '大阪府': {...}, '京都府': {...}}
+builder = TranslationDatasetBuilder(country_code="JP", source_lang="ja", target_lang="zh-tw")
+records = [{"sidonm": name} for name in ["東京都", "大阪府", "京都府"]]
+dataset = builder.build_admin1(records, name_field="sidonm")
+results = translator_ja.batch_translate(dataset, batch_size=16)
+# {'JP/admin_1/東京都': {...}, ...}
 ```
 
 ### 使用 P131 驗證
@@ -456,11 +480,15 @@ result = translator_ja.translate("中区", parent_qid="Q35765")
 # → 選擇大阪市中區（Q54886752），而非橫濱市中區
 
 # 範例 2: 批次翻譯時提供父級對照表
+records = [{"sidonm": name} for name in ["中区", "西区"]]
+dataset = TranslationDatasetBuilder(
+    country_code="JP", source_lang="ja", target_lang="zh-tw"
+).build_admin1(records, name_field="sidonm")
 parent_qids = {
-    "中区": "Q35765",      # 大阪市中區
-    "西区": "Q35765",      # 大阪市西區
+    item.id: "Q35765"  # 指向大阪市
+    for item in dataset
 }
-results = translator_ja.batch_translate(["中区", "西区"], parent_qids=parent_qids)
+results = translator_ja.batch_translate(dataset, parent_qids=parent_qids)
 ```
 
 ### 使用候選過濾器
@@ -486,9 +514,13 @@ def filter_administrative_only(name: str, metadata: dict) -> bool:
 
 # 範例：翻譯越南省份並應用過濾器
 translator_vi = WikidataTranslator(source_lang="vi", target_lang="zh-tw")
+records = [{"sidonm": name} for name in ["Hà Nội", "Hồ Chí Minh", "Đà Nẵng"]]
+dataset = TranslationDatasetBuilder(
+    country_code="VN", source_lang="vi", target_lang="zh-tw"
+).build_admin1(records, name_field="sidonm")
 results = translator_vi.batch_translate(
-    names=["Hà Nội", "Hồ Chí Minh", "Đà Nẵng"],
-    candidate_filter=filter_administrative_only
+    dataset,
+    candidate_filter=filter_administrative_only,
 )
 ```
 

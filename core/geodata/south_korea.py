@@ -472,7 +472,7 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
                 df,
                 name_field="sidonm",
             )
-            admin1_results = translator.batch_translate_dataset(
+            admin1_results = translator.batch_translate(
                 admin1_dataset,
                 batch_size=32,
                 show_progress=True,
@@ -523,7 +523,7 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
                 if parent_qid:
                     parent_qids_map[item.id] = parent_qid
 
-            admin2_results = translator.batch_translate_dataset(
+            admin2_results = translator.batch_translate(
                 admin2_dataset,
                 batch_size=32,
                 parent_qids=parent_qids_map,

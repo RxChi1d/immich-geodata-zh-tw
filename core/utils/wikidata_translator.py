@@ -1312,7 +1312,7 @@ class WikidataTranslator:
             deduplicated=True,
         )
         parent_map = {item.id: parent_qid} if parent_qid else None
-        results = self.batch_translate_dataset(
+        results = self.batch_translate(
             dataset,
             batch_size=1,
             parent_qids=parent_map,
@@ -1329,7 +1329,7 @@ class WikidataTranslator:
             },
         )
 
-    def batch_translate_dataset(
+    def batch_translate(
         self,
         dataset: TranslationDataset,
         *,
@@ -1348,70 +1348,3 @@ class WikidataTranslator:
             candidate_filter=candidate_filter,
             show_progress=show_progress,
         )
-
-    def batch_translate(
-        self,
-        names: list[str],
-        parent_qids: dict[str, str] | None = None,
-        show_progress: bool = True,
-        candidate_filter: "Callable[[str, dict], bool] | None" = None,
-    ) -> dict[str, dict]:
-        """批次翻譯多個地名（舊介面，內部轉向 dataset 版）。"""
-
-        if not names:
-            return {}
-
-        items_by_name: dict[str, TranslationItem] = {}
-        parent_qids = parent_qids or {}
-
-        for name in names:
-            normalized_name = _normalize_text(name)
-            if not normalized_name:
-                continue
-            item = TranslationItem.from_values(
-                level=AdminLevel.ADMIN_1,
-                original_name=normalized_name,
-                source_lang=self.source_lang,
-                target_lang=self.target_lang,
-                parent_chain=(self.source_lang.upper() or "GENERIC",),
-            )
-            items_by_name[normalized_name] = item
-
-        dataset = TranslationDataset(
-            list(items_by_name.values()),
-            level=AdminLevel.ADMIN_1,
-            source_lang=self.source_lang,
-            target_lang=self.target_lang,
-            deduplicated=True,
-        )
-
-        parent_map: dict[str, str] | None = None
-        if parent_qids:
-            parent_map = {}
-            for item in dataset:
-                parent_qid = parent_qids.get(item.original_name)
-                if parent_qid:
-                    parent_map[item.id] = parent_qid
-
-        dataset_results = self.batch_translate_dataset(
-            dataset,
-            batch_size=20,
-            parent_qids=parent_map,
-            show_progress=show_progress,
-            candidate_filter=candidate_filter,
-        )
-
-        legacy_results: dict[str, dict] = {}
-        for name, item in items_by_name.items():
-            legacy_results[name] = dataset_results.get(
-                item.id,
-                {
-                    "translated": name,
-                    "qid": None,
-                    "source": "original",
-                    "used_lang": "original",
-                    "parent_verified": False,
-                },
-            )
-
-        return legacy_results

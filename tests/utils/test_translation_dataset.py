@@ -10,7 +10,6 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))
 from core.utils.wikidata_translator import (  # noqa: E402  # pylint: disable=C0413
     AdminLevel,
     TranslationDataLoader,
-    TranslationDataset,
     TranslationDatasetBuilder,
     TranslationItem,
     WikidataTranslator,
@@ -87,10 +86,7 @@ def test_dataloader_reports_progress() -> None:
     builder = TranslationDatasetBuilder(
         country_code="KR", source_lang="ko", target_lang="zh-hant"
     )
-    records = [
-        {"sidonm": "首爾", "sggnm": f"第{i}區"}
-        for i in range(4)
-    ]
+    records = [{"sidonm": "首爾", "sggnm": f"第{i}區"} for i in range(4)]
     dataset = builder.build_admin2(
         records,
         parent_field="sidonm",
@@ -131,8 +127,10 @@ def translator(monkeypatch: pytest.MonkeyPatch) -> WikidataTranslator:
     return tr
 
 
-def test_batch_translate_dataset_basic(monkeypatch: pytest.MonkeyPatch, translator: WikidataTranslator) -> None:
-    """batch_translate_dataset 應回傳以 item.id 為 key 的結果並考慮 parent_qids。"""
+def test_batch_translate_basic(
+    monkeypatch: pytest.MonkeyPatch, translator: WikidataTranslator
+) -> None:
+    """batch_translate 應回傳以 item.id 為 key 的結果並考慮 parent_qids。"""
 
     builder = TranslationDatasetBuilder(
         country_code="KR", source_lang="ko", target_lang="zh-tw"
@@ -174,7 +172,7 @@ def test_batch_translate_dataset_basic(monkeypatch: pytest.MonkeyPatch, translat
         dataset[1].id: "PARENTX",
     }
 
-    results = translator.batch_translate_dataset(
+    results = translator.batch_translate(
         dataset,
         batch_size=1,
         parent_qids=parent_map,
@@ -187,7 +185,9 @@ def test_batch_translate_dataset_basic(monkeypatch: pytest.MonkeyPatch, translat
     assert results[dataset[1].id]["translated"] == "海雲臺區"
 
 
-def test_batch_translate_dataset_candidate_filter(monkeypatch: pytest.MonkeyPatch, translator: WikidataTranslator) -> None:
+def test_batch_translate_candidate_filter(
+    monkeypatch: pytest.MonkeyPatch, translator: WikidataTranslator
+) -> None:
     """候選過濾器應能排除不需要的 QID。"""
 
     builder = TranslationDatasetBuilder(
@@ -216,7 +216,7 @@ def test_batch_translate_dataset_candidate_filter(monkeypatch: pytest.MonkeyPatc
     def candidate_filter(_: str, metadata: dict) -> bool:
         return metadata["qid"].endswith("GOOD")
 
-    results = translator.batch_translate_dataset(
+    results = translator.batch_translate(
         dataset,
         batch_size=2,
         parent_qids=None,
@@ -225,3 +225,75 @@ def test_batch_translate_dataset_candidate_filter(monkeypatch: pytest.MonkeyPatc
     )
 
     assert results[dataset[0].id]["qid"] == "Q_GOOD"
+
+
+def test_translate_respects_parent_qid(
+    monkeypatch: pytest.MonkeyPatch, translator: WikidataTranslator
+) -> None:
+    """translate() 應利用 parent_qid 執行 P131 驗證。"""
+
+    monkeypatch.setattr(
+        translator,
+        "_search_wikidata",
+        lambda name: [f"Q_{name}"],
+    )
+    monkeypatch.setattr(
+        translator,
+        "_batch_get_labels",
+        lambda qids: {qid: {"zh-tw": qid} for qid in qids},
+    )
+    monkeypatch.setattr(translator, "_batch_get_instance_of", lambda qids: {})
+
+    verified: list[tuple[str, str]] = []
+
+    def fake_verify(qid: str, parent_qid: str) -> bool:
+        verified.append((qid, parent_qid))
+        return parent_qid == "PARENT_OK"
+
+    monkeypatch.setattr(translator, "_verify_p131", fake_verify)
+
+    result = translator.translate("測試地名", parent_qid="PARENT_OK")
+
+    assert result["parent_verified"] is True
+    assert verified == [("Q_測試地名", "PARENT_OK")]
+
+
+def test_batch_translate_parent_map(
+    monkeypatch: pytest.MonkeyPatch, translator: WikidataTranslator
+) -> None:
+    """batch_translate 接收 dataset 時能套用 parent_qids。"""
+
+    names = ["首爾", "釜山"]
+    search_map = {name: [f"Q_{name}"] for name in names}
+
+    monkeypatch.setattr(translator, "_search_wikidata", lambda name: search_map[name])
+    monkeypatch.setattr(
+        translator,
+        "_batch_get_labels",
+        lambda qids: {qid: {"zh-tw": qid} for qid in qids},
+    )
+    monkeypatch.setattr(translator, "_batch_get_instance_of", lambda qids: {})
+
+    def fake_verify(qid: str, parent_qid: str) -> bool:
+        return (qid, parent_qid) == ("Q_首爾", "PARENT1")
+
+    monkeypatch.setattr(translator, "_verify_p131", fake_verify)
+
+    records = [{"sidonm": name} for name in names]
+    dataset = TranslationDatasetBuilder(
+        country_code="KR", source_lang="ko", target_lang="zh-tw"
+    ).build_admin1(records, name_field="sidonm")
+    parent_map = {item.id: ("PARENT1" if "首爾" in item.original_name else "PARENTX") for item in dataset}
+
+    results = translator.batch_translate(
+        dataset,
+        parent_qids=parent_map,
+        show_progress=False,
+    )
+
+    for item in dataset:
+        data = results[item.id]
+        if item.original_name == "首爾":
+            assert data["parent_verified"] is True
+        else:
+            assert data["parent_verified"] is False

@@ -82,7 +82,7 @@
    - 每階段開始/結束輸出 INFO log（含耗時與進度）
 2. 介面：
    ```python
-   def batch_translate_dataset(
+   def batch_translate(
        self,
        dataset: TranslationDataset,
        *,
@@ -90,17 +90,14 @@
        filters: list[CandidateFilter] | None = None,
    ) -> dict[str, TranslationResult]
    ```
-3. 與現有 `batch_translate(list[str])` 保持相容：
-   - Deprecated pathway：若仍傳入 list/tuple，轉換為臨時 dataset（level = UNKNOWN, parent_chain=(country,)）。
-   - 在 log 中加警告提示未來版本僅接受 dataset。
-4. INFO log 模板：
+3. INFO log 模板：
    - `logger.info("Admin_2 批次翻譯開始，筆數: {dataset.total}, batch_size={batch_size}")`
    - 進度：`logger.info("Admin_2 進度 {processed}/{total} ({percent:.1f}%)")`
    - 結束：輸出成功/失敗/跳過統計。
 5. DEBUG log 保留：候選過濾、HTTP Response、Manually override events。
 6. 單元測試：mock Wikidata API，確保 dataset 內多筆資料能完整走完各階段且 log level 正確（可用 caplog）。
 
-**完成條件**：外部呼叫 `batch_translate_dataset` 得到 dict 結果；舊 API 仍可使用但印出提示；測試覆蓋核心邏輯。
+**完成條件**：外部呼叫 `batch_translate` 得到 dict 結果，所有 handler 改用 dataset 流程；測試覆蓋核心邏輯。
 
 ### T5. 更新 `core/geodata/south_korea.py`
 1. 在 extract 流程中：
@@ -108,8 +105,8 @@
    - 分別呼叫 `build_admin1`, `build_admin2`。
    - 以清楚 log 告知 dataset 規模（沿用 builder stats）。
 2. 呼叫新 translator API：
-   - `admin1_results = translator.batch_translate_dataset(admin1_dataset, batch_size=32)`
-   - `admin2_results = translator.batch_translate_dataset(admin2_dataset, batch_size=32, filters=[custom_filter])`
+   - `admin1_results = translator.batch_translate(admin1_dataset, batch_size=32)`
+   - `admin2_results = translator.batch_translate(admin2_dataset, batch_size=32, filters=[custom_filter])`
 3. 資料套用：保留既有 `apply_translations` 邏輯，只是結果改讀 `TranslationItem.id` 或 `(parent_chain, original_name)`。
 4. 移除舊有按 admin_1 分組 loop 與 tqdm；DEBUG log 改由 batch translator 自行處理。
 5. 驗證：
@@ -124,7 +121,7 @@
    def translate_one(self, name: str, *, level: AdminLevel, parent_chain: tuple[str, ...], metadata=None):
        item = TranslationItem(...)
        dataset = TranslationDataset([item], level=level, deduplicated=True)
-       return self.batch_translate_dataset(dataset, batch_size=1)[item.id]
+       return self.batch_translate(dataset, batch_size=1)[item.id]
    ```
 2. 對外 API 保持 signature 盡量不變；若舊簽名為 `translate(name, **kwargs)`，則在內部組裝必要參數。
 3. 補測試：
@@ -151,4 +148,3 @@
 - 在 PR 中附加此計畫書連結與 log 範例，供 reviewer 快速理解。
 - 若在 Phase B 碰到與 KR handler 綁太緊的情形，可在 PR 分支再拆子任務（例如 `refactor/wikidata-dataloader` → `refactor/kr-handler-adapter`）。
 - 若日後其他國家也要使用 Wikidata 翻譯，建議再起一份子計畫，引用此文件的公共模組設計部分。
-

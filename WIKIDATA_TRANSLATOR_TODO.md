@@ -10,7 +10,7 @@
 
 ## Phase B：翻譯流程整合
 - [x] B1. 引入 `BatchTranslationRunner`（或等效協調類），拆分搜尋/抓標籤/處理三階段。
-- [x] B2. 調整 `WikidataTranslator.batch_translate*` 接受 dataset/dataloader，保留向下相容層。
+- [x] B2. 調整 `WikidataTranslator.batch_translate` 只接受 dataset/dataloader，移除舊 list 介面。
 - [x] B3. 重新整理 INFO/DEBUG log：移除多餘細節，統一進度、統計輸出。
 - [x] B4. 更新 `core/geodata/south_korea.py`：建構 dataset、呼叫新 API、套用結果。
 - [x] B5. 更新 `translate_one` 走新的資料模型，確保對外介面簡潔。
