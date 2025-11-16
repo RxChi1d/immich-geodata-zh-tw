@@ -6,29 +6,46 @@
 
 - [WikidataTranslator 說明文檔](#wikidatatranslator-說明文檔)
   - [目錄](#目錄)
+  - [快速開始](#快速開始)
   - [設計理念](#設計理念)
   - [核心功能](#核心功能)
   - [翻譯流程](#翻譯流程)
-    - [單一翻譯流程](#單一翻譯流程)
     - [批次翻譯流程](#批次翻譯流程)
+    - [單一翻譯介面](#單一翻譯介面)
   - [翻譯策略](#翻譯策略)
     - [多層回退機制](#多層回退機制)
     - [P131 層級關係驗證](#p131-層級關係驗證)
     - [候選過濾機制](#候選過濾機制)
   - [快取機制](#快取機制)
     - [快取結構](#快取結構)
-    - [快取版本遷移](#快取版本遷移)
+    - [快取同步策略](#快取同步策略)
   - [批次查詢優化](#批次查詢優化)
   - [錯誤處理與重試機制](#錯誤處理與重試機制)
     - [速率限制處理](#速率限制處理)
     - [重試機制](#重試機制)
     - [錯誤降級處理](#錯誤降級處理)
   - [使用範例](#使用範例)
-    - [基本使用](#基本使用)
+    - [批次翻譯](#批次翻譯)
+    - [單一翻譯](#單一翻譯)
     - [使用 P131 驗證](#使用-p131-驗證)
     - [使用候選過濾器](#使用候選過濾器)
+    - [Admin 2 批次翻譯](#admin-2-批次翻譯)
     - [不同語言翻譯](#不同語言翻譯)
   - [API 端點與速率限制](#api-端點與速率限制)
+
+---
+
+## 快速開始
+
+```python
+from core.utils.wikidata_translator import WikidataTranslator
+
+translator = WikidataTranslator(source_lang="ko", target_lang="zh-tw")
+result = translator.translate("서울특별시")
+print(result["translated"])  # 輸出: 首爾特別市
+```
+
+完整使用方式請參閱 [使用範例](#使用範例) 章節。
 
 ---
 
@@ -52,36 +69,31 @@ WikidataTranslator 提供以下核心功能：
 
 | 功能 | 說明 |
 |------|------|
-| **單一翻譯** | `translate(name, parent_qid)` - 翻譯單一地名 |
-| **批次翻譯** | `batch_translate(dataset, parent_qids)` - 透過 dataset/dataloader 批次翻譯並驅動統一進度 |
+| **批次翻譯** | `batch_translate(dataset, parent_qids)` - 透過 `TranslationDataset` 批次翻譯並驅動統一進度 |
+| **資料集與進度控制** | 透過 `TranslationDataset` / `TranslationDataLoader` 封裝待翻譯項目，統一追蹤總筆數、進度條與逐列快取 |
+| **單一翻譯介面** | `translate(name, parent_qid)` - 內部建立單筆 dataset 後呼叫批次翻譯，適合快速測試與少量翻譯 |
 | **P131 驗證** | 透過 Wikidata P131（located in）關係驗證地名層級關係 |
 | **候選過濾** | 提供自訂過濾器排除不符合條件的候選實體 |
 | **多層快取** | 分層快取搜尋結果、標籤、P131 驗證、翻譯結果 |
+| **快取自動同步** | 採用「隨寫隨沖」策略，達 **20 筆**或 **30 秒**自動同步快取，避免長時間處理中斷時資料遺失 |
 | **簡轉繁** | 透過 OpenCC 將簡體中文標籤轉換為繁體中文 |
 | **維基百科標題轉換** | 使用中文維基百科 API 進行標題簡繁轉換 |
-| **資料集＋進度控制** | 透過 `TranslationDataset` / `TranslationDataLoader` 封裝待翻譯項目，統一追蹤總筆數、進度條與行別快取 |
 
 ---
 
 ## 翻譯流程
 
-### 單一翻譯流程
-
-`translate()` 方法實際上是 `batch_translate()` 的包裝（會在內部臨時建立 `TranslationDataset`），因此所有邏輯統一走批次流程：
-
-```
-輸入地名 → 檢查快取 → 搜尋 Wikidata → 取得標籤 → 選擇最佳翻譯 → 快取結果
-```
-
 ### 批次翻譯流程
 
-`batch_translate()` 採用三階段處理，最大化批次查詢效率：
+`batch_translate()` 是翻譯器的核心實作，採用三階段處理，最大化批次查詢效率：
 
 ```
 階段 1: 搜尋階段
+  ├─ 透過 DataLoader 依 batch_size 迭代 dataset
   ├─ 逐一搜尋地名取得候選 QID（Wikidata API 不支援批次搜尋）
   ├─ 檢查翻譯快取，已快取的直接返回
-  └─ 收集所有候選 QID
+  ├─ 收集所有候選 QID
+  └─ 更新進度（透過 progress_callback）
 
 階段 1.5: 候選過濾（可選）
   ├─ 批次取得所有候選 QID 的標籤與 P31（instance of）
@@ -93,24 +105,62 @@ WikidataTranslator 提供以下核心功能：
   ├─ 批次查詢標籤（每批最多 50 個 QID）
   └─ 快取標籤結果
 
-階段 3: 選擇最佳翻譯
+階段 3: 選擇最佳翻譯與快取寫入
   ├─ 根據 P131 驗證選擇正確的 QID
   ├─ 應用多層回退策略選擇最佳標籤
-  ├─ 快取翻譯結果
+  ├─ 快取翻譯結果（每筆寫入都觸發 _mark_cache_dirty）
+  ├─ 依照髒污次數或時間間隔自動同步快取
   └─ 返回翻譯結果
+```
+
+**關鍵優化**：階段 2 使用批次 API（每次最多 **50 個 QID**），大幅減少請求次數。例如翻譯 250 個地名，使用批次查詢只需約 5 次 API 請求，而非 250 次。
 
 #### 資料集與進度控制
 
-批次翻譯以 `TranslationDatasetBuilder → TranslationDataset → TranslationDataLoader` 為骨架：
+批次翻譯以 `TranslationDatasetBuilder → TranslationDataset → TranslationDataLoader → BatchTranslationRunner` 為骨架：
 
-1. **Dataset Builder**：處理 handler 提供的 DataFrame，產生 `TranslationItem`（包含 `id`、原始名稱、admin level、parent chain 等 metadata）。Admin_1 與 Admin_2 各自轉成 dataset，以便獨立翻譯。  
-2. **Dataset**：實作 `Sequence` 介面並保留統計資訊（總筆數、唯一 parent 數、語言對），方便 log 與進度輸出。  
-3. **DataLoader**：依 `batch_size` 迭代 dataset，並對接 `progress_callback`。若啟用 `show_progress`，callback 會驅動 `tqdm` 進度條；否則改用 `ProgressLogger` 在 INFO 等級打印進度百分比。
+1. **TranslationDatasetBuilder**：處理 handler 提供的 DataFrame，產生 `TranslationItem`（包含 `id`、原始名稱、admin level、parent chain 等 metadata）。Admin_1 與 Admin_2 各自轉成 dataset，以便獨立翻譯。
 
-此設計將翻譯邏輯與資料來源解耦：handler 只需負責構建 dataset，翻譯器則專注於批次查詢／回寫快取，進度與 batch 控制也統一集中於 `BatchTranslationRunner`。
+2. **TranslationDataset**：實作 `Sequence` 介面並保留統計資訊（總筆數、唯一 parent 數、語言對），方便 log 與進度輸出。提供 `stats()` 方法取得資料集摘要。
+
+3. **TranslationDataLoader**：依 `batch_size` 迭代 dataset，並透過 `progress_callback` 回報進度。支援自訂排序策略（`sorter` 參數）。
+
+4. **BatchTranslationRunner**：協調三階段翻譯流程並控制進度顯示：
+   - `show_progress=True` 時使用 `tqdm` 進度條，完成後保留結果
+   - `show_progress=False` 時使用 `ProgressLogger`，在 INFO 級別輸出進度百分比（0%, 5%, 10%, ..., 100%）
+
+**設計優勢**：
+- 將翻譯邏輯與資料來源解耦：handler 只需負責構建 dataset，翻譯器專注於批次查詢與快取管理
+- 統一進度控制介面：不論是進度條或日誌輸出，都透過相同的 callback 機制
+- 靈活的批次大小控制：可依據網路狀況或 API 限制調整 batch_size
+
+### 單一翻譯介面
+
+`translate()` 方法提供簡化的單筆翻譯介面，內部實作為建立臨時單筆 `TranslationDataset` 後呼叫批次翻譯核心：
+
+```
+translate(name, parent_qid)
+  ↓
+建立臨時單筆 TranslationDataset
+  ↓
+呼叫 batch_translate(dataset, parent_qids)
+  ↓
+返回單筆結果
 ```
 
-**關鍵優化**：階段 2 使用批次 API（每次最多 50 個 QID），大幅減少請求次數。例如翻譯 250 個地名，使用批次查詢只需約 5 次 API 請求，而非 250 次。
+**設計理念**：
+- **統一邏輯**：單一翻譯與批次翻譯共用相同的核心邏輯
+- **功能完整**：P131 驗證、候選過濾等所有批次翻譯功能在單一翻譯也可使用
+- **易於維護**：只需維護批次翻譯的邏輯，單一翻譯自動繼承所有改進
+- **使用便利**：提供簡單的單筆翻譯介面，無需手動建立 dataset
+
+**何時使用**：
+- 快速翻譯單一地名
+- 互動式測試與除錯
+- 少量（< 10 筆）即時翻譯需求
+
+**建議**：
+- 大量翻譯（> 10 筆）建議直接使用 `batch_translate()` 並搭配 `TranslationDataset`，可獲得更好的效能與進度追蹤
 
 ---
 
@@ -330,13 +380,25 @@ WikidataTranslator 使用多層快取減少重複的 API 請求，大幅提升�
 
 ### 快取同步策略
 
-過去快取僅在整個批次翻譯結束時一次性寫入，長時間處理 Admin_2 時若中途中斷便會遺失結果。現在改為「隨寫隨沖」策略：
+為了避免長時間處理（例如 Admin 2）中途被中斷時，前幾百筆查詢成果遺失，翻譯器採用「隨寫隨沖」（Write-Through with Deferred Flush）策略：
 
-- 所有會寫入快取的步驟（搜尋、標籤、P31、P131、翻譯結果）都會在記憶體更新後呼叫 `_mark_cache_dirty()`。  
-- `_mark_cache_dirty()` 會累計髒污筆數並透過 `_flush_cache_if_needed()` 判斷是否落盤：預設達到 20 筆或距離上次儲存超過 30 秒就自動 `_save_cache()`。  
-- `BatchTranslationRunner` 在階段 3 完成時一律 `force=True` 進行最後一次 flush，確保批次結果全部寫入。  
+**觸發機制**：
 
-如此即便在翻譯過程中遭遇網路中斷或手動終止，也只會損失最後極少數尚未 flush 的筆數，大幅改善長時間作業的可靠性。
+1. 任何快取寫入（搜尋、標籤、P31、P131、翻譯結果）都會在記憶體更新後呼叫 `_mark_cache_dirty()`
+2. `_mark_cache_dirty()` 累計髒污筆數並自動檢查是否需要同步
+3. 達到以下**任一條件**時自動執行 `_save_cache()`：
+   - 累計達 **20 筆**髒污資料
+   - 距離上次儲存超過 **30 秒**
+4. `BatchTranslationRunner` 在階段 3 完成時強制執行最後一次同步
+
+**優勢**：
+- **容錯性提升**：即便翻譯過程中遭遇網路中斷或手動終止，也只會損失最後極少數尚未 flush 的筆數
+- **效能平衡**：不會每筆都寫入（避免過度 I/O），也不會等到全部完成才寫入（避免中斷損失）
+- **透明化**：開發者無需手動呼叫儲存，翻譯器自動管理快取同步
+
+**原子寫入保護**：
+- 使用臨時檔案（`.tmp`）+ `rename()` 確保快取檔案不會因寫入過程中斷而損毀
+- 即使同步過程失敗，原快取檔案仍保持完整
 
 ---
 
@@ -348,8 +410,8 @@ WikidataTranslator 使用多層快取減少重複的 API 請求，大幅提升�
 
 | 方法 | 功能 | 批次大小 | API 端點 |
 |------|------|----------|----------|
-| `_batch_get_labels()` | 取得多個 QID 的標籤 | 50 個/批 | wbgetentities |
-| `_batch_get_instance_of()` | 取得多個 QID 的 P31 | 50 個/批 | wbgetentities |
+| `_batch_get_labels()` | 取得多個 QID 的標籤 | **50 個/批** | wbgetentities |
+| `_batch_get_instance_of()` | 取得多個 QID 的 P31 | **50 個/批** | wbgetentities |
 
 **批次查詢流程**：
 
@@ -442,12 +504,15 @@ for attempt in range(MAX_RETRIES):  # 最多重試 5 次
 
 ## 使用範例
 
-### 基本使用
+### 批次翻譯
 
 ```python
-from core.utils.wikidata_translator import WikidataTranslator
+from core.utils.wikidata_translator import (
+    WikidataTranslator,
+    TranslationDatasetBuilder,
+)
 
-# 範例 1: 日文 → 繁體中文
+# 建立翻譯器（日文 → 繁體中文）
 translator_ja = WikidataTranslator(
     source_lang="ja",
     target_lang="zh-tw",
@@ -456,22 +521,56 @@ translator_ja = WikidataTranslator(
     use_opencc=True
 )
 
-# 單一翻譯
+# 建立 dataset builder
+builder = TranslationDatasetBuilder(
+    country_code="JP",
+    source_lang="ja",
+    target_lang="zh-tw"
+)
+
+# 準備資料並建立 dataset
+records = [{"sidonm": name} for name in ["東京都", "大阪府", "京都府"]]
+dataset = builder.build_admin1(records, name_field="sidonm")
+
+# 批次翻譯（show_progress=True 會顯示 tqdm 進度條）
+results = translator_ja.batch_translate(
+    dataset,
+    batch_size=16,
+    show_progress=True
+)
+# 返回: {'JP/admin_1/東京都': {...}, 'JP/admin_1/大阪府': {...}, ...}
+```
+
+### 單一翻譯
+
+```python
+from core.utils.wikidata_translator import WikidataTranslator
+
+# 建立翻譯器
+translator_ja = WikidataTranslator(
+    source_lang="ja",
+    target_lang="zh-tw",
+    fallback_langs=["zh-hant", "zh", "en", "ja"],
+    cache_path="geoname_data/JP_wikidata_cache.json",
+    use_opencc=True
+)
+
+# 單一翻譯（內部會建立臨時 dataset 後呼叫 batch_translate）
 result = translator_ja.translate("東京都")
 # {'translated': '東京都', 'qid': 'Q1490', 'source': 'wikidata',
 #  'used_lang': 'zh-tw', 'parent_verified': False}
 
-# 批次翻譯
-builder = TranslationDatasetBuilder(country_code="JP", source_lang="ja", target_lang="zh-tw")
-records = [{"sidonm": name} for name in ["東京都", "大阪府", "京都府"]]
-dataset = builder.build_admin1(records, name_field="sidonm")
-results = translator_ja.batch_translate(dataset, batch_size=16)
-# {'JP/admin_1/東京都': {...}, ...}
+# 注意：大量翻譯（> 10 筆）建議使用 batch_translate() 以獲得更好的效能
 ```
 
 ### 使用 P131 驗證
 
 ```python
+from core.utils.wikidata_translator import (
+    WikidataTranslator,
+    TranslationDatasetBuilder,
+)
+
 # 範例 1: 翻譯日本的同名地名「中区」
 translator_ja = WikidataTranslator(source_lang="ja", target_lang="zh-tw")
 
@@ -480,22 +579,54 @@ result = translator_ja.translate("中区", parent_qid="Q35765")
 # → 選擇大阪市中區（Q54886752），而非橫濱市中區
 
 # 範例 2: 批次翻譯時提供父級對照表
+builder = TranslationDatasetBuilder(
+    country_code="JP",
+    source_lang="ja",
+    target_lang="zh-tw"
+)
 records = [{"sidonm": name} for name in ["中区", "西区"]]
-dataset = TranslationDatasetBuilder(
-    country_code="JP", source_lang="ja", target_lang="zh-tw"
-).build_admin1(records, name_field="sidonm")
+dataset = builder.build_admin1(records, name_field="sidonm")
+
+# 提供父級 QID 對照表（可用 item.id 或 item.original_name 作為鍵）
 parent_qids = {
-    item.id: "Q35765"  # 指向大阪市
+    item.id: "Q35765"  # 使用 item.id（如 "JP/admin_1/中区"）
     for item in dataset
 }
-results = translator_ja.batch_translate(dataset, parent_qids=parent_qids)
+# 或者
+parent_qids = {
+    item.original_name: "Q35765"  # 使用原始名稱（如 "中区"）
+    for item in dataset
+}
+
+results = translator_ja.batch_translate(
+    dataset,
+    parent_qids=parent_qids,
+    show_progress=True
+)
 ```
 
 ### 使用候選過濾器
 
 ```python
+from core.utils.wikidata_translator import (
+    WikidataTranslator,
+    TranslationDatasetBuilder,
+)
+
 def filter_administrative_only(name: str, metadata: dict) -> bool:
-    """僅保留行政區實體，排除政府機構、歷史地名等。"""
+    """僅保留行政區實體，排除政府機構、歷史地名等。
+
+    Args:
+        name: 原始地名
+        metadata: {
+            'qid': 候選 QID,
+            'labels': {語言: 標籤},
+            'instance_of': [P31 QID 列表]
+        }
+
+    Returns:
+        True = 保留候選，False = 排除候選
+    """
     labels = metadata.get("labels", {})
     instance_of = metadata.get("instance_of", [])
 
@@ -514,19 +645,72 @@ def filter_administrative_only(name: str, metadata: dict) -> bool:
 
 # 範例：翻譯越南省份並應用過濾器
 translator_vi = WikidataTranslator(source_lang="vi", target_lang="zh-tw")
-records = [{"sidonm": name} for name in ["Hà Nội", "Hồ Chí Minh", "Đà Nẵng"]]
-dataset = TranslationDatasetBuilder(
-    country_code="VN", source_lang="vi", target_lang="zh-tw"
-).build_admin1(records, name_field="sidonm")
+builder = TranslationDatasetBuilder(
+    country_code="VN",
+    source_lang="vi",
+    target_lang="zh-tw"
+)
+records = [{"name": city} for city in ["Hà Nội", "Hồ Chí Minh", "Đà Nẵng"]]
+dataset = builder.build_admin1(records, name_field="name")
+
 results = translator_vi.batch_translate(
     dataset,
     candidate_filter=filter_administrative_only,
+    show_progress=True
 )
+```
+
+### Admin 2 批次翻譯
+
+```python
+from core.utils.wikidata_translator import (
+    WikidataTranslator,
+    TranslationDatasetBuilder,
+)
+
+# 範例：翻譯日本 Admin_2（市區町村）
+translator_ja = WikidataTranslator(
+    source_lang="ja",
+    target_lang="zh-tw",
+    cache_path="geoname_data/JP_wikidata_cache.json"
+)
+
+builder = TranslationDatasetBuilder(
+    country_code="JP",
+    source_lang="ja",
+    target_lang="zh-tw"
+)
+
+# Admin_2 資料需包含 parent 欄位（所屬 Admin_1）
+records = [
+    {"parent": "東京都", "name": "千代田区"},
+    {"parent": "東京都", "name": "中央区"},
+    {"parent": "大阪府", "name": "大阪市"},
+]
+
+# 建立 Admin_2 dataset（需指定 parent_field 和 name_field）
+dataset = builder.build_admin2(
+    records,
+    parent_field="parent",
+    name_field="name",
+    deduplicate=True  # 自動去重
+)
+
+# show_progress=False 時會使用 ProgressLogger（INFO 級別輸出）
+results = translator_ja.batch_translate(
+    dataset,
+    batch_size=16,
+    show_progress=False  # 使用日誌輸出進度
+)
+
+# 返回格式: {'JP/admin_2/東京都/千代田区': {...}, ...}
 ```
 
 ### 不同語言翻譯
 
 ```python
+from core.utils.wikidata_translator import WikidataTranslator
+
 # 範例 1: 越南文 → 繁體中文
 translator_vi = WikidataTranslator(
     source_lang="vi",
@@ -551,6 +735,7 @@ result = translator_th.translate("กรุงเทพมหานคร")
 translator_ko = WikidataTranslator(
     source_lang="ko",
     target_lang="zh-tw",
+    fallback_langs=["zh-hant", "zh", "en", "ko"],
     cache_path="geoname_data/KR_wikidata_cache.json"
 )
 result = translator_ko.translate("서울특별시")
@@ -584,4 +769,4 @@ immich-geodata-zh-tw/1.0 (Wikidata Translation Tool)
 
 ---
 
-**最後更新**：2025-11-11
+**最後更新**：2025-11-16
