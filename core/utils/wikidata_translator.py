@@ -446,9 +446,7 @@ class BatchTranslationRunner:
         cache_hits = 0
         for batch in loader:
             for item in batch:
-                cache_entry = self.translator.cache.get("translations", {}).get(
-                    item.original_name
-                )
+                cache_entry = self.translator.cache_store.get_translation(item)
                 if cache_entry and "translated" in cache_entry:
                     search_results[item.id] = {
                         "item": item,
@@ -468,7 +466,7 @@ class BatchTranslationRunner:
                     cache_hits += 1
                     continue
 
-                candidate_qids = self.translator._search_wikidata(item.original_name)
+                candidate_qids = self.translator._search_wikidata(item)
                 search_results[item.id] = {
                     "item": item,
                     "cached": False,
@@ -558,6 +556,11 @@ class BatchTranslationRunner:
                 continue
 
             qids = data.get("qids", []) or []
+            parent_qid = None
+            if parent_qids:
+                parent_qid = parent_qids.get(item_id) or parent_qids.get(
+                    item.original_name
+                )
             if not qids:
                 result = {
                     "translated": item.original_name,
@@ -567,17 +570,10 @@ class BatchTranslationRunner:
                     "parent_verified": False,
                 }
                 results[item_id] = result
-                self.translator.cache.setdefault("translations", {})[
-                    item.original_name
-                ] = {
-                    **result,
-                    "cached_at": datetime.now().isoformat(),
-                }
-                self.translator._mark_cache_dirty()
+                self.translator.cache_store.set_translation(item, result, parent_qid)
                 fallback_count += 1
                 continue
 
-            parent_qid = parent_qids.get(item_id) or parent_qids.get(item.original_name)
             selected_qid = None
             parent_verified = False
 
@@ -606,11 +602,7 @@ class BatchTranslationRunner:
             results[item_id] = result
             success_count += 1
 
-            self.translator.cache.setdefault("translations", {})[item.original_name] = {
-                **result,
-                "cached_at": datetime.now().isoformat(),
-            }
-            self.translator._mark_cache_dirty()
+            self.translator.cache_store.set_translation(item, result, parent_qid)
 
             if result_bar is not None:
                 result_bar.update(1)
@@ -625,6 +617,158 @@ class BatchTranslationRunner:
         return results
 
 
+class TranslationCacheStore:
+    """集中管理 WikidataTranslator 使用的快取。"""
+
+    VERSION = "2.0"
+
+    def __init__(
+        self,
+        *,
+        source_lang: str,
+        target_lang: str,
+        cache_path: Path | None,
+    ) -> None:
+        self.source_lang = source_lang
+        self.target_lang = target_lang
+        self.cache_path = cache_path
+        self._dirty = 0
+        self._last_flush = time.time()
+        self.data = self._load()
+
+    def _load(self) -> dict:
+        if not self.cache_path or not self.cache_path.exists():
+            return self._create_empty_payload()
+
+        try:
+            payload = json.loads(self.cache_path.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - I/O 失敗時回退
+            logger.warning(f"快取載入失敗，將重新建立：{exc}")
+            return self._create_empty_payload()
+
+        version = payload.get("metadata", {}).get("version")
+        if version != self.VERSION:
+            self._backup_existing()
+            return self._create_empty_payload()
+
+        return payload
+
+    def _backup_existing(self) -> None:
+        if not self.cache_path or not self.cache_path.exists():
+            return
+
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        backup_path = self.cache_path.with_suffix(
+            f"{self.cache_path.suffix}.bak.{timestamp}"
+        )
+        try:
+            self.cache_path.replace(backup_path)
+            logger.info(f"已備份舊版快取至 {backup_path.name}")
+        except Exception as exc:  # pragma: no cover - 失敗僅記錄
+            logger.warning(f"舊版快取備份失敗：{exc}")
+
+    def _create_empty_payload(self) -> dict:
+        return {
+            "metadata": {
+                "source_lang": self.source_lang,
+                "target_lang": self.target_lang,
+                "created_at": datetime.now().isoformat(),
+                "version": self.VERSION,
+                "last_compacted_at": None,
+            },
+            "translations": {},
+            "cache": {
+                "search": {},
+                "labels": {},
+                "p131": {},
+                "instance_of": {},
+            },
+            "indexes": {
+                "by_name": {},
+            },
+        }
+
+    def create_empty(self) -> dict:
+        """提供測試快速產生全新快取字典。"""
+
+        return self._create_empty_payload()
+
+    def _ensure_index(self) -> None:
+        self.data.setdefault("indexes", {}).setdefault("by_name", {})
+
+    def _index_name(self, item: TranslationItem) -> None:
+        self._ensure_index()
+        by_name = self.data["indexes"]["by_name"]
+        slots = by_name.setdefault(item.original_name, [])
+        if item.id not in slots:
+            slots.append(item.id)
+
+    def get_translation(self, item: TranslationItem) -> dict | None:
+        return self.data.get("translations", {}).get(item.id)
+
+    def set_translation(
+        self,
+        item: TranslationItem,
+        result: Mapping[str, Any],
+        parent_qid: str | None,
+    ) -> None:
+        entry = {
+            "original_name": item.original_name,
+            "level": item.level.value,
+            "parent_chain": list(item.parent_chain),
+            "parent_qid": parent_qid,
+            "cached_at": datetime.now().isoformat(),
+        }
+        entry.update(result)
+        self.data.setdefault("translations", {})[item.id] = entry
+        self._index_name(item)
+        self.mark_dirty()
+
+    def get_search_results(self, item: TranslationItem) -> list[str] | None:
+        return self.data.get("cache", {}).get("search", {}).get(item.id)
+
+    def set_search_results(self, item: TranslationItem, qids: list[str]) -> None:
+        self.data.setdefault("cache", {}).setdefault("search", {})[item.id] = qids
+        self.mark_dirty()
+
+    def mark_dirty(self) -> None:
+        self._dirty += 1
+        self.flush_if_needed()
+
+    def flush_if_needed(
+        self,
+        *,
+        force: bool = False,
+        max_dirty: int = 20,
+        max_interval: float = 30.0,
+    ) -> None:
+        if not self.cache_path:
+            self._dirty = 0
+            self._last_flush = time.time()
+            return
+
+        now = time.time()
+        if not force:
+            if self._dirty < max_dirty and (now - self._last_flush) < max_interval:
+                return
+
+        self.save()
+        self._dirty = 0
+        self._last_flush = now
+
+    def save(self) -> None:
+        if not self.cache_path:
+            return
+
+        try:
+            self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = self.cache_path.with_suffix(self.cache_path.suffix + ".tmp")
+            tmp_path.write_text(
+                json.dumps(self.data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            tmp_path.replace(self.cache_path)
+        except Exception as exc:  # pragma: no cover - I/O 失敗時記錄
+            logger.warning(f"快取儲存失敗: {exc}")
 try:
     from opencc import OpenCC
 
@@ -701,133 +845,25 @@ class WikidataTranslator:
 
         # 初始化快取
         self.cache_path = Path(cache_path) if cache_path else None
+        self.cache_store = TranslationCacheStore(
+            source_lang=self.source_lang,
+            target_lang=self.target_lang,
+            cache_path=self.cache_path,
+        )
         self.cache = self._load_cache()
-        self._cache_dirty_count = 0
-        self._last_cache_flush = time.time()
 
     def _create_empty_cache(self) -> dict:
-        """建立空白快取結構。
+        """提供兼容舊測試的空白快取。"""
 
-        Returns:
-            新版快取結構（v1.1）
-        """
-        return {
-            "metadata": {
-                "source_lang": self.source_lang,
-                "target_lang": self.target_lang,
-                "created_at": datetime.now().isoformat(),
-                "version": "1.1",
-            },
-            "translations": {},
-            "cache": {
-                "search": {},
-                "labels": {},
-                "p131": {},
-                "instance_of": {},
-            },
-        }
+        return self.cache_store.create_empty()
 
     def _load_cache(self) -> dict:
-        """載入快取檔案。
+        """取得目前快取內容。"""
 
-        支援自動遷移舊版快取格式（v0.0）到新版（v1.0）。
-
-        Returns:
-            快取字典
-        """
-        if not self.cache_path or not self.cache_path.exists():
-            return self._create_empty_cache()
-
-        try:
-            cache = json.loads(self.cache_path.read_text(encoding="utf-8"))
-
-            # 檢查版本並自動遷移
-            version = cache.get("metadata", {}).get("version", "0.0")
-            if version == "0.0":
-                logger.info("偵測到舊版快取格式，正在自動遷移到 v1.0...")
-                cache = self._migrate_cache_v0_to_v1(cache)
-                # 立即儲存遷移後的快取
-                self.cache = cache
-                self._save_cache()
-                logger.info("快取遷移完成並已儲存")
-
-            return cache
-        except Exception as e:
-            logger.warning(f"快取載入失敗: {e}，將使用空白快取")
-            return self._create_empty_cache()
-
-    def _migrate_cache_v0_to_v1(self, old_cache: dict) -> dict:
-        """遷移舊版快取（v0.0）到新版（v1.0）。
-
-        舊版結構：所有資料混在 translations 中
-        新版結構：分層結構（translations + cache）
-
-        Args:
-            old_cache: 舊版快取字典
-
-        Returns:
-            新版快取字典
-        """
-        new_cache = self._create_empty_cache()
-
-        # 保留 metadata（如果有）
-        if "metadata" in old_cache:
-            new_cache["metadata"].update(old_cache["metadata"])
-        new_cache["metadata"]["version"] = "1.0"
-        new_cache["metadata"]["migrated_at"] = datetime.now().isoformat()
-
-        # 遍歷舊的 translations 並分類
-        old_translations = old_cache.get("translations", {})
-
-        for key, value in old_translations.items():
-            if key.startswith("search_"):
-                # 搜尋結果快取：search_제주특별자치도 → cache.search["제주특별자치도"]
-                name = key[7:]  # 移除 "search_" 前綴
-                new_cache["cache"]["search"][name] = value.get("qids", [])
-
-            elif key.startswith("labels_"):
-                # QID 標籤快取：labels_Q41164 → cache.labels["Q41164"]
-                qid = key[7:]  # 移除 "labels_" 前綴
-                new_cache["cache"]["labels"][qid] = value.get("labels", {})
-
-            elif key.startswith("p131_"):
-                # P131 驗證結果快取：p131_Q41164_Q884 → cache.p131["Q41164_Q884"]
-                relation_key = key[5:]  # 移除 "p131_" 前綴
-                new_cache["cache"]["p131"][relation_key] = value.get("result", False)
-
-            else:
-                # 最終翻譯結果：제주특별자치도 → translations["제주특별자치도"]
-                new_cache["translations"][key] = value
-
-        logger.info(
-            f"快取遷移統計: "
-            f"翻譯結果 {len(new_cache['translations'])} 筆, "
-            f"搜尋快取 {len(new_cache['cache']['search'])} 筆, "
-            f"標籤快取 {len(new_cache['cache']['labels'])} 筆, "
-            f"P131 快取 {len(new_cache['cache']['p131'])} 筆"
-        )
-
-        return new_cache
+        return self.cache_store.data
 
     def _save_cache(self) -> None:
-        """儲存快取檔案（使用原子寫入）。"""
-        if not self.cache_path:
-            return
-
-        try:
-            self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-
-            # Reason: 使用原子寫入（tmp + rename）防止寫入過程中斷導致快取損毀
-            tmp_path = self.cache_path.with_suffix(self.cache_path.suffix + ".tmp")
-            tmp_path.write_text(
-                json.dumps(self.cache, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            tmp_path.replace(self.cache_path)
-            self._cache_dirty_count = 0
-            self._last_cache_flush = time.time()
-
-        except Exception as e:
-            logger.warning(f"快取儲存失敗: {e}")
+        self.cache_store.save()
 
     def _flush_cache_if_needed(
         self,
@@ -838,23 +874,12 @@ class WikidataTranslator:
     ) -> None:
         """依照髒污次數或時間間隔決定是否儲存快取。"""
 
-        if not self.cache_path:
-            return
-
-        current_time = time.time()
-        if not force:
-            if self._cache_dirty_count < max_dirty and (
-                current_time - self._last_cache_flush
-            ) < max_interval:
-                return
-
-        self._save_cache()
-        self._cache_dirty_count = 0
-        self._last_cache_flush = current_time
+        self.cache_store.flush_if_needed(
+            force=force, max_dirty=max_dirty, max_interval=max_interval
+        )
 
     def _mark_cache_dirty(self) -> None:
-        self._cache_dirty_count += 1
-        self._flush_cache_if_needed()
+        self.cache_store.mark_dirty()
 
     def _request_json(
         self, url: str, params: dict | None = None, throttle: float = 0.0
@@ -950,25 +975,18 @@ class WikidataTranslator:
             logger.warning(f"Wikipedia 標題轉換失敗: {e}")
             return title
 
-    def _search_wikidata(self, name: str, limit: int = 7) -> list[str]:
-        """搜尋 Wikidata 實體（使用來源語言）。
+    def _search_wikidata(self, item: TranslationItem, limit: int = 7) -> list[str]:
+        """搜尋 Wikidata 實體，並以 context-aware key 快取結果。"""
 
-        Args:
-            name: 搜尋關鍵字
-            limit: 結果數量限制
-
-        Returns:
-            QID 列表
-        """
-        # 檢查快取（新路徑）
-        if name in self.cache.get("cache", {}).get("search", {}):
-            return self.cache["cache"]["search"][name]
+        cached_qids = self.cache_store.get_search_results(item)
+        if cached_qids is not None:
+            return cached_qids
 
         try:
             js = self._wd_api(
                 {
                     "action": "wbsearchentities",
-                    "search": name,
+                    "search": item.original_name,
                     "language": self.source_lang,
                     "uselang": self.source_lang,
                     "type": "item",
@@ -976,16 +994,13 @@ class WikidataTranslator:
                 }
             )
 
-            qids = [item["id"] for item in js.get("search", [])]
+            qids = [entry["id"] for entry in js.get("search", [])]
 
-            # 快取搜尋結果（新路徑）
-            self.cache.setdefault("cache", {}).setdefault("search", {})[name] = qids
-            self._mark_cache_dirty()
-
+            self.cache_store.set_search_results(item, qids)
             return qids
 
         except Exception as e:
-            logger.warning(f"Wikidata 搜尋失敗 ({name}): {e}")
+            logger.warning(f"Wikidata 搜尋失敗 ({item.original_name}): {e}")
             return []
 
     def _verify_p131(self, candidate_qid: str, parent_qid: str) -> bool:

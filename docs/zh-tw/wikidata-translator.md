@@ -314,33 +314,38 @@ translator.batch_translate(
 
 ## 快取機制
 
-WikidataTranslator 使用多層快取減少重複的 API 請求，大幅提升效能。
+WikidataTranslator 由 `TranslationCacheStore` 集中管理快取。所有翻譯結果與搜尋結果都採 **context-aware key**（`TranslationItem.id = level/parent_chain/name`），確保同名但不同父層的行政區擁有獨立快取。快取以 JSON 儲存（schema v2.0），尚未正式釋出前不保留向後相容性；若偵測到舊檔會自動備份並重新建立。
 
 ### 快取結構
 
-快取檔案採用 JSON 格式，包含 metadata（元資料）、translations（翻譯結果）和 cache（中間查詢結果）三大區塊：
-
-```json
+```jsonc
 {
   "metadata": {
+    "version": "2.0",
     "source_lang": "ja",
     "target_lang": "zh-tw",
-    "created_at": "2025-01-15T10:30:00",
-    "version": "1.1"
+    "created_at": "2025-11-15T10:30:00",
+    "last_compacted_at": null
   },
   "translations": {
-    "東京都": {
-      "translated": "東京都",
+    "admin_2/KR/首爾/城東區": {
+      "original_name": "城東區",
+      "translated": "城東區",
       "qid": "Q1490",
       "source": "wikidata",
       "used_lang": "zh-tw",
-      "parent_verified": false,
-      "cached_at": "2025-01-15T10:31:25"
+      "level": "admin_2",
+      "parent_chain": ["KR", "首爾"],
+      "parent_qid": "PARENT1",
+      "parent_verified": true,
+      "context_hash": "cf82b8c7",
+      "cached_at": "2025-11-15T10:31:25",
+      "ttl": null
     }
   },
   "cache": {
     "search": {
-      "東京都": ["Q1490", "Q123456"]
+      "admin_2/KR/首爾/城東區": ["Q1490", "Q123456"]
     },
     "labels": {
       "Q1490": {
@@ -355,41 +360,49 @@ WikidataTranslator 使用多層快取減少重複的 API 請求，大幅提升�
     "instance_of": {
       "Q1490": ["Q50337", "Q515"]
     }
+  },
+  "indexes": {
+    "by_name": {
+      "城東區": ["admin_2/KR/首爾/城東區", "admin_2/KR/京畿道/城東區"]
+    }
   }
 }
 ```
+
+> **注意**：context-aware 設計要求所有快取鍵均包含 `level + parent_chain + original_name`。升級至 v2.0 後會重新填滿整份快取（舊資料僅以 `.bak` 備份）。
 
 **快取層級說明**：
 
 | 層級 | 用途 | 快取鍵 | 快取值 |
 |------|------|--------|--------|
-| **metadata** | 快取檔案元資料 | - | 來源/目標語言、建立時間、版本 |
-| **translations** | 最終翻譯結果 | 地名 | 翻譯結果 + metadata |
-| **cache.search** | Wikidata 搜尋結果 | 地名 | QID 列表 |
+| **metadata** | 快取檔案元資料 | - | 來源/目標語言、建立時間、版本、壓縮紀錄 |
+| **translations** | 最終翻譯結果 | `TranslationItem.id` | 翻譯結果 + parent_chain + parent_qid + cached_at |
+| **cache.search** | Wikidata 搜尋結果 | `TranslationItem.id` | 候選 QID 列表（依父層切割） |
 | **cache.labels** | 實體的多語言標籤 | QID | {語言: 標籤} |
 | **cache.p131** | P131 驗證結果 | `{候選QID}_{父級QID}` | true/false |
 | **cache.instance_of** | P31 屬性（實例類型） | QID | [P31 QID 列表] |
+| **indexes.by_name** | 偵錯索引 | 地名 | 對應的 context-aware key 陣列 |
 
 **快取查詢優先順序**：
 
-1. **translations**：如果已有翻譯結果，直接返回（跳過所有查詢）
-2. **cache.search**：如果已搜尋過該地名，使用快取的 QID 列表
-3. **cache.labels**：如果已取得該 QID 的標籤，使用快取的標籤
-4. **cache.p131**：如果已驗證過該層級關係，使用快取的驗證結果
-5. **cache.instance_of**：如果已取得該 QID 的 P31，使用快取的類型資訊
+1. **translations**：命中即返回，避免重複查詢與驗證
+2. **cache.search**：同名不同父層擁有獨立候選列表
+3. **cache.labels**：沿用既有 QID 標籤，減少 `wbgetentities` 請求
+4. **cache.p131**：記錄 `候選QID → 父層 QID` 驗證結果
+5. **cache.instance_of**：提供候選過濾器使用的 P31 類型資訊
 
 ### 快取同步策略
 
-為了避免長時間處理（例如 Admin 2）中途被中斷時，前幾百筆查詢成果遺失，翻譯器採用「隨寫隨沖」（Write-Through with Deferred Flush）策略：
+為了避免長時間處理（例如 Admin 2）中途被中斷時，前幾百筆查詢成果遺失，`TranslationCacheStore` 採用「隨寫隨沖」（Write-Through with Deferred Flush）策略：
 
 **觸發機制**：
 
-1. 任何快取寫入（搜尋、標籤、P31、P131、翻譯結果）都會在記憶體更新後呼叫 `_mark_cache_dirty()`
-2. `_mark_cache_dirty()` 累計髒污筆數並自動檢查是否需要同步
-3. 達到以下**任一條件**時自動執行 `_save_cache()`：
+1. 任何快取寫入（搜尋、標籤、P31、P131、翻譯結果）都會在記憶體更新後呼叫 store 的 `mark_dirty()`
+2. `mark_dirty()` 累計髒污筆數並自動檢查是否需要同步
+3. 達到以下**任一條件**時自動執行 `save()`：
    - 累計達 **20 筆**髒污資料
    - 距離上次儲存超過 **30 秒**
-4. `BatchTranslationRunner` 在階段 3 完成時強制執行最後一次同步
+4. `BatchTranslationRunner` 在階段 3 完成時請求 store 強制執行最後一次同步
 
 **優勢**：
 - **容錯性提升**：即便翻譯過程中遭遇網路中斷或手動終止，也只會損失最後極少數尚未 flush 的筆數
