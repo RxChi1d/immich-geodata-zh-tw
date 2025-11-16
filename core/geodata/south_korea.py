@@ -580,6 +580,32 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
                 ]
             )
 
+            # 針對光州移除 Wikidata 消歧義括號
+            # Reason: 光州的東區/西區在 Wikidata 中帶有 "(光州)" 消歧義標記，
+            #         但 admin_1 已經標明是「光州」，不需要重複標註
+            gwangju_parent = "광주광역시"
+            gwangju_df_before = df.filter(pl.col("sidonm") == gwangju_parent)
+
+            # 統計處理前有括號的記錄數
+            disambig_count_before = gwangju_df_before.filter(
+                pl.col("chinese_admin_2").str.contains(r"\([^)]+\)")
+            ).height
+
+            df = df.with_columns(
+                pl.when(pl.col("sidonm") == gwangju_parent)
+                .then(
+                    pl.col("chinese_admin_2").str.replace_all(r"\s*\([^)]+\)\s*$", "")
+                )
+                .otherwise(pl.col("chinese_admin_2"))
+                .alias("chinese_admin_2")
+            )
+
+            # 統計移除的消歧義標記數量
+            if disambig_count_before > 0:
+                logger.info(
+                    f"已移除光州 {disambig_count_before} 筆 Admin_2 的 Wikidata 消歧義括號"
+                )
+
             # 顯示翻譯統計
             logger.info(f"Admin_1 翻譯數量: {len(admin1_map)}")
             logger.info(f"Admin_2 翻譯數量: {len(admin2_lookup)}")
