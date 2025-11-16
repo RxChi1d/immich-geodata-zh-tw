@@ -573,6 +573,7 @@ class BatchTranslationRunner:
                     **result,
                     "cached_at": datetime.now().isoformat(),
                 }
+                self.translator._mark_cache_dirty()
                 fallback_count += 1
                 continue
 
@@ -609,6 +610,7 @@ class BatchTranslationRunner:
                 **result,
                 "cached_at": datetime.now().isoformat(),
             }
+            self.translator._mark_cache_dirty()
 
             if result_bar is not None:
                 result_bar.update(1)
@@ -616,7 +618,7 @@ class BatchTranslationRunner:
         if result_bar is not None:
             result_bar.close()
 
-        self.translator._save_cache()
+        self.translator._flush_cache_if_needed(force=True)
         logger.info(
             f"{dataset.level.value.upper()} 批次翻譯完成：成功 {success_count}，回退 {fallback_count}，總筆數 {dataset.total}"
         )
@@ -700,6 +702,8 @@ class WikidataTranslator:
         # 初始化快取
         self.cache_path = Path(cache_path) if cache_path else None
         self.cache = self._load_cache()
+        self._cache_dirty_count = 0
+        self._last_cache_flush = time.time()
 
     def _create_empty_cache(self) -> dict:
         """建立空白快取結構。
@@ -819,9 +823,38 @@ class WikidataTranslator:
                 json.dumps(self.cache, ensure_ascii=False, indent=2), encoding="utf-8"
             )
             tmp_path.replace(self.cache_path)
+            self._cache_dirty_count = 0
+            self._last_cache_flush = time.time()
 
         except Exception as e:
             logger.warning(f"快取儲存失敗: {e}")
+
+    def _flush_cache_if_needed(
+        self,
+        *,
+        force: bool = False,
+        max_dirty: int = 20,
+        max_interval: float = 30.0,
+    ) -> None:
+        """依照髒污次數或時間間隔決定是否儲存快取。"""
+
+        if not self.cache_path:
+            return
+
+        current_time = time.time()
+        if not force:
+            if self._cache_dirty_count < max_dirty and (
+                current_time - self._last_cache_flush
+            ) < max_interval:
+                return
+
+        self._save_cache()
+        self._cache_dirty_count = 0
+        self._last_cache_flush = current_time
+
+    def _mark_cache_dirty(self) -> None:
+        self._cache_dirty_count += 1
+        self._flush_cache_if_needed()
 
     def _request_json(
         self, url: str, params: dict | None = None, throttle: float = 0.0
@@ -947,6 +980,7 @@ class WikidataTranslator:
 
             # 快取搜尋結果（新路徑）
             self.cache.setdefault("cache", {}).setdefault("search", {})[name] = qids
+            self._mark_cache_dirty()
 
             return qids
 
@@ -978,6 +1012,7 @@ class WikidataTranslator:
             self.cache.setdefault("cache", {}).setdefault("p131", {})[cache_key] = (
                 answer
             )
+            self._mark_cache_dirty()
 
             return answer
 
@@ -1026,6 +1061,7 @@ class WikidataTranslator:
 
             # 快取標籤（新路徑）
             self.cache.setdefault("cache", {}).setdefault("labels", {})[qid] = labels
+            self._mark_cache_dirty()
 
             return labels
 
@@ -1104,6 +1140,7 @@ class WikidataTranslator:
                         self.cache.setdefault("cache", {}).setdefault("labels", {})[
                             qid
                         ] = labels
+                        self._mark_cache_dirty()
 
                     logger.debug(
                         f"批次 {i // batch_size + 1}: 成功查詢 {len(batch)} 個 QID"
@@ -1189,6 +1226,7 @@ class WikidataTranslator:
                         self.cache.setdefault("cache", {}).setdefault(
                             "instance_of", {}
                         )[qid] = instance_of_qids
+                        self._mark_cache_dirty()
 
                     logger.debug(
                         f"批次 {i // batch_size + 1}: 成功查詢 {len(batch)} 個 QID 的 P31"
