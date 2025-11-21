@@ -620,7 +620,7 @@ class BatchTranslationRunner:
 class TranslationCacheStore:
     """集中管理 WikidataTranslator 使用的快取。"""
 
-    VERSION = "2.0"
+    VERSION = "1.0"
 
     def __init__(
         self,
@@ -769,6 +769,8 @@ class TranslationCacheStore:
             tmp_path.replace(self.cache_path)
         except Exception as exc:  # pragma: no cover - I/O 失敗時記錄
             logger.warning(f"快取儲存失敗: {exc}")
+
+
 try:
     from opencc import OpenCC
 

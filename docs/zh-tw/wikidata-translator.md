@@ -11,6 +11,7 @@
   - [核心功能](#核心功能)
   - [翻譯流程](#翻譯流程)
     - [批次翻譯流程](#批次翻譯流程)
+      - [資料集與進度控制](#資料集與進度控制)
     - [單一翻譯介面](#單一翻譯介面)
   - [翻譯策略](#翻譯策略)
     - [多層回退機制](#多層回退機制)
@@ -314,14 +315,16 @@ translator.batch_translate(
 
 ## 快取機制
 
-WikidataTranslator 由 `TranslationCacheStore` 集中管理快取。所有翻譯結果與搜尋結果都採 **context-aware key**（`TranslationItem.id = level/parent_chain/name`），確保同名但不同父層的行政區擁有獨立快取。快取以 JSON 儲存（schema v2.0），尚未正式釋出前不保留向後相容性；若偵測到舊檔會自動備份並重新建立。
+WikidataTranslator 由 `TranslationCacheStore` 集中管理快取。所有翻譯結果與搜尋結果都採 **context-aware key**（`TranslationItem.id = level/parent_chain/name`），確保同名但不同父層的行政區擁有獨立快取。快取以 JSON 儲存（cache schema v1.0），若偵測到舊版會自動備份並重新建立。
+
+> **版本說明**：快取 schema 版本是資料格式版本，與專案發布版本獨立。只有在快取資料結構不相容時才會升級 schema 版本。
 
 ### 快取結構
 
 ```jsonc
 {
   "metadata": {
-    "version": "2.0",
+    "version": "1.0",
     "source_lang": "ja",
     "target_lang": "zh-tw",
     "created_at": "2025-11-15T10:30:00",
@@ -369,7 +372,7 @@ WikidataTranslator 由 `TranslationCacheStore` 集中管理快取。所有翻譯
 }
 ```
 
-> **注意**：context-aware 設計要求所有快取鍵均包含 `level + parent_chain + original_name`。升級至 v2.0 後會重新填滿整份快取（舊資料僅以 `.bak` 備份）。
+> **注意**：context-aware 設計要求所有快取鍵均包含 `level + parent_chain + original_name`。升級至 v1.0 後會重新填滿整份快取（舊資料僅以 `.bak` 備份）。
 
 **快取層級說明**：
 
