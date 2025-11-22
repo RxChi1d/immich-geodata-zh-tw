@@ -58,11 +58,7 @@ The pipeline trusts the NLSC source without additional transformations:
 
 - Rows with missing coordinates are filtered out
 - Object columns are normalized to strings to keep the CSV consistent
-
-### Output Ordering
-
-- The resulting CSV is sorted by `country → admin_1 → admin_2`
-- Sorting makes version control diffs and manual reviews easier
+- Uses base class shared method for sorting and standardized output
 
 ## Processing Workflow
 

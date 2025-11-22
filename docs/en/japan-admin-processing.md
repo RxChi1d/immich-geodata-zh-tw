@@ -79,13 +79,10 @@ Different administrative categories have distinct display rules to balance reada
 - Uses adaptive UTM zones combined with an Albers projection to compute centroids
 - Coordinates are converted back to WGS84 and rounded to eight decimal places
 
-### Data Cleaning
+### Data Cleaning and Output
 
 - Trims empty strings and `None` values from `N03_003`, `N03_004`, and `N03_005` before applying the rules
-
-### Output Ordering
-
-- Final CSV output is sorted by `country → admin_1 → admin_2`
+- Uses base class shared method for sorting and standardized output
 
 ## Processing Workflow
 
