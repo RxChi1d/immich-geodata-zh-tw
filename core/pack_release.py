@@ -63,6 +63,17 @@ def pack(output_dir):
             logger.error(f"複製 {src} 失敗！退出。")
             exit(1)
 
+    # 將更新腳本也打包，讓使用者可從 release 取得穩定版本
+    script_src = "update_data.sh"
+    script_dst = os.path.join(release_dir, "update_data.sh")
+
+    try:
+        shutil.copy(script_src, script_dst)
+        logger.info(f"複製 {script_src} 到 {script_dst} 成功")
+    except IOError:
+        logger.error(f"複製 {script_src} 失敗！退出。")
+        exit(1)
+
     # 建立 geodata-date.txt 檔案
     date_file = os.path.join(geodata_dir, "geodata-date.txt")
     with open(date_file, "w") as f:

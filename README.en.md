@@ -1,11 +1,8 @@
 # Immich Reverse Geocoding - Taiwan Localization  
 
 > [!IMPORTANT]
-> Upgrade notice: If you already deploy this project and your media library includes photos taken in Japan, please run "[Re-extract photo metadata](#integrated-deployment-recommended-convenient-for-future-updates)" after upgrading to v2.0.0 to apply the latest Japanese dataset.
-
-> [!WARNING]
-> If you still use `exec /bin/bash start.sh` as the `entrypoint` in an integrated deployment, Immich 1.142.0+ will fail on startup with `Error: /usr/src/dist/main.js not found` and enter a reboot loop.
-> Switch to `exec start.sh` instead (see [Integrated Deployment](#integrated-deployment-recommended-convenient-for-future-updates) for the updated example and notes).
+> - Upgrade notice: If you already deploy this project and your media library includes photos taken in Japan and South Korea, please run "[Re-extract photo metadata](#integrated-deployment-recommended-convenient-for-future-updates)" after upgrading to v2.2.0 to apply the latest Japanese dataset.
+> - Starting on v2.2.0 every release bundles `update_data.sh`. Please point automation to the release-hosted script so it matches the published dataset; the repository copy stays for reference but the release artifact should be the source of truth.
 
 [繁體中文](README.md) | [English](README.en.md)
 
@@ -122,7 +119,7 @@ This project supports the following two deployment methods:
 
       # Other configurations omitted
 
-      entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/update_data.sh) --install && exec start.sh" ]
+      entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install && exec start.sh" ]
    ```  
    > [!NOTE]
    > - The `entrypoint` will first execute this project's `update_data.sh` script when the container starts, automatically downloading and configuring Taiwan localization data, then execute Immich server's `start.sh` to start the service.
@@ -158,7 +155,7 @@ This project supports the following two deployment methods:
    Two download methods are provided:  
        
    (1) **Automatic download**  
-      Refer to the `update_data.sh` script in this project, modify `DOWNLOAD_DIR` to the folder path storing geodata and i18n-iso-countries, and execute the script:  
+      Refer to the `update_data.sh` script in this project, modify `DOWNLOAD_DIR` to the folder storing geodata and i18n-iso-countries, and execute the script:  
       ```bash
       bash update_data.sh
       ```  
@@ -184,9 +181,9 @@ Please go to this project's [Releases page](https://github.com/RxChi1d/immich-ge
 1.  **Integrated Deployment (`entrypoint` in `docker-compose.yml`)**
     Add `--tag <tag_name>` after the entrypoint command:
     ```yaml
-    entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/update_data.sh) --install --tag <tag_name> && exec start.sh" ] 
+    entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/download/<tag_name>/update_data.sh) --install --tag <tag_name> && exec start.sh" ] 
     ```
-    Replace `<tag_name>` with the specific tag name you want to download. If `--tag` is omitted, the latest release (`latest`) is downloaded by default.
+    Replace `<tag_name>` in both places with the specific tag name you want to download. If `--tag` is omitted, the latest release (`latest`) is downloaded by default.
 
 2.  **Manual Deployment (`update_data.sh`)**
     Add `--tag <tag_name>` when executing the script:
