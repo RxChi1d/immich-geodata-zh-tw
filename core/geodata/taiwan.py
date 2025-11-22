@@ -2,7 +2,6 @@
 
 import polars as pl
 import geopandas as gpd
-from pathlib import Path
 
 from core.utils import logger
 from core.geodata.base import GeoDataHandler, register_handler
@@ -94,27 +93,8 @@ class TaiwanGeoDataHandler(GeoDataHandler):
                 ]
             )
 
-            # 按照 country, admin_1, admin_2 進行排序
-            df = df.sort(["country", "admin_1", "admin_2"])
-
-            # 移除無效的資料點
-            df = df.filter(
-                pl.col("longitude").is_not_null() & pl.col("latitude").is_not_null()
-            )
-
-            # 固定經緯度小數位數以確保輸出穩定性
-            df = self.standardize_coordinate_precision(df)
-
-            # 儲存 CSV
-            output_path = Path(output_csv)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-
-            logger.info(f"正在儲存 CSV 檔案: {output_path}")
-            df.write_csv(output_path)
-            logger.info(f"成功儲存 CSV 檔案，共 {len(df)} 筆資料")
-
-            # 顯示前五筆資料供檢查
-            logger.info(df.head(5))
+            # 標準化並儲存 CSV
+            self._save_extract_csv(df, output_csv)
 
         except Exception as e:
             logger.error(f"處理 Shapefile 時發生錯誤: {e}")

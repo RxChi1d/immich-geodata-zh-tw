@@ -1,6 +1,7 @@
 """地理資料處理器抽象基類（ETL 模式）。"""
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 import polars as pl
 from core.utils import logger, fill_admin_columns
 from core.schemas import ADMIN1_SCHEMA, GEODATA_SCHEMA, CITIES_SCHEMA
@@ -224,6 +225,135 @@ class GeoDataHandler(ABC):
             .round(cls.COORD_DECIMAL_PLACES)
             .alias(longitude_column),
         )
+
+    @staticmethod
+    def get_diverse_sample(
+        df: pl.DataFrame,
+        n: int = 5,
+    ) -> pl.DataFrame:
+        """取得多樣化的資料樣本（階層式去重）。
+
+        使用階層式去重策略，優先確保不同的省/道/市（admin_1），
+        資料不足時才使用更細的層級（admin_2, admin_3, admin_4）。
+
+        階層式邏輯：
+        1. 先用 admin_1 去重，如果結果 >= n，回傳前 n 筆
+        2. 如果不足，用 admin_1 + admin_2 去重，如果結果 >= n，回傳前 n 筆
+        3. 依此類推到 admin_3, admin_4
+        4. 如果所有層級都不足 n 筆，回傳所有去重後的結果
+
+        Args:
+            df: 來源 DataFrame。
+            n: 要取樣的資料筆數（預設 5）。
+
+        Returns:
+            包含最多 n 筆多樣化資料的 DataFrame。
+
+        Examples:
+            >>> # 5 個不同的 admin_1，n=5 → 回傳 5 筆（每個 admin_1 一筆）
+            >>> df = pl.DataFrame({
+            ...     "admin_1": ["台北市", "新北市", "台中市", "台南市", "高雄市"],
+            ...     "admin_2": ["中正區", "板橋區", "西屯區", "東區", "前金區"],
+            ... })
+            >>> result = GeoDataHandler.get_diverse_sample(df, n=5)
+            >>> len(result)
+            5
+
+            >>> # 3 個 admin_1，n=5 → 先用 admin_1 得 3 筆，不足，
+            >>> # 改用 admin_1+admin_2 得 5 筆
+            >>> df = pl.DataFrame({
+            ...     "admin_1": ["台北市", "台北市", "新北市", "新北市", "台中市"],
+            ...     "admin_2": ["中正區", "大安區", "板橋區", "新莊區", "西屯區"],
+            ... })
+            >>> result = GeoDataHandler.get_diverse_sample(df, n=5)
+            >>> len(result)
+            5
+        """
+        # 固定使用 admin_1-4 的階層式去重
+        diversity_columns = ["admin_1", "admin_2", "admin_3", "admin_4"]
+
+        # 過濾掉不存在於 DataFrame 中的欄位
+        available_columns = [col for col in diversity_columns if col in df.columns]
+
+        # 如果沒有可用的去重欄位，直接回傳前 n 筆
+        if not available_columns:
+            return df.head(n)
+
+        # 階層式去重：從最粗粒度（admin_1）開始，逐步擴展到更細的層級
+        for level in range(1, len(available_columns) + 1):
+            # 當前層級的 subset（例如：["admin_1"], ["admin_1", "admin_2"], ...）
+            subset = available_columns[:level]
+
+            # 使用當前層級的欄位組合進行去重
+            result = df.unique(subset=subset, keep="first")
+
+            # 如果這個層級的 unique 結果已經 >= n，就使用它
+            if len(result) >= n:
+                return result.head(n)
+
+        # 如果所有層級都不足 n 筆，回傳所有去重後的結果
+        return result
+
+    def _save_extract_csv(
+        self,
+        df: pl.DataFrame,
+        output_csv: str,
+        sort_columns: list[str] | None = None,
+    ) -> None:
+        """標準化並儲存 extract 階段產生的 CSV 檔案。
+
+        執行標準收尾步驟：
+        1. 全欄位排序
+        2. 移除無效座標
+        3. 標準化座標精度
+        4. 建立輸出目錄
+        5. 寫入 CSV
+        6. 記錄日誌
+        7. 顯示前五筆資料
+
+        Args:
+            df: 待儲存的 DataFrame。
+            output_csv: 輸出 CSV 檔案路徑。
+            sort_columns: 排序欄位列表。預設為完整欄位順序。
+
+        Raises:
+            Exception: 儲存過程中發生的任何錯誤。
+        """
+        # 預設排序欄位
+        if sort_columns is None:
+            sort_columns = [
+                "latitude",
+                "longitude",
+                "country",
+                "admin_1",
+                "admin_2",
+                "admin_3",
+                "admin_4",
+            ]
+
+        # 全欄位排序可在資料更新時最小化 git diff，便於版本追蹤
+        df = df.sort(sort_columns)
+
+        # 移除無效的資料點
+        df = df.filter(
+            pl.col("longitude").is_not_null() & pl.col("latitude").is_not_null()
+        )
+
+        # 固定經緯度小數位數以確保輸出穩定性
+        df = self.standardize_coordinate_precision(df)
+
+        # 儲存 CSV
+        output_path = Path(output_csv)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"正在儲存 CSV 檔案: {output_path}")
+        df.write_csv(output_path)
+        logger.info(f"成功儲存 CSV 檔案，共 {len(df)} 筆資料")
+
+        # 顯示多樣化的資料樣本供檢查
+        sample_df = self.get_diverse_sample(df, n=5)
+        logger.info("資料預覽（多樣化取樣）：")
+        logger.info(sample_df)
 
     @classmethod
     def prepare_cities_source(cls, df: pl.DataFrame) -> pl.DataFrame:
