@@ -27,20 +27,24 @@
 
 ## [未發佈版本]
 
+---
+
+## [2.2.0] - 2025-11-22
+
 ### Added
 - **Wikidata 翻譯工具**：通用地名翻譯引擎，支援 P131 驗證、P31 過濾、多語言回退與 OpenCC，並使用 Context-Aware Cache（`TranslationCacheStore`）將翻譯結果、搜尋結果依 `TranslationItem.id` 獨立儲存，確保同名不同父層的行政區在搜尋、驗證、快取各階段完全隔離。
 - **翻譯可追溯性**：翻譯結果包含實際使用語言、QID、父層驗證狀態與時間戳記，提升除錯與品質分析能力。
 - **南韓地理資料處理器**：從 admdongkor 專案提取官方行政區邊界並自動翻譯為繁體中文。廣域市統一加「市」字（首爾市、釜山市），濟州道區分濟州市，世宗市採用業界通用譯名（大平洞、賽倫洞等）。自動拆分「市＋區/郡」，支援特殊行政結構。
+- **資料來源授權聲明**：新增 NOTICE.md 完整聲明第三方資料授權，符合 GeoNames (CC-BY 4.0) 與 OpenStreetMap (ODbL 1.0) 等授權要求。
 
 ### Changed
 - **Release 套件一致性**：release 壓縮檔與 README/README.en 現在都改為指向 release 內的 `update_data.sh`，避免使用者拉取 main 分支腳本造成版本不一致。
-- **資料來源授權聲明**：新增 NOTICE.md 完整聲明第三方資料授權,符合 GeoNames (CC-BY 4.0) 與 OpenStreetMap (ODbL 1.0) 等授權要求
-- **LocationIQ QPS 預設值**：從 1 調整為 2，提升資料處理效率
+- **LocationIQ QPS 預設值**：從 1 調整為 2，提升資料處理效率。
 - **GeoData 欄位順序**：統一 GEODATA_SCHEMA、各國 Handler 與 LocationIQ 流程，並將欄位實際順序調整為 `latitude, longitude, country, admin_1, admin_2, admin_3, admin_4`，同時更新 meta_data CSV 與文件，確保所有 ETL 階段與翻譯腳本依此排列讀寫。
 - **Admin 欄位缺值處理**：meta_data CSV 在產生時保留 Null，不再強制輸出空白字串，並於讀取階段透過共用的 `fill_admin_columns()` 將 `admin_1-4` 的缺值統一補為空字串，避免 Polars 將空欄解析成 `None` 造成翻譯流程異常。
-- **Extract 儲存邏輯**：重構為共用方法，消除重複程式碼
-- **Extract CSV 排序策略**：擴充至全欄位排序（latitude, longitude, country, admin_1-4），優化版本追蹤效果，同一行政區資料聚集在一起，提升可讀性
-- **資料預覽多樣化**：Extract 完成後採用階層式去重策略，優先確保不同省/道/市（admin_1），資料不足時才顯示同一省內的不同市/區，最大化地理區域代表性
+- **Extract 儲存邏輯**：重構為共用方法，消除重複程式碼。
+- **Extract CSV 排序策略**：擴充至全欄位排序（latitude, longitude, country, admin_1-4），優化版本追蹤效果，同一行政區資料聚集在一起，提升可讀性。
+- **資料預覽多樣化**：Extract 完成後採用階層式去重策略，優先確保不同省/道/市（admin_1），資料不足時才顯示同一省內的不同市/區，最大化地理區域代表性。
 
 ---
 
@@ -216,7 +220,8 @@
 
 特定變更的詳細資訊請參閱 [提交歷史](https://github.com/RxChi1d/immich-geodata-zh-tw/commits/main) 或 [發佈頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases)。
 
-[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.1.0...HEAD
+[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.2...v2.0.0
 [1.2.2]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.1...v1.2.2
