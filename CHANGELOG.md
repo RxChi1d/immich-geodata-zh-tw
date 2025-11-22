@@ -33,6 +33,7 @@
 - **南韓地理資料處理器**：完整 ETL 流程整合同步翻譯，提供廣域市/道繁中對照、自動拆分「市＋區/郡」、Admin 4 備援邏輯與客製候選過濾器（`시청/도청/군청/구청/교육청` 等），並針對世宗特別自治市等特殊結構最佳化。
 
 ### Changed
+- **Release 套件一致性**：release 壓縮檔與 README/README.en 現在都改為指向 release 內的 `update_data.sh`，避免使用者拉取 main 分支腳本造成版本不一致。
 - **資料來源授權聲明**：新增 NOTICE.md 完整聲明第三方資料授權,符合 GeoNames (CC-BY 4.0) 與 OpenStreetMap (ODbL 1.0) 等授權要求
 - **LocationIQ QPS 預設值**：從 1 調整為 2，提升資料處理效率
 - **GeoData 欄位順序**：統一 GEODATA_SCHEMA、各國 Handler 與 LocationIQ 流程，並將欄位實際順序調整為 `latitude, longitude, country, admin_1, admin_2, admin_3, admin_4`，同時更新 meta_data CSV 與文件，確保所有 ETL 階段與翻譯腳本依此排列讀寫。

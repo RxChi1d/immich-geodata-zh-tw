@@ -1,11 +1,8 @@
 # Immich 反向地理編碼 - 臺灣特化  
 
 > [!IMPORTANT]
-> 升級提醒：若您已部署本專案且媒體庫含有日本地區照片，請在更新至 v2.0.0 後執行「[重新擷取照片中繼資料](#整合式部署推薦方便後續更新)」，以套用最新的日本資料。
-
-> [!WARNING]
-> 若整合式部署仍使用 `exec /bin/bash start.sh` 作為 `entrypoint`，Immich 1.142.0 起會在啟動時顯示 `Error: /usr/src/dist/main.js not found` 並陷入重啟循環。
-> 請改用 `exec start.sh`（[整合式部署](#整合式部署推薦方便後續更新)章節提供更新後的範例與說明）。
+> - 升級提醒：若您已部署本專案且媒體庫含有日本、南韓地區照片，請在更新至 v2.2.0 後執行「[重新擷取照片中繼資料](#整合式部署推薦方便後續更新)」，以套用最新的日本資料。
+> - 從 v2.2.0 起每個 release 都會附帶 `update_data.sh`，建議改用 release 內的腳本路徑以確保和釋出的資料一致；儘管倉庫內仍保留同名檔案，但以 release 版本為主。
 
 [繁體中文](README.md) | [English](README.en.md)
 
@@ -117,7 +114,7 @@
 
       # 其他配置省略
 
-      entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/update_data.sh) --install && exec start.sh" ]
+      entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install && exec start.sh" ]
    ```  
    > [!NOTE]
    > - `entrypoint` 會在容器啟動時先執行本專案的 `update_data.sh` 腳本，自動下載並配置臺灣特化資料，隨後執行 Immich 伺服器的 `start.sh` 啟動服務。
@@ -179,9 +176,9 @@
 1.  **整合式部署 (`docker-compose.yml` 中的 `entrypoint`)**
     在 `entrypoint` 的指令後面加上 `--tag <tag_name>`：
     ```yaml
-    entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://raw.githubusercontent.com/RxChi1d/immich-geodata-zh-tw/refs/heads/main/update_data.sh) --install --tag <tag_name> && exec start.sh" ] 
+    entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/download/<tag_name>/update_data.sh) --install --tag <tag_name> && exec start.sh" ] 
     ```
-    將 `<tag_name>` 替換為你想要下載的具體 tag 名稱。如果省略 `--tag`，則預設下載最新的 release (`latest`)。
+    將 `<tag_name>` 分別替換為你想要下載的具體 tag 名稱。如果省略 `--tag`，則預設下載最新的 release (`latest`)。
 
 2.  **手動部署 (`update_data.sh`)**
     執行腳本時加上 `--tag <tag_name>`：
