@@ -322,13 +322,13 @@ class GeoDataHandler(ABC):
         # 預設排序欄位
         if sort_columns is None:
             sort_columns = [
-                "latitude",
-                "longitude",
                 "country",
                 "admin_1",
                 "admin_2",
                 "admin_3",
                 "admin_4",
+                "latitude",
+                "longitude",
             ]
 
         # 全欄位排序可在資料更新時最小化 git diff，便於版本追蹤
