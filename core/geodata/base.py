@@ -230,33 +230,47 @@ class GeoDataHandler(ABC):
     def get_diverse_sample(
         df: pl.DataFrame,
         n: int = 5,
-        diversity_columns: list[str] | None = None,
     ) -> pl.DataFrame:
-        """取得多樣化的資料樣本。
+        """取得多樣化的資料樣本（階層式去重）。
 
-        從 DataFrame 中選取指定數量的資料，確保這些資料在指定欄位的組合上
-        盡可能不重複，以提供更具代表性的預覽。
+        使用階層式去重策略，優先確保不同的省/道/市（admin_1），
+        資料不足時才使用更細的層級（admin_2, admin_3, admin_4）。
+
+        階層式邏輯：
+        1. 先用 admin_1 去重，如果結果 >= n，回傳前 n 筆
+        2. 如果不足，用 admin_1 + admin_2 去重，如果結果 >= n，回傳前 n 筆
+        3. 依此類推到 admin_3, admin_4
+        4. 如果所有層級都不足 n 筆，回傳所有去重後的結果
 
         Args:
             df: 來源 DataFrame。
             n: 要取樣的資料筆數（預設 5）。
-            diversity_columns: 用於去重的欄位列表。
-                預設為 ["admin_1", "admin_2", "admin_3", "admin_4"]。
 
         Returns:
             包含最多 n 筆多樣化資料的 DataFrame。
 
         Examples:
+            >>> # 5 個不同的 admin_1，n=5 → 回傳 5 筆（每個 admin_1 一筆）
             >>> df = pl.DataFrame({
-            ...     "admin_1": ["台北市", "台北市", "新北市"],
-            ...     "admin_2": ["中正區", "中正區", "板橋區"],
+            ...     "admin_1": ["台北市", "新北市", "台中市", "台南市", "高雄市"],
+            ...     "admin_2": ["中正區", "板橋區", "西屯區", "東區", "前金區"],
             ... })
             >>> result = GeoDataHandler.get_diverse_sample(df, n=5)
             >>> len(result)
-            2
+            5
+
+            >>> # 3 個 admin_1，n=5 → 先用 admin_1 得 3 筆，不足，
+            >>> # 改用 admin_1+admin_2 得 5 筆
+            >>> df = pl.DataFrame({
+            ...     "admin_1": ["台北市", "台北市", "新北市", "新北市", "台中市"],
+            ...     "admin_2": ["中正區", "大安區", "板橋區", "新莊區", "西屯區"],
+            ... })
+            >>> result = GeoDataHandler.get_diverse_sample(df, n=5)
+            >>> len(result)
+            5
         """
-        if diversity_columns is None:
-            diversity_columns = ["admin_1", "admin_2", "admin_3", "admin_4"]
+        # 固定使用 admin_1-4 的階層式去重
+        diversity_columns = ["admin_1", "admin_2", "admin_3", "admin_4"]
 
         # 過濾掉不存在於 DataFrame 中的欄位
         available_columns = [col for col in diversity_columns if col in df.columns]
@@ -265,11 +279,20 @@ class GeoDataHandler(ABC):
         if not available_columns:
             return df.head(n)
 
-        # 使用 unique 去除重複組合，保留第一筆
-        diverse_df = df.unique(subset=available_columns, keep="first")
+        # 階層式去重：從最粗粒度（admin_1）開始，逐步擴展到更細的層級
+        for level in range(1, len(available_columns) + 1):
+            # 當前層級的 subset（例如：["admin_1"], ["admin_1", "admin_2"], ...）
+            subset = available_columns[:level]
 
-        # 回傳前 n 筆
-        return diverse_df.head(n)
+            # 使用當前層級的欄位組合進行去重
+            result = df.unique(subset=subset, keep="first")
+
+            # 如果這個層級的 unique 結果已經 >= n，就使用它
+            if len(result) >= n:
+                return result.head(n)
+
+        # 如果所有層級都不足 n 筆，回傳所有去重後的結果
+        return result
 
     def _save_extract_csv(
         self,

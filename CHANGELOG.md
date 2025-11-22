@@ -39,7 +39,7 @@
 - **Admin 欄位缺值處理**：meta_data CSV 在產生時保留 Null，不再強制輸出空白字串，並於讀取階段透過共用的 `fill_admin_columns()` 將 `admin_1-4` 的缺值統一補為空字串，避免 Polars 將空欄解析成 `None` 造成翻譯流程異常。
 - **Extract 儲存邏輯**：重構為共用方法，消除重複程式碼
 - **Extract CSV 排序**：擴充至全欄位排序（latitude, longitude, country, admin_1-4），優化版本追蹤效果
-- **資料預覽多樣化**：Extract 完成後顯示多樣化取樣（去除 admin 組合重複），提升檢視代表性
+- **資料預覽多樣化**：Extract 完成後採用階層式去重策略，優先確保不同省/道/市（admin_1），資料不足時才顯示同一省內的不同市/區，最大化地理區域代表性
 
 ---
 
