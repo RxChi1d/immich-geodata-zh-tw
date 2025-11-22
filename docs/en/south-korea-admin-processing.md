@@ -211,6 +211,48 @@ Roughly 239 duplicates exist, but Immich usually displays up to Admin 2.
 
 **Strategy**: keep the Korean labels.
 
+### Disambiguation Parentheses Removal
+
+Some place names in Wikidata include disambiguation parentheses (e.g., "東區 (光州)"). In this project's data structure, `admin_1` already identifies the parent region, so `admin_2` does not need to repeat this information.
+
+#### Gwangju-Specific Processing
+
+Gwangju's Dong-gu (East District) and Seo-gu (West District) have disambiguation markers in their Traditional Chinese Wikidata labels:
+
+- `동구` → 東區 (光州)
+- `서구` → 西區 (光州)
+
+**Issue**:
+- Other cities (Busan, Daegu, Incheon, Daejeon, Ulsan) with identically-named districts do not have parentheses
+- Creates naming inconsistencies
+- Immich displays redundant information: "Gwangju > Dong District (Gwangju)"
+
+**Processing logic**:
+
+After translation completes, remove trailing disambiguation parentheses from Gwangju's Admin 2 records:
+
+```python
+# Only process Gwangju (광주광역시) records
+gwangju_parent = "광주광역시"
+df = df.with_columns(
+    pl.when(pl.col("sidonm") == gwangju_parent)
+    .then(pl.col("chinese_admin_2").str.replace_all(r"\s*\([^)]+\)\s*$", ""))
+    .otherwise(pl.col("chinese_admin_2"))
+    .alias("chinese_admin_2")
+)
+```
+
+**Impact**:
+
+| Before | After |
+|--------|-------|
+| Gwangju > Dong District (Gwangju) | Gwangju > Dong District ✅ |
+| Gwangju > Seo District (Gwangju) | Gwangju > Seo District ✅ |
+| Busan > Dong District | Busan > Dong District (unchanged) |
+
+> [!NOTE]
+> This processing targets only Gwangju for precise control. If similar issues are discovered in other cities, the logic can be extended.
+
 ---
 
 ## Special Handling for Sejong Special Self-Governing City

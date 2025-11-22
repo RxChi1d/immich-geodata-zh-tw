@@ -14,4 +14,3 @@ def fill_admin_columns(df: pl.DataFrame) -> pl.DataFrame:
             pl.col("admin_4").fill_null(""),
         ]
     )
-

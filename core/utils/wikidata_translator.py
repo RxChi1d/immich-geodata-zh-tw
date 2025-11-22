@@ -30,13 +30,746 @@
 import json
 import random
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
+from types import MappingProxyType
+from typing import Any, Mapping
 
 import requests
-from loguru import logger
 from tqdm import tqdm
+
+from core.utils import logger
+
+
+class AdminLevel(str, Enum):
+    """支援的行政層級。"""
+
+    ADMIN_1 = "admin_1"
+    ADMIN_2 = "admin_2"
+
+
+def _normalize_text(value: Any) -> str:
+    """將輸入值轉為乾淨字串。"""
+
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def build_translation_item_id(
+    level: AdminLevel,
+    parent_chain: Sequence[str],
+    original_name: str,
+) -> str:
+    """產生唯一 ID，方便快取與日誌。"""
+
+    chain = [level.value]
+    chain.extend(parent_chain)
+    chain.append(original_name)
+    return "/".join(part for part in chain if part)
+
+
+@dataclass(frozen=True, slots=True)
+class TranslationItem:
+    """單筆翻譯需求。"""
+
+    id: str
+    level: AdminLevel
+    original_name: str
+    source_lang: str
+    target_lang: str
+    parent_chain: tuple[str, ...]
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_values(
+        cls,
+        *,
+        level: AdminLevel,
+        original_name: str,
+        source_lang: str,
+        target_lang: str,
+        parent_chain: Sequence[str],
+        metadata: Mapping[str, Any] | None = None,
+    ) -> "TranslationItem":
+        """依照統一規則建立 TranslationItem。"""
+
+        normalized_name = _normalize_text(original_name)
+        if not normalized_name:
+            raise ValueError("original_name 不可為空字串")
+
+        normalized_parent = tuple(_normalize_text(p) for p in parent_chain)
+        if not normalized_parent or not normalized_parent[0]:
+            raise ValueError("parent_chain 至少需要包含國家碼")
+
+        item_id = build_translation_item_id(level, normalized_parent, normalized_name)
+        safe_metadata = MappingProxyType(dict(metadata or {}))
+        return cls(
+            id=item_id,
+            level=level,
+            original_name=normalized_name,
+            source_lang=_normalize_text(source_lang),
+            target_lang=_normalize_text(target_lang),
+            parent_chain=normalized_parent,
+            metadata=safe_metadata,
+        )
+
+
+@dataclass(slots=True)
+class DatasetStats:
+    """描述資料集規模。"""
+
+    level: AdminLevel
+    total: int
+    unique_parent: int
+    source_lang: str
+    target_lang: str
+
+
+class TranslationDataset(Sequence[TranslationItem]):
+    """可供批次翻譯使用的資料集。"""
+
+    def __init__(
+        self,
+        items: Iterable[TranslationItem],
+        *,
+        level: AdminLevel,
+        source_lang: str,
+        target_lang: str,
+        deduplicated: bool,
+    ) -> None:
+        self._items = list(items)
+        self.level = level
+        self.source_lang = source_lang
+        self.target_lang = target_lang
+        self.deduplicated = deduplicated
+        self.total = len(self._items)
+
+        for item in self._items:
+            if item.level != level:
+                raise ValueError("所有 TranslationItem 必須擁有相同的 level")
+
+        self._unique_parents = {item.parent_chain for item in self._items}
+
+    def __len__(self) -> int:  # type: ignore[override]
+        return self.total
+
+    def __getitem__(self, index: int) -> TranslationItem:  # type: ignore[override]
+        return self._items[index]
+
+    def __iter__(self) -> Iterator[TranslationItem]:  # type: ignore[override]
+        return iter(self._items)
+
+    def stats(self) -> DatasetStats:
+        """回傳資料集摘要資訊。"""
+
+        return DatasetStats(
+            level=self.level,
+            total=self.total,
+            unique_parent=len(self._unique_parents),
+            source_lang=self.source_lang,
+            target_lang=self.target_lang,
+        )
+
+    def as_sorted(
+        self, sorter: Callable[[TranslationItem], Any] | None = None
+    ) -> list[TranslationItem]:
+        """依指定排序鍵輸出項目。"""
+
+        if sorter is None:
+            return list(self._items)
+        return sorted(self._items, key=sorter)
+
+
+class TranslationDatasetBuilder:
+    """負責從 tabular 資料建構 dataset。"""
+
+    def __init__(
+        self,
+        *,
+        country_code: str,
+        source_lang: str,
+        target_lang: str,
+    ) -> None:
+        self.country_code = _normalize_text(country_code)
+        if not self.country_code:
+            raise ValueError("country_code 不可為空")
+        self.source_lang = source_lang
+        self.target_lang = target_lang
+
+    def build_admin1(
+        self,
+        data: Any,
+        *,
+        name_field: str,
+        metadata_fields: Sequence[str] | None = None,
+    ) -> TranslationDataset:
+        """根據資料列產生 Admin_1 資料集。"""
+
+        records = list(self._to_records(data))
+        items: list[TranslationItem] = []
+        seen: dict[str, TranslationItem] = {}
+        for idx, row in enumerate(records):
+            name = _normalize_text(row.get(name_field))
+            if not name:
+                raise ValueError(f"第 {idx} 列缺少 {name_field} 欄位")
+
+            metadata = self._collect_metadata(row, metadata_fields, idx)
+            item = TranslationItem.from_values(
+                level=AdminLevel.ADMIN_1,
+                original_name=name,
+                source_lang=self.source_lang,
+                target_lang=self.target_lang,
+                parent_chain=(self.country_code,),
+                metadata=metadata,
+            )
+            seen[item.id] = item
+
+        items.extend(seen.values())
+        dataset = TranslationDataset(
+            items,
+            level=AdminLevel.ADMIN_1,
+            source_lang=self.source_lang,
+            target_lang=self.target_lang,
+            deduplicated=True,
+        )
+        unique_parent = len({item.parent_chain for item in dataset})
+        logger.info(
+            f"Admin_1 dataset 建構完成：total={dataset.total} unique_parent={unique_parent}"
+        )
+        return dataset
+
+    def build_admin2(
+        self,
+        data: Any,
+        *,
+        parent_field: str,
+        name_field: str,
+        metadata_fields: Sequence[str] | None = None,
+        deduplicate: bool = False,
+    ) -> TranslationDataset:
+        """根據資料列產生 Admin_2 資料集。"""
+
+        records = list(self._to_records(data))
+        items: list[TranslationItem] = []
+        seen: dict[str, TranslationItem] = {}
+
+        for idx, row in enumerate(records):
+            parent_name = _normalize_text(row.get(parent_field))
+            name = _normalize_text(row.get(name_field))
+            if not parent_name or not name:
+                raise ValueError(f"第 {idx} 列缺少 {parent_field} 或 {name_field}")
+
+            metadata = self._collect_metadata(row, metadata_fields, idx)
+            item = TranslationItem.from_values(
+                level=AdminLevel.ADMIN_2,
+                original_name=name,
+                source_lang=self.source_lang,
+                target_lang=self.target_lang,
+                parent_chain=(self.country_code, parent_name),
+                metadata=metadata,
+            )
+
+            if deduplicate:
+                seen[item.id] = item
+            else:
+                items.append(item)
+
+        if deduplicate:
+            items = list(seen.values())
+
+        dataset = TranslationDataset(
+            items,
+            level=AdminLevel.ADMIN_2,
+            source_lang=self.source_lang,
+            target_lang=self.target_lang,
+            deduplicated=deduplicate,
+        )
+        unique_parent = len({item.parent_chain for item in dataset})
+        logger.info(
+            f"Admin_2 dataset 建構完成：total={dataset.total} unique_parent={unique_parent}"
+        )
+        return dataset
+
+    def _collect_metadata(
+        self,
+        row: Mapping[str, Any],
+        metadata_fields: Sequence[str] | None,
+        row_index: int,
+    ) -> Mapping[str, Any]:
+        base = {"row_index": row_index}
+        if metadata_fields:
+            for field_name in metadata_fields:
+                base[field_name] = row.get(field_name)
+        return base
+
+    def _to_records(self, data: Any) -> Iterable[Mapping[str, Any]]:
+        """將 DataFrame 或 iterable 轉換為 dict 列表。"""
+
+        if data is None:
+            return []
+
+        # 優先支援 Polars
+        if hasattr(data, "to_dicts") and callable(data.to_dicts):
+            return data.to_dicts()
+
+        # pandas DataFrame
+        if hasattr(data, "to_dict"):
+            try:
+                return data.to_dict(orient="records")  # type: ignore[arg-type]
+            except TypeError:
+                pass
+
+        if isinstance(data, Iterable):
+            return data
+
+        raise TypeError("不支援的資料來源型別")
+
+
+class TranslationDataLoader(Iterable[list[TranslationItem]]):
+    """依 batch 產出 TranslationItem。"""
+
+    def __init__(
+        self,
+        dataset: TranslationDataset,
+        *,
+        batch_size: int,
+        sorter: Callable[[TranslationItem], Any] | None = None,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> None:
+        if batch_size <= 0:
+            raise ValueError("batch_size 必須大於 0")
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.sorter = sorter
+        self.progress_callback = progress_callback
+
+    def __iter__(self) -> Iterator[list[TranslationItem]]:
+        items = self.dataset.as_sorted(self.sorter)
+        total = len(items)
+        processed = 0
+
+        for start in range(0, total, self.batch_size):
+            batch = items[start : start + self.batch_size]
+            yield batch
+            processed += len(batch)
+            if self.progress_callback:
+                self.progress_callback(processed, total)
+
+
+class ProgressLogger:
+    """控制 INFO log 的進度輸出頻率。"""
+
+    def __init__(self, label: str) -> None:
+        self.label = label
+        self._last_percent = -1
+
+    def __call__(self, processed: int, total: int) -> None:
+        if total == 0:
+            return
+        percent = int((processed / total) * 100)
+        if percent == self._last_percent:
+            return
+        if percent not in {0, 100} and percent % 5 != 0:
+            return
+        self._last_percent = percent
+        logger.info(f"{self.label} 進度 {processed}/{total} ({percent}%)")
+
+
+class BatchTranslationRunner:
+    """協調批次翻譯三階段流程。"""
+
+    def __init__(self, translator: "WikidataTranslator") -> None:
+        self.translator = translator
+
+    def run(
+        self,
+        dataset: TranslationDataset,
+        *,
+        batch_size: int,
+        parent_qids: Mapping[str, str] | None,
+        candidate_filter: "Callable[[str, dict], bool] | None",
+        show_progress: bool,
+    ) -> dict[str, dict]:
+        if dataset.total == 0:
+            logger.info(f"{dataset.level.value} 資料集為空，跳過翻譯")
+            return {}
+
+        parent_qids = parent_qids or {}
+        logger.info(
+            f"{dataset.level.value.upper()} 批次翻譯開始，筆數: {dataset.total}，batch_size={batch_size}"
+        )
+
+        progress_bar = None
+        progress_logger = None
+
+        def _noop_callback(processed: int, total: int) -> None:  # pragma: no cover
+            del processed, total
+
+        progress_callback: Callable[[int, int], None] = _noop_callback
+
+        if show_progress:
+            progress_bar = tqdm(
+                total=dataset.total,
+                desc=f"{dataset.level.value.upper()} 翻譯",
+                unit="筆",
+                leave=True,
+            )
+
+            def _progress_callback(processed: int, _: int) -> None:
+                if progress_bar is not None:
+                    progress_bar.update(processed - progress_bar.n)
+
+            progress_callback = _progress_callback
+
+        else:
+            progress_logger = ProgressLogger(f"{dataset.level.value.upper()} 翻譯")
+
+            def _logger_callback(processed: int, total: int) -> None:
+                if progress_logger is not None:
+                    progress_logger(processed, total)
+
+            progress_callback = _logger_callback
+
+        loader = TranslationDataLoader(
+            dataset,
+            batch_size=batch_size,
+            progress_callback=progress_callback,
+        )
+
+        # === 階段 1 ===
+        logger.info("階段 1/3: 搜尋 Wikidata 取得候選 QID...")
+        search_results: dict[str, dict[str, Any]] = {}
+        cache_hits = 0
+        for batch in loader:
+            for item in batch:
+                cache_entry = self.translator.cache_store.get_translation(item)
+                if cache_entry and "translated" in cache_entry:
+                    search_results[item.id] = {
+                        "item": item,
+                        "cached": True,
+                        "result": {
+                            "translated": cache_entry.get(
+                                "translated", item.original_name
+                            ),
+                            "qid": cache_entry.get("qid"),
+                            "source": cache_entry.get("source", "cache"),
+                            "used_lang": cache_entry.get("used_lang", "unknown"),
+                            "parent_verified": cache_entry.get(
+                                "parent_verified", False
+                            ),
+                        },
+                    }
+                    cache_hits += 1
+                    continue
+
+                candidate_qids = self.translator._search_wikidata(item)
+                search_results[item.id] = {
+                    "item": item,
+                    "cached": False,
+                    "qids": candidate_qids,
+                }
+
+        logger.info(f"階段 1 完成：快取命中 {cache_hits}/{dataset.total}")
+
+        # === 階段 1.5: 候選過濾 ===
+        if candidate_filter:
+            logger.info("正在應用候選過濾器...")
+            filtered_count = 0
+            total_candidates = 0
+            qids_for_filtering: list[str] = []
+
+            for data in search_results.values():
+                if data.get("cached"):
+                    continue
+                qids_list = data.get("qids", []) or []
+                qids_for_filtering.extend(qids_list)
+
+            filter_labels: dict[str, dict] = {}
+            filter_instance_of: dict[str, list[str]] = {}
+            if qids_for_filtering:
+                filter_labels = self.translator._batch_get_labels(qids_for_filtering)
+                filter_instance_of = self.translator._batch_get_instance_of(
+                    qids_for_filtering
+                )
+
+            for data in search_results.values():
+                if data.get("cached"):
+                    continue
+                qids_list = data.get("qids", []) or []
+                if not qids_list:
+                    continue
+                original_count = len(qids_list)
+                total_candidates += original_count
+                filtered_qids = []
+                item = data["item"]
+                for qid in qids_list:
+                    metadata = {
+                        "qid": qid,
+                        "labels": filter_labels.get(qid, {}),
+                        "instance_of": filter_instance_of.get(qid, []),
+                    }
+                    if candidate_filter(item.original_name, metadata):
+                        filtered_qids.append(qid)
+                    else:
+                        filtered_count += 1
+                data["qids"] = filtered_qids
+
+            if filtered_count > 0:
+                logger.info(
+                    f"候選過濾完成：從 {total_candidates} 個候選中排除 {filtered_count} 個"
+                )
+
+        # === 階段 2: 批次取得標籤 ===
+        logger.info("階段 2/3: 批次取得所有 QID 的標籤...")
+        all_qids: list[str] = []
+        for data in search_results.values():
+            if data.get("cached"):
+                continue
+            qids_list = data.get("qids", []) or []
+            all_qids.extend(qids_list)
+
+        all_labels: dict[str, dict] = {}
+        if all_qids:
+            all_labels = self.translator._batch_get_labels(all_qids)
+            logger.info(f"成功取得 {len(all_labels)} 個 QID 的標籤")
+
+        # === 階段 3: 處理結果 ===
+        logger.info("階段 3/3: 處理翻譯結果...")
+        result_bar = (
+            tqdm(total=len(search_results), desc="處理結果", unit="筆", leave=True)
+            if show_progress and search_results
+            else None
+        )
+        results: dict[str, dict] = {}
+        success_count = 0
+        fallback_count = 0
+
+        for item_id, data in search_results.items():
+            item = data["item"]
+            if data.get("cached"):
+                results[item_id] = data.get("result", {})
+                success_count += 1
+                continue
+
+            qids = data.get("qids", []) or []
+            parent_qid = None
+            if parent_qids:
+                parent_qid = parent_qids.get(item_id) or parent_qids.get(
+                    item.original_name
+                )
+            if not qids:
+                result = {
+                    "translated": item.original_name,
+                    "qid": None,
+                    "source": "original",
+                    "used_lang": "original",
+                    "parent_verified": False,
+                }
+                results[item_id] = result
+                self.translator.cache_store.set_translation(item, result, parent_qid)
+                fallback_count += 1
+                continue
+
+            selected_qid = None
+            parent_verified = False
+
+            if parent_qid:
+                for qid in qids:
+                    if self.translator._verify_p131(qid, parent_qid):
+                        selected_qid = qid
+                        parent_verified = True
+                        break
+
+            if not selected_qid:
+                selected_qid = qids[0]
+
+            labels = all_labels.get(selected_qid, {})
+            translated, source, used_lang = self.translator._select_best_label(
+                labels, item.original_name
+            )
+
+            result = {
+                "translated": translated,
+                "qid": selected_qid,
+                "source": source,
+                "used_lang": used_lang,
+                "parent_verified": parent_verified,
+            }
+            results[item_id] = result
+            success_count += 1
+
+            self.translator.cache_store.set_translation(item, result, parent_qid)
+
+            if result_bar is not None:
+                result_bar.update(1)
+
+        if result_bar is not None:
+            result_bar.close()
+
+        self.translator._flush_cache_if_needed(force=True)
+        logger.info(
+            f"{dataset.level.value.upper()} 批次翻譯完成：成功 {success_count}，回退 {fallback_count}，總筆數 {dataset.total}"
+        )
+        return results
+
+
+class TranslationCacheStore:
+    """集中管理 WikidataTranslator 使用的快取。"""
+
+    VERSION = "1.0"
+
+    def __init__(
+        self,
+        *,
+        source_lang: str,
+        target_lang: str,
+        cache_path: Path | None,
+    ) -> None:
+        self.source_lang = source_lang
+        self.target_lang = target_lang
+        self.cache_path = cache_path
+        self._dirty = 0
+        self._last_flush = time.time()
+        self.data = self._load()
+
+    def _load(self) -> dict:
+        if not self.cache_path or not self.cache_path.exists():
+            return self._create_empty_payload()
+
+        try:
+            payload = json.loads(self.cache_path.read_text(encoding="utf-8"))
+        except Exception as exc:  # pragma: no cover - I/O 失敗時回退
+            logger.warning(f"快取載入失敗，將重新建立：{exc}")
+            return self._create_empty_payload()
+
+        version = payload.get("metadata", {}).get("version")
+        if version != self.VERSION:
+            self._backup_existing()
+            return self._create_empty_payload()
+
+        return payload
+
+    def _backup_existing(self) -> None:
+        if not self.cache_path or not self.cache_path.exists():
+            return
+
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        backup_path = self.cache_path.with_suffix(
+            f"{self.cache_path.suffix}.bak.{timestamp}"
+        )
+        try:
+            self.cache_path.replace(backup_path)
+            logger.info(f"已備份舊版快取至 {backup_path.name}")
+        except Exception as exc:  # pragma: no cover - 失敗僅記錄
+            logger.warning(f"舊版快取備份失敗：{exc}")
+
+    def _create_empty_payload(self) -> dict:
+        return {
+            "metadata": {
+                "source_lang": self.source_lang,
+                "target_lang": self.target_lang,
+                "created_at": datetime.now().isoformat(),
+                "version": self.VERSION,
+                "last_compacted_at": None,
+            },
+            "translations": {},
+            "cache": {
+                "search": {},
+                "labels": {},
+                "p131": {},
+                "instance_of": {},
+            },
+            "indexes": {
+                "by_name": {},
+            },
+        }
+
+    def create_empty(self) -> dict:
+        """提供測試快速產生全新快取字典。"""
+
+        return self._create_empty_payload()
+
+    def _ensure_index(self) -> None:
+        self.data.setdefault("indexes", {}).setdefault("by_name", {})
+
+    def _index_name(self, item: TranslationItem) -> None:
+        self._ensure_index()
+        by_name = self.data["indexes"]["by_name"]
+        slots = by_name.setdefault(item.original_name, [])
+        if item.id not in slots:
+            slots.append(item.id)
+
+    def get_translation(self, item: TranslationItem) -> dict | None:
+        return self.data.get("translations", {}).get(item.id)
+
+    def set_translation(
+        self,
+        item: TranslationItem,
+        result: Mapping[str, Any],
+        parent_qid: str | None,
+    ) -> None:
+        entry = {
+            "original_name": item.original_name,
+            "level": item.level.value,
+            "parent_chain": list(item.parent_chain),
+            "parent_qid": parent_qid,
+            "cached_at": datetime.now().isoformat(),
+        }
+        entry.update(result)
+        self.data.setdefault("translations", {})[item.id] = entry
+        self._index_name(item)
+        self.mark_dirty()
+
+    def get_search_results(self, item: TranslationItem) -> list[str] | None:
+        return self.data.get("cache", {}).get("search", {}).get(item.id)
+
+    def set_search_results(self, item: TranslationItem, qids: list[str]) -> None:
+        self.data.setdefault("cache", {}).setdefault("search", {})[item.id] = qids
+        self.mark_dirty()
+
+    def mark_dirty(self) -> None:
+        self._dirty += 1
+        self.flush_if_needed()
+
+    def flush_if_needed(
+        self,
+        *,
+        force: bool = False,
+        max_dirty: int = 20,
+        max_interval: float = 30.0,
+    ) -> None:
+        if not self.cache_path:
+            self._dirty = 0
+            self._last_flush = time.time()
+            return
+
+        now = time.time()
+        if not force:
+            if self._dirty < max_dirty and (now - self._last_flush) < max_interval:
+                return
+
+        self.save()
+        self._dirty = 0
+        self._last_flush = now
+
+    def save(self) -> None:
+        if not self.cache_path:
+            return
+
+        try:
+            self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = self.cache_path.with_suffix(self.cache_path.suffix + ".tmp")
+            tmp_path.write_text(
+                json.dumps(self.data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            tmp_path.replace(self.cache_path)
+        except Exception as exc:  # pragma: no cover - I/O 失敗時記錄
+            logger.warning(f"快取儲存失敗: {exc}")
+
 
 try:
     from opencc import OpenCC
@@ -114,129 +847,41 @@ class WikidataTranslator:
 
         # 初始化快取
         self.cache_path = Path(cache_path) if cache_path else None
+        self.cache_store = TranslationCacheStore(
+            source_lang=self.source_lang,
+            target_lang=self.target_lang,
+            cache_path=self.cache_path,
+        )
         self.cache = self._load_cache()
 
     def _create_empty_cache(self) -> dict:
-        """建立空白快取結構。
+        """提供兼容舊測試的空白快取。"""
 
-        Returns:
-            新版快取結構（v1.1）
-        """
-        return {
-            "metadata": {
-                "source_lang": self.source_lang,
-                "target_lang": self.target_lang,
-                "created_at": datetime.now().isoformat(),
-                "version": "1.1",
-            },
-            "translations": {},
-            "cache": {
-                "search": {},
-                "labels": {},
-                "p131": {},
-                "instance_of": {},
-            },
-        }
+        return self.cache_store.create_empty()
 
     def _load_cache(self) -> dict:
-        """載入快取檔案。
+        """取得目前快取內容。"""
 
-        支援自動遷移舊版快取格式（v0.0）到新版（v1.0）。
-
-        Returns:
-            快取字典
-        """
-        if not self.cache_path or not self.cache_path.exists():
-            return self._create_empty_cache()
-
-        try:
-            cache = json.loads(self.cache_path.read_text(encoding="utf-8"))
-
-            # 檢查版本並自動遷移
-            version = cache.get("metadata", {}).get("version", "0.0")
-            if version == "0.0":
-                logger.info("偵測到舊版快取格式，正在自動遷移到 v1.0...")
-                cache = self._migrate_cache_v0_to_v1(cache)
-                # 立即儲存遷移後的快取
-                self.cache = cache
-                self._save_cache()
-                logger.info("快取遷移完成並已儲存")
-
-            return cache
-        except Exception as e:
-            logger.warning(f"快取載入失敗: {e}，將使用空白快取")
-            return self._create_empty_cache()
-
-    def _migrate_cache_v0_to_v1(self, old_cache: dict) -> dict:
-        """遷移舊版快取（v0.0）到新版（v1.0）。
-
-        舊版結構：所有資料混在 translations 中
-        新版結構：分層結構（translations + cache）
-
-        Args:
-            old_cache: 舊版快取字典
-
-        Returns:
-            新版快取字典
-        """
-        new_cache = self._create_empty_cache()
-
-        # 保留 metadata（如果有）
-        if "metadata" in old_cache:
-            new_cache["metadata"].update(old_cache["metadata"])
-        new_cache["metadata"]["version"] = "1.0"
-        new_cache["metadata"]["migrated_at"] = datetime.now().isoformat()
-
-        # 遍歷舊的 translations 並分類
-        old_translations = old_cache.get("translations", {})
-
-        for key, value in old_translations.items():
-            if key.startswith("search_"):
-                # 搜尋結果快取：search_제주특별자치도 → cache.search["제주특별자치도"]
-                name = key[7:]  # 移除 "search_" 前綴
-                new_cache["cache"]["search"][name] = value.get("qids", [])
-
-            elif key.startswith("labels_"):
-                # QID 標籤快取：labels_Q41164 → cache.labels["Q41164"]
-                qid = key[7:]  # 移除 "labels_" 前綴
-                new_cache["cache"]["labels"][qid] = value.get("labels", {})
-
-            elif key.startswith("p131_"):
-                # P131 驗證結果快取：p131_Q41164_Q884 → cache.p131["Q41164_Q884"]
-                relation_key = key[5:]  # 移除 "p131_" 前綴
-                new_cache["cache"]["p131"][relation_key] = value.get("result", False)
-
-            else:
-                # 最終翻譯結果：제주특별자치도 → translations["제주특별자치도"]
-                new_cache["translations"][key] = value
-
-        logger.info(
-            f"快取遷移統計: "
-            f"翻譯結果 {len(new_cache['translations'])} 筆, "
-            f"搜尋快取 {len(new_cache['cache']['search'])} 筆, "
-            f"標籤快取 {len(new_cache['cache']['labels'])} 筆, "
-            f"P131 快取 {len(new_cache['cache']['p131'])} 筆"
-        )
-
-        return new_cache
+        return self.cache_store.data
 
     def _save_cache(self) -> None:
-        """儲存快取檔案（使用原子寫入）。"""
-        if not self.cache_path:
-            return
+        self.cache_store.save()
 
-        try:
-            self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+    def _flush_cache_if_needed(
+        self,
+        *,
+        force: bool = False,
+        max_dirty: int = 20,
+        max_interval: float = 30.0,
+    ) -> None:
+        """依照髒污次數或時間間隔決定是否儲存快取。"""
 
-            # Reason: 使用原子寫入（tmp + rename）防止寫入過程中斷導致快取損毀
-            tmp_path = self.cache_path.with_suffix(self.cache_path.suffix + ".tmp")
-            tmp_path.write_text(
-                json.dumps(self.cache, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            tmp_path.replace(self.cache_path)
+        self.cache_store.flush_if_needed(
+            force=force, max_dirty=max_dirty, max_interval=max_interval
+        )
 
-        except Exception as e:
-            logger.warning(f"快取儲存失敗: {e}")
+    def _mark_cache_dirty(self) -> None:
+        self.cache_store.mark_dirty()
 
     def _request_json(
         self, url: str, params: dict | None = None, throttle: float = 0.0
@@ -332,25 +977,18 @@ class WikidataTranslator:
             logger.warning(f"Wikipedia 標題轉換失敗: {e}")
             return title
 
-    def _search_wikidata(self, name: str, limit: int = 7) -> list[str]:
-        """搜尋 Wikidata 實體（使用來源語言）。
+    def _search_wikidata(self, item: TranslationItem, limit: int = 7) -> list[str]:
+        """搜尋 Wikidata 實體，並以 context-aware key 快取結果。"""
 
-        Args:
-            name: 搜尋關鍵字
-            limit: 結果數量限制
-
-        Returns:
-            QID 列表
-        """
-        # 檢查快取（新路徑）
-        if name in self.cache.get("cache", {}).get("search", {}):
-            return self.cache["cache"]["search"][name]
+        cached_qids = self.cache_store.get_search_results(item)
+        if cached_qids is not None:
+            return cached_qids
 
         try:
             js = self._wd_api(
                 {
                     "action": "wbsearchentities",
-                    "search": name,
+                    "search": item.original_name,
                     "language": self.source_lang,
                     "uselang": self.source_lang,
                     "type": "item",
@@ -358,15 +996,13 @@ class WikidataTranslator:
                 }
             )
 
-            qids = [item["id"] for item in js.get("search", [])]
+            qids = [entry["id"] for entry in js.get("search", [])]
 
-            # 快取搜尋結果（新路徑）
-            self.cache.setdefault("cache", {}).setdefault("search", {})[name] = qids
-
+            self.cache_store.set_search_results(item, qids)
             return qids
 
         except Exception as e:
-            logger.warning(f"Wikidata 搜尋失敗 ({name}): {e}")
+            logger.warning(f"Wikidata 搜尋失敗 ({item.original_name}): {e}")
             return []
 
     def _verify_p131(self, candidate_qid: str, parent_qid: str) -> bool:
@@ -393,6 +1029,7 @@ class WikidataTranslator:
             self.cache.setdefault("cache", {}).setdefault("p131", {})[cache_key] = (
                 answer
             )
+            self._mark_cache_dirty()
 
             return answer
 
@@ -441,6 +1078,7 @@ class WikidataTranslator:
 
             # 快取標籤（新路徑）
             self.cache.setdefault("cache", {}).setdefault("labels", {})[qid] = labels
+            self._mark_cache_dirty()
 
             return labels
 
@@ -519,6 +1157,7 @@ class WikidataTranslator:
                         self.cache.setdefault("cache", {}).setdefault("labels", {})[
                             qid
                         ] = labels
+                        self._mark_cache_dirty()
 
                     logger.debug(
                         f"批次 {i // batch_size + 1}: 成功查詢 {len(batch)} 個 QID"
@@ -604,6 +1243,7 @@ class WikidataTranslator:
                         self.cache.setdefault("cache", {}).setdefault(
                             "instance_of", {}
                         )[qid] = instance_of_qids
+                        self._mark_cache_dirty()
 
                     logger.debug(
                         f"批次 {i // batch_size + 1}: 成功查詢 {len(batch)} 個 QID 的 P31"
@@ -667,32 +1307,38 @@ class WikidataTranslator:
         parent_qid: str | None = None,
         instance_of_qid: str | None = None,
     ) -> dict:
-        """翻譯單一地名（內部呼叫 batch_translate）。
+        """翻譯單一地名（沿用批次核心邏輯）。"""
 
-        Args:
-            name: 來源語言的地名
-            parent_qid: 父級行政區的 QID（用於 P131 驗證）
-            instance_of_qid: 實例類型的 QID（暫未使用，保留以便未來擴充）
-
-        Returns:
-            {
-                'translated': '翻譯結果',
-                'qid': 'Q12345' or None,
-                'source': 'wikidata' | 'opencc' | 'zhwiki-convert' | 'original',
-                'used_lang': '實際使用的語言代碼',
-                'parent_verified': 是否通過 P131 驗證
-            }
-        """
-        # Reason: 統一使用 batch_translate 實作，避免重複邏輯
         _ = instance_of_qid  # 保留參數以維持 API 一致性
-        parent_qids = {name: parent_qid} if parent_qid else None
+        normalized_name = _normalize_text(name)
+        if not normalized_name:
+            raise ValueError("name 不可為空字串")
+
+        item = TranslationItem.from_values(
+            level=AdminLevel.ADMIN_1,
+            original_name=normalized_name,
+            source_lang=self.source_lang,
+            target_lang=self.target_lang,
+            parent_chain=(self.source_lang.upper() or "GENERIC",),
+        )
+        dataset = TranslationDataset(
+            [item],
+            level=AdminLevel.ADMIN_1,
+            source_lang=self.source_lang,
+            target_lang=self.target_lang,
+            deduplicated=True,
+        )
+        parent_map = {item.id: parent_qid} if parent_qid else None
         results = self.batch_translate(
-            [name], parent_qids=parent_qids, show_progress=False
+            dataset,
+            batch_size=1,
+            parent_qids=parent_map,
+            show_progress=False,
         )
         return results.get(
-            name,
+            item.id,
             {
-                "translated": name,
+                "translated": normalized_name,
                 "qid": None,
                 "source": "original",
                 "used_lang": "original",
@@ -702,197 +1348,20 @@ class WikidataTranslator:
 
     def batch_translate(
         self,
-        names: list[str],
-        parent_qids: dict[str, str] | None = None,
+        dataset: TranslationDataset,
+        *,
+        batch_size: int = 20,
+        parent_qids: Mapping[str, str] | None = None,
         show_progress: bool = True,
         candidate_filter: "Callable[[str, dict], bool] | None" = None,
     ) -> dict[str, dict]:
-        """批次翻譯多個地名（使用批次 API 查詢優化）。
+        """針對 TranslationDataset 執行批次翻譯。"""
 
-        實作真正的批次查詢以減少 API 請求次數：
-        - 階段 1: 逐一搜尋取得候選 QID（無法批次）
-        - 階段 1.5: 應用候選過濾器（如果提供）
-        - 階段 2: 批次取得所有 QID 的標籤（每批 50 個）
-        - 階段 3: 選擇最佳翻譯並快取結果
-
-        Args:
-            names: 地名列表
-            parent_qids: {地名: 父級QID} 對照表（用於 P131 驗證）
-            show_progress: 是否顯示進度條
-            candidate_filter: 候選過濾器函式，接收 (name, metadata) 並回傳 bool。
-                metadata 包含 {"qid": str, "labels": dict, "instance_of": list[str]}。
-                回傳 True 保留候選，False 排除候選。
-
-        Returns:
-            {地名: {translated, qid, source, used_lang, parent_verified}}
-        """
-        parent_qids = parent_qids or {}
-
-        # === 階段 1: 搜尋階段（逐一搜尋，無法批次）===
-        logger.info("階段 1/3: 搜尋 Wikidata 取得候選 QID...")
-        search_results = {}
-        iterator = tqdm(names, desc="搜尋 QID", unit="筆") if show_progress else names
-
-        for name in iterator:
-            # 檢查翻譯快取
-            if name in self.cache.get("translations", {}):
-                cached = self.cache["translations"][name]
-                if "translated" in cached:
-                    search_results[name] = {
-                        "cached": True,
-                        "result": {
-                            "translated": cached.get("translated", name),
-                            "qid": cached.get("qid"),
-                            "source": cached.get("source", "cache"),
-                            "used_lang": cached.get("used_lang", "unknown"),
-                            "parent_verified": cached.get("parent_verified", False),
-                        },
-                    }
-                    continue
-
-            # 搜尋 Wikidata
-            candidate_qids = self._search_wikidata(name)
-            search_results[name] = {"cached": False, "qids": candidate_qids}
-
-        # === 階段 1.5: 應用候選過濾器（如果提供）===
-        if candidate_filter:
-            logger.info("正在應用候選過濾器...")
-            filtered_count = 0
-            total_candidates = 0
-
-            # 收集需要取得標籤和 P31 的 QID（用於過濾）
-            qids_for_filtering: list[str] = []
-            for name, data in search_results.items():
-                if not data.get("cached"):
-                    qids_list = data.get("qids", [])
-                    if isinstance(qids_list, list):
-                        qids_for_filtering.extend(qids_list)
-
-            # 批次取得標籤和 P31 用於過濾
-            filter_labels: dict[str, dict] = {}
-            filter_instance_of: dict[str, list[str]] = {}
-            if qids_for_filtering:
-                filter_labels = self._batch_get_labels(qids_for_filtering)
-                filter_instance_of = self._batch_get_instance_of(qids_for_filtering)
-
-            # 應用過濾器到每個名稱的候選列表
-            for name, data in search_results.items():
-                if data.get("cached"):
-                    continue
-
-                qids_list = data.get("qids", [])
-                if not isinstance(qids_list, list) or not qids_list:
-                    continue
-
-                original_count = len(qids_list)
-                total_candidates += original_count
-
-                # 過濾候選
-                filtered_qids = []
-                for qid in qids_list:
-                    labels = filter_labels.get(qid, {})
-                    instance_of = filter_instance_of.get(qid, [])
-                    metadata = {
-                        "qid": qid,
-                        "labels": labels,
-                        "instance_of": instance_of,
-                    }
-                    if candidate_filter(name, metadata):
-                        filtered_qids.append(qid)
-                    else:
-                        filtered_count += 1
-
-                # 更新過濾後的候選列表
-                data["qids"] = filtered_qids
-
-            if filtered_count > 0:
-                logger.info(
-                    f"候選過濾完成：從 {total_candidates} 個候選中排除了 "
-                    f"{filtered_count} 個不符合條件的候選"
-                )
-
-        # === 階段 2: 批次取得標籤 ===
-        logger.info("階段 2/3: 批次取得所有 QID 的標籤...")
-
-        # 收集所有需要查詢標籤的 QID
-        all_qids: list[str] = []
-        for name, data in search_results.items():
-            if not data.get("cached"):
-                qids_list = data.get("qids", [])
-                if isinstance(qids_list, list):
-                    all_qids.extend(qids_list)
-
-        # 去重並批次查詢
-        all_labels: dict[str, dict] = {}
-        if all_qids:
-            all_labels = self._batch_get_labels(all_qids)
-            logger.info(f"成功取得 {len(all_labels)} 個 QID 的標籤")
-
-        # === 階段 3: 選擇最佳翻譯 ===
-        logger.info("階段 3/3: 處理翻譯結果...")
-        results: dict[str, dict] = {}
-
-        for name, data in search_results.items():
-            # 如果已快取，直接使用
-            if data.get("cached"):
-                result_data = data.get("result")
-                if isinstance(result_data, dict):
-                    results[name] = result_data
-                continue
-
-            # 處理新查詢的結果
-            qids_data = data.get("qids", [])
-            qids: list[str] = qids_data if isinstance(qids_data, list) else []
-            if not qids:
-                result = {
-                    "translated": name,
-                    "qid": None,
-                    "source": "original",
-                    "used_lang": "original",
-                    "parent_verified": False,
-                }
-                results[name] = result
-                self.cache.setdefault("translations", {})[name] = {
-                    **result,
-                    "cached_at": datetime.now().isoformat(),
-                }
-                continue
-
-            # 選擇最佳 QID（P131 驗證）
-            selected_qid = None
-            parent_qid = parent_qids.get(name)
-            parent_verified = False
-
-            if parent_qid:
-                for qid in qids:
-                    if self._verify_p131(qid, parent_qid):
-                        selected_qid = qid
-                        parent_verified = True
-                        break
-
-            if not selected_qid:
-                selected_qid = qids[0]
-
-            # 使用批次查詢的標籤選擇最佳翻譯
-            labels = all_labels.get(selected_qid, {})
-            translated, source, used_lang = self._select_best_label(labels, name)
-
-            result = {
-                "translated": translated,
-                "qid": selected_qid,
-                "source": source,
-                "used_lang": used_lang,
-                "parent_verified": parent_verified,
-            }
-            results[name] = result
-
-            # 快取結果
-            self.cache.setdefault("translations", {})[name] = {
-                **result,
-                "cached_at": datetime.now().isoformat(),
-            }
-
-        # 儲存快取
-        self._save_cache()
-
-        return results
+        runner = BatchTranslationRunner(self)
+        return runner.run(
+            dataset,
+            batch_size=batch_size,
+            parent_qids=parent_qids,
+            candidate_filter=candidate_filter,
+            show_progress=show_progress,
+        )

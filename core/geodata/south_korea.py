@@ -10,7 +10,10 @@ from collections.abc import Callable
 from pathlib import Path
 
 from core.utils import logger
-from core.utils.wikidata_translator import WikidataTranslator
+from core.utils.wikidata_translator import (
+    TranslationDatasetBuilder,
+    WikidataTranslator,
+)
 from core.geodata.base import GeoDataHandler, register_handler
 
 
@@ -458,111 +461,102 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
 
             # 建立候選過濾器（用於排除議會機構等非行政區實體）
             candidate_filter = self._build_candidate_filter()
-
-            # 步驟 3.1: 批次翻譯 Admin_1（廣域市/道）
-            logger.info("正在批次翻譯 Admin_1（廣域市/道）...")
-            unique_admin1 = df["sidonm"].unique().to_list()
-            admin1_qids = {}  # 儲存 Admin_1 的 QID 用於 P131 驗證
-
-            # 批次翻譯所有 Admin_1（主要為批次取得 QID）
-            admin1_translations = translator.batch_translate(
-                unique_admin1, show_progress=True
+            dataset_builder = TranslationDatasetBuilder(
+                country_code="KR",
+                source_lang="ko",
+                target_lang="zh-tw",
             )
 
-            # 套用內建對照表覆蓋翻譯結果
-            for ko_name, result in admin1_translations.items():
-                # Reason: 使用內建對照表優先，確保使用台灣慣用簡稱
-                if ko_name in self.ADMIN1_NAME_MAP:
-                    admin1_qids[ko_name] = {
-                        "translated": self.ADMIN1_NAME_MAP[ko_name],
-                        "qid": result.get("qid"),
-                    }
-                else:
-                    admin1_qids[ko_name] = {
-                        "translated": result.get("translated", ko_name),
-                        "qid": result.get("qid"),
-                    }
+            # 步驟 3.1: 批次翻譯 Admin_1（廣域市/道）
+            admin1_dataset = dataset_builder.build_admin1(
+                df,
+                name_field="sidonm",
+            )
+            admin1_results = translator.batch_translate(
+                admin1_dataset,
+                batch_size=32,
+                show_progress=True,
+            )
 
-            # 步驟 3.2: 按 Admin_1 分組批次翻譯 Admin_2（市/區/郡）
-            logger.info("正在按 Admin_1 分組批次翻譯 Admin_2（市/區/郡）...")
-            admin2_translations = {}
+            admin1_lookup: dict[str, dict[str, str | None]] = {}
+            for item in admin1_dataset:
+                result = admin1_results.get(item.id, {})
+                translated = result.get("translated", item.original_name)
+                if item.original_name in self.ADMIN1_NAME_MAP:
+                    translated = self.ADMIN1_NAME_MAP[item.original_name]
+                admin1_lookup[item.original_name] = {
+                    "translated": translated,
+                    "qid": result.get("qid"),
+                }
 
-            # Reason: 按 Admin_1 分組翻譯，確保同名 Admin_2 使用正確的 parent QID
-            for admin1_ko_name, admin1_data in admin1_qids.items():
-                admin1_qid = admin1_data.get("qid")
-                if not admin1_qid:
-                    continue
-
-                # 取得此 Admin_1 下的所有 Admin_2
-                admin2_list = (
-                    df.filter(pl.col("sidonm") == admin1_ko_name)["sggnm"]
-                    .unique()
-                    .to_list()
-                )
-
-                # 🆕 特殊處理：世宗特別自治市直接使用手動對照表（完全跳過 Wikidata）
-                if admin1_ko_name == "세종특별자치시":
-                    logger.info(
-                        f"正在處理世宗特別自治市的 {len(admin2_list)} 個 Admin_2"
-                        f"（直接使用手動對照表，跳過 Wikidata 查詢）..."
-                    )
-
-                    for korean_name in admin2_list:
-                        if korean_name in self.SEJONG_ADMIN2_MAP:
-                            # 直接使用對照表翻譯
-                            admin2_translations[korean_name] = {
-                                "translated": self.SEJONG_ADMIN2_MAP[korean_name],
-                                "qid": "",  # 無 QID
-                                "source": "sejong_manual_map",  # 標記為世宗手動對照
-                            }
-                            logger.debug(
-                                f"  {korean_name} → {self.SEJONG_ADMIN2_MAP[korean_name]} (手動對照)"
-                            )
-                        else:
-                            # 理論上不應該發生（對照表應涵蓋所有世宗地名）
-                            logger.warning(
-                                f"  {korean_name} 不在手動對照表中，保持原樣"
-                            )
-                            admin2_translations[korean_name] = {
-                                "translated": korean_name,
-                                "qid": "",
-                                "source": "missing_in_map",
-                            }
-                    continue  # 跳過 Wikidata 翻譯流程
-
-                # 其他地區：正常 Wikidata 翻譯流程
+            # 步驟 3.2: 批次翻譯 Admin_2（市/區/郡）
+            sejong_parent = "세종특별자치시"
+            sejong_df = df.filter(pl.col("sidonm") == sejong_parent)
+            sejong_lookup: dict[tuple[str, str], str] = {}
+            if sejong_df.height > 0:
+                sejong_names = sejong_df["sggnm"].unique().to_list()
                 logger.info(
-                    f"正在翻譯 {admin1_data['translated']} 下的 {len(admin2_list)} 個 Admin_2..."
+                    f"世宗特別自治市 Admin_2 直接使用手動對照表（{len(sejong_names)} 筆）"
+                )
+                for korean_name in sejong_names:
+                    translated = self.SEJONG_ADMIN2_MAP.get(korean_name)
+                    if translated:
+                        sejong_lookup[(sejong_parent, korean_name)] = translated
+                        logger.debug(f"  {korean_name} → {translated} (手動對照)")
+                    else:
+                        logger.warning(f"  {korean_name} 不在手動對照表中，保持原樣")
+                        sejong_lookup[(sejong_parent, korean_name)] = korean_name
+
+            admin2_source_df = df.filter(pl.col("sidonm") != sejong_parent)
+            admin2_dataset = dataset_builder.build_admin2(
+                admin2_source_df,
+                parent_field="sidonm",
+                name_field="sggnm",
+                deduplicate=True,
+            )
+
+            parent_qids_map: dict[str, str] = {}
+            for item in admin2_dataset:
+                parent_name = item.parent_chain[-1]
+                parent_info = admin1_lookup.get(parent_name)
+                parent_qid = parent_info.get("qid") if parent_info else None
+                if parent_qid:
+                    parent_qids_map[item.id] = parent_qid
+
+            admin2_results = translator.batch_translate(
+                admin2_dataset,
+                batch_size=32,
+                parent_qids=parent_qids_map,
+                show_progress=True,
+                candidate_filter=candidate_filter,
+            )
+
+            admin2_lookup = dict(sejong_lookup)
+            for item in admin2_dataset:
+                result = admin2_results.get(
+                    item.id,
+                    {
+                        "translated": item.original_name,
+                        "qid": None,
+                        "source": "original",
+                        "used_lang": "original",
+                        "parent_verified": False,
+                    },
+                )
+                admin2_lookup[(item.parent_chain[-1], item.original_name)] = result.get(
+                    "translated", item.original_name
                 )
 
-                # 為這組 Admin_2 建立統一的 parent_qids
-                parent_qids = {name: admin1_qid for name in admin2_list}
-
-                # 批次翻譯這組 Admin_2
-                group_translations = translator.batch_translate(
-                    admin2_list,
-                    parent_qids=parent_qids,
-                    show_progress=False,  # 避免進度條混亂
-                    candidate_filter=candidate_filter,  # 過濾議會機構等非行政區實體
-                )
-
-                # 合併到總翻譯結果
-                admin2_translations.update(group_translations)
-
-            logger.info(f"Admin_2 翻譯完成，共 {len(admin2_translations)} 個唯一名稱")
+            logger.info(
+                f"Admin_2 翻譯完成，唯一組合: {len(admin2_lookup)} (含手動 {len(sejong_lookup)})"
+            )
 
             # 步驟 3.3: 建立對照字典並應用到 DataFrame
             logger.info("正在應用翻譯結果...")
 
             # 建立 Admin_1 對照字典
             admin1_map = {
-                ko_name: data["translated"] for ko_name, data in admin1_qids.items()
-            }
-
-            # 建立 Admin_2 對照字典
-            admin2_map = {
-                ko_name: data.get("translated", ko_name)
-                for ko_name, data in admin2_translations.items()
+                ko_name: data["translated"] for ko_name, data in admin1_lookup.items()
             }
 
             # 應用翻譯到 DataFrame
@@ -573,9 +567,12 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
                         lambda x: admin1_map.get(x, x), return_dtype=pl.String
                     )
                     .alias("chinese_admin_1"),
-                    pl.col("sggnm")
+                    pl.struct(["sidonm", "sggnm"])
                     .map_elements(
-                        lambda x: admin2_map.get(x, x), return_dtype=pl.String
+                        lambda row: admin2_lookup.get(
+                            (row["sidonm"], row["sggnm"]), row["sggnm"]
+                        ),
+                        return_dtype=pl.String,
                     )
                     .alias("chinese_admin_2"),
                     # Reason: Admin_3 保留韓文原文以降低 API 請求次數
@@ -583,9 +580,35 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
                 ]
             )
 
+            # 針對光州移除 Wikidata 消歧義括號
+            # Reason: 光州的東區/西區在 Wikidata 中帶有 "(光州)" 消歧義標記，
+            #         但 admin_1 已經標明是「光州」，不需要重複標註
+            gwangju_parent = "광주광역시"
+            gwangju_df_before = df.filter(pl.col("sidonm") == gwangju_parent)
+
+            # 統計處理前有括號的記錄數
+            disambig_count_before = gwangju_df_before.filter(
+                pl.col("chinese_admin_2").str.contains(r"\([^)]+\)")
+            ).height
+
+            df = df.with_columns(
+                pl.when(pl.col("sidonm") == gwangju_parent)
+                .then(
+                    pl.col("chinese_admin_2").str.replace_all(r"\s*\([^)]+\)\s*$", "")
+                )
+                .otherwise(pl.col("chinese_admin_2"))
+                .alias("chinese_admin_2")
+            )
+
+            # 統計移除的消歧義標記數量
+            if disambig_count_before > 0:
+                logger.info(
+                    f"已移除光州 {disambig_count_before} 筆 Admin_2 的 Wikidata 消歧義括號"
+                )
+
             # 顯示翻譯統計
-            logger.info(f"Admin_1 翻譯數量: {len(admin1_qids)}")
-            logger.info(f"Admin_2 翻譯數量: {len(admin2_translations)}")
+            logger.info(f"Admin_1 翻譯數量: {len(admin1_map)}")
+            logger.info(f"Admin_2 翻譯數量: {len(admin2_lookup)}")
             logger.info("Admin_3 保留韓文原文（未翻譯）")
 
             # 重組為標準格式
