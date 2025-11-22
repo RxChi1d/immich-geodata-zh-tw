@@ -226,6 +226,51 @@ class GeoDataHandler(ABC):
             .alias(longitude_column),
         )
 
+    @staticmethod
+    def get_diverse_sample(
+        df: pl.DataFrame,
+        n: int = 5,
+        diversity_columns: list[str] | None = None,
+    ) -> pl.DataFrame:
+        """取得多樣化的資料樣本。
+
+        從 DataFrame 中選取指定數量的資料，確保這些資料在指定欄位的組合上
+        盡可能不重複，以提供更具代表性的預覽。
+
+        Args:
+            df: 來源 DataFrame。
+            n: 要取樣的資料筆數（預設 5）。
+            diversity_columns: 用於去重的欄位列表。
+                預設為 ["admin_1", "admin_2", "admin_3", "admin_4"]。
+
+        Returns:
+            包含最多 n 筆多樣化資料的 DataFrame。
+
+        Examples:
+            >>> df = pl.DataFrame({
+            ...     "admin_1": ["台北市", "台北市", "新北市"],
+            ...     "admin_2": ["中正區", "中正區", "板橋區"],
+            ... })
+            >>> result = GeoDataHandler.get_diverse_sample(df, n=5)
+            >>> len(result)
+            2
+        """
+        if diversity_columns is None:
+            diversity_columns = ["admin_1", "admin_2", "admin_3", "admin_4"]
+
+        # 過濾掉不存在於 DataFrame 中的欄位
+        available_columns = [col for col in diversity_columns if col in df.columns]
+
+        # 如果沒有可用的去重欄位，直接回傳前 n 筆
+        if not available_columns:
+            return df.head(n)
+
+        # 使用 unique 去除重複組合，保留第一筆
+        diverse_df = df.unique(subset=available_columns, keep="first")
+
+        # 回傳前 n 筆
+        return diverse_df.head(n)
+
     def _save_extract_csv(
         self,
         df: pl.DataFrame,
@@ -282,8 +327,10 @@ class GeoDataHandler(ABC):
         df.write_csv(output_path)
         logger.info(f"成功儲存 CSV 檔案，共 {len(df)} 筆資料")
 
-        # 顯示前五筆資料供檢查
-        logger.info(df.head(5))
+        # 顯示多樣化的資料樣本供檢查
+        sample_df = self.get_diverse_sample(df, n=5)
+        logger.info("資料預覽（多樣化取樣）：")
+        logger.info(sample_df)
 
     @classmethod
     def prepare_cities_source(cls, df: pl.DataFrame) -> pl.DataFrame:
