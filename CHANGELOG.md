@@ -28,7 +28,15 @@
 ## [未發佈版本]
 
 ### Added
+- **Wikidata 翻譯工具**：通用地名翻譯引擎，支援 P131 驗證、P31 過濾、多語言回退與 OpenCC，並使用 Context-Aware Cache（`TranslationCacheStore`）將翻譯結果、搜尋結果依 `TranslationItem.id` 獨立儲存，確保同名不同父層的行政區在搜尋、驗證、快取各階段完全隔離。
+- **翻譯可追溯性**：翻譯結果包含實際使用語言、QID、父層驗證狀態與時間戳記，提升除錯與品質分析能力。
+- **南韓地理資料處理器**：完整 ETL 流程整合同步翻譯，提供廣域市/道繁中對照、自動拆分「市＋區/郡」、Admin 4 備援邏輯與客製候選過濾器（`시청/도청/군청/구청/교육청` 等），並針對世宗特別自治市等特殊結構最佳化。
+
+### Changed
 - **資料來源授權聲明**：新增 NOTICE.md 完整聲明第三方資料授權,符合 GeoNames (CC-BY 4.0) 與 OpenStreetMap (ODbL 1.0) 等授權要求
+- **LocationIQ QPS 預設值**：從 1 調整為 2，提升資料處理效率
+- **GeoData 欄位順序**：統一 GEODATA_SCHEMA、各國 Handler 與 LocationIQ 流程，並將欄位實際順序調整為 `latitude, longitude, country, admin_1, admin_2, admin_3, admin_4`，同時更新 meta_data CSV 與文件，確保所有 ETL 階段與翻譯腳本依此排列讀寫。
+- **Admin 欄位缺值處理**：meta_data CSV 在產生時保留 Null，不再強制輸出空白字串，並於讀取階段透過共用的 `fill_admin_columns()` 將 `admin_1-4` 的缺值統一補為空字串，避免 Polars 將空欄解析成 `None` 造成翻譯流程異常。
 
 ---
 

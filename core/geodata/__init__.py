@@ -3,6 +3,7 @@
 from .base import GeoDataHandler, register_handler, get_handler, get_all_handlers
 from .taiwan import TaiwanGeoDataHandler
 from .japan import JapanGeoDataHandler
+from .south_korea import SouthKoreaGeoDataHandler
 
 __all__ = [
     "GeoDataHandler",
@@ -11,4 +12,5 @@ __all__ = [
     "get_all_handlers",
     "TaiwanGeoDataHandler",
     "JapanGeoDataHandler",
+    "SouthKoreaGeoDataHandler",
 ]

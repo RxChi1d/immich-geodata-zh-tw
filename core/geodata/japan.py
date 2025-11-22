@@ -107,7 +107,13 @@ class JapanGeoDataHandler(GeoDataHandler):
 
         return gdf
 
-    def extract_from_shapefile(self, shapefile_path: str, output_csv: str) -> None:
+    def extract_from_shapefile(
+        self,
+        shapefile_path: str,
+        output_csv: str,
+        *,
+        google_api_key: str | None = None,
+    ) -> None:
         """從日本行政區 Shapefile 提取地理資料並轉換為標準化 CSV。
 
         處理日本國土數值情報的行政區域資料，計算中心點座標並按照
@@ -116,6 +122,7 @@ class JapanGeoDataHandler(GeoDataHandler):
         Args:
             shapefile_path: 輸入 Shapefile 的路徑
             output_csv: 輸出 CSV 檔案的路徑
+            google_api_key: Google Geocoding API 金鑰（本處理器不使用，保留介面一致性）
 
         處理步驟：
             1. 讀取 Shapefile 並使用動態 UTM 區選擇計算中心點
@@ -134,6 +141,8 @@ class JapanGeoDataHandler(GeoDataHandler):
             Exception: Shapefile 讀取失敗或資料處理錯誤時拋出
         """
         try:
+            _ = google_api_key
+
             logger.info(f"正在讀取 Shapefile: {shapefile_path}")
 
             # === 步驟 1: 讀取 Shapefile 並計算中心點 ===
@@ -163,8 +172,8 @@ class JapanGeoDataHandler(GeoDataHandler):
             # === 步驟 2: 選擇並標準化欄位 ===
             df = df.select(
                 [
-                    pl.col("longitude"),
                     pl.col("latitude"),
+                    pl.col("longitude"),
                     pl.col("N03_001"),  # 都道府縣
                     pl.col("N03_003"),  # 郡名 or 政令市名（舊版資料格式）
                     pl.col("N03_004"),  # 市區町村名
@@ -332,8 +341,9 @@ class JapanGeoDataHandler(GeoDataHandler):
             # 選擇最終欄位並轉換為 CITIES_SCHEMA 格式
             df = df.select(
                 [
-                    pl.col("longitude"),
                     pl.col("latitude"),
+                    pl.col("longitude"),
+                    pl.lit("日本").alias("country"),  # 國家名稱
                     pl.col("N03_001").alias("admin_1"),  # 都道府縣
                     pl.col("admin_2"),  # 市區町村（已按 R1-R5 規則生成）
                     # admin_3：僅政令市在 SEIREI_SHI_CITY_NAME_ONLY=True 時填入區名
@@ -341,10 +351,9 @@ class JapanGeoDataHandler(GeoDataHandler):
                         pl.col("is_seirei_shi") & pl.lit(self.SEIREI_SHI_CITY_NAME_ONLY)
                     )
                     .then(pl.col("clean_n03_005"))
-                    .otherwise(pl.lit(""))
+                    .otherwise(pl.lit(None, dtype=pl.String))
                     .alias("admin_3"),
-                    pl.lit("").alias("admin_4"),  # 空字串（保留欄位）
-                    pl.lit("日本").alias("country"),  # 國家名稱
+                    pl.lit(None, dtype=pl.String).alias("admin_4"),  # 空欄保留
                 ]
             )
 

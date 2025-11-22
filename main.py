@@ -79,14 +79,18 @@ def cmd_extract(args):
         logger.error(str(e))
         sys.exit(1)
 
-    # 驗證 Shapefile
+    # 驗證地理資料檔案
     shapefile_path = Path(args.shapefile)
     if not shapefile_path.exists():
-        logger.error(f"Shapefile 不存在: {shapefile_path}")
+        logger.error(f"地理資料檔案不存在: {shapefile_path}")
         sys.exit(1)
 
-    if shapefile_path.suffix.lower() != ".shp":
-        logger.error(f"請提供 .shp 檔案，而非: {shapefile_path.suffix}")
+    # 支援 Shapefile (.shp) 和 GeoJSON (.geojson, .json)
+    allowed_extensions = {".shp", ".geojson", ".json"}
+    if shapefile_path.suffix.lower() not in allowed_extensions:
+        logger.error(
+            f"不支援的檔案格式: {shapefile_path.suffix}，請提供 .shp 或 .geojson 檔案"
+        )
         sys.exit(1)
 
     # 執行提取
@@ -96,7 +100,10 @@ def cmd_extract(args):
     logger.info(f"  輸出: {output_csv}")
 
     handler = handler_class()
-    handler.extract_from_shapefile(str(shapefile_path), output_csv)
+    handler.extract_from_shapefile(
+        str(shapefile_path),
+        output_csv,
+    )
 
     logger.info("extract 步驟完成。")
 
@@ -129,7 +136,7 @@ def cmd_locationiq(args):
     qps = (
         args.locationiq_qps
         if args.locationiq_qps is not None
-        else int(os.environ.get("LOCATIONIQ_QPS", "1"))
+        else int(os.environ.get("LOCATIONIQ_QPS", "2"))
     )
 
     # 設定 LocationIQ 配置
@@ -224,7 +231,7 @@ def cmd_release(args):
         qps = (
             args.locationiq_qps
             if args.locationiq_qps is not None
-            else int(os.environ.get("LOCATIONIQ_QPS", "1"))
+            else int(os.environ.get("LOCATIONIQ_QPS", "2"))
         )
         generate_geodata_locationiq.set_locationiq_config(api_key, qps)
 
@@ -294,13 +301,17 @@ def main():
 
     # extract 子命令
     parser_extract = subparsers.add_parser(
-        "extract", help="提取原始地理資料（Shapefile → CSV）"
+        "extract", help="提取原始地理資料（Shapefile/GeoJSON → CSV）"
     )
     parser_extract.add_argument(
-        "--country", type=str, required=True, help="國家代碼（例如: TW, JP）"
+        "--country", type=str, required=True, help="國家代碼（例如: TW, JP, KR）"
     )
     parser_extract.add_argument(
-        "-s", "--shapefile", type=str, required=True, help="Shapefile (.shp) 檔案路徑"
+        "-s",
+        "--shapefile",
+        type=str,
+        required=True,
+        help="Shapefile (.shp) 或 GeoJSON (.geojson) 檔案路徑",
     )
     parser_extract.add_argument(
         "-o",
@@ -352,7 +363,7 @@ def main():
         "--locationiq-api-key", type=str, help="LocationIQ API Key"
     )
     parser_locationiq.add_argument(
-        "--locationiq-qps", type=int, default=1, help="LocationIQ 每秒查詢次數限制"
+        "--locationiq-qps", type=int, default=2, help="LocationIQ 每秒查詢次數限制"
     )
     parser_locationiq.set_defaults(func=cmd_locationiq)
 
@@ -404,7 +415,7 @@ def main():
         "--locationiq-api-key", type=str, help="LocationIQ API Key"
     )
     parser_release.add_argument(
-        "--locationiq-qps", type=int, default=1, help="LocationIQ 每秒查詢次數限制"
+        "--locationiq-qps", type=int, default=2, help="LocationIQ 每秒查詢次數限制"
     )
     parser_release.add_argument(
         "--pass-cleanup", action="store_true", help="跳過 cleanup 步驟"

@@ -35,8 +35,16 @@ class TaiwanGeoDataHandler(GeoDataHandler):
 
     MUNICIPALITIES = _MUNICIPALITIES
 
-    def extract_from_shapefile(self, shapefile_path: str, output_csv: str) -> None:
+    def extract_from_shapefile(
+        self,
+        shapefile_path: str,
+        output_csv: str,
+        *,
+        google_api_key: str | None = None,
+    ) -> None:
         try:
+            _ = google_api_key
+
             logger.info(f"正在讀取 Shapefile: {shapefile_path}")
 
             # 使用 geopandas 讀取 Shapefile
@@ -76,13 +84,13 @@ class TaiwanGeoDataHandler(GeoDataHandler):
             # 選擇需要的欄位並重新命名
             df = df.select(
                 [
-                    pl.col("longitude"),
                     pl.col("latitude"),
+                    pl.col("longitude"),
+                    pl.lit("臺灣").alias("country"),  # 國家
                     pl.col("COUNTYNAME").alias("admin_1"),  # 縣市
                     pl.col("TOWNNAME").alias("admin_2"),  # 鄉鎮市區
                     pl.col("VILLNAME").alias("admin_3"),  # 村里
-                    pl.lit("").alias("admin_4"),  # 鄰 - 設為空字串
-                    pl.lit("臺灣").alias("country"),  # 國家
+                    pl.lit(None, dtype=pl.String).alias("admin_4"),  # 鄰
                 ]
             )
 

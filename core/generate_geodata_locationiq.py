@@ -8,7 +8,7 @@ from requests.adapters import HTTPAdapter, Retry
 import polars as pl
 from tqdm import tqdm
 
-from core.utils import logger, ensure_folder_exists
+from core.utils import logger, ensure_folder_exists, fill_admin_columns
 from core.schemas import CITIES_SCHEMA, GEODATA_SCHEMA
 from core.geodata import get_handler
 
@@ -25,7 +25,7 @@ s.mount("https://", HTTPAdapter(max_retries=retries))
 
 # 預設值（若沒有設定，可能會在使用時出現錯誤）
 LOCATIONIQ_API_KEY = None
-LOCATIONIQ_QPS = 1
+LOCATIONIQ_QPS = 2  # LocationIQ 免費方案：5,000 次/天，2 次/秒
 
 
 def set_locationiq_config(api_key, qps):
@@ -97,7 +97,9 @@ def save_to_csv(data: pl.DataFrame, output_file: str):
         return  # 避免寫入空檔案
 
     if os.path.exists(output_file):
-        existing_data = pl.read_csv(output_file, schema=GEODATA_SCHEMA)
+        existing_data = fill_admin_columns(
+            pl.read_csv(output_file, schema=GEODATA_SCHEMA)
+        )
         data = existing_data.vstack(data)
 
     # 一次性寫入（覆蓋舊檔案）
@@ -121,15 +123,17 @@ def reverse_query(coordinate):
     if response:
         address = response["address"]
 
+        admin_2_value = address.get("city") or address.get("county")
+
         return pl.DataFrame(
             {
                 "latitude": [coordinate["lat"]],
                 "longitude": [coordinate["lon"]],
                 "country": [address["country"]],
-                "admin_1": [address.get("state", "")],
-                "admin_2": [address.get("city", address.get("county", ""))],
-                "admin_3": [address.get("suburb", "")],
-                "admin_4": [address.get("neighbourhood", "")],
+                "admin_1": [address.get("state")],
+                "admin_2": [admin_2_value],
+                "admin_3": [address.get("suburb")],
+                "admin_4": [address.get("neighbourhood")],
             },
             schema=GEODATA_SCHEMA,
             strict=False,
@@ -159,16 +163,18 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
 
     # 嘗試讀取已存在的 meta_data (恢復進度)
     existing_data = (
-        pl.read_csv(
-            output_file,
-            schema=GEODATA_SCHEMA,
+        fill_admin_columns(
+            pl.read_csv(
+                output_file,
+                schema=GEODATA_SCHEMA,
+            )
         )
         if os.path.exists(output_file)
         else pl.DataFrame(schema=GEODATA_SCHEMA)
     )
 
     # 建立已查詢座標的 Hash Set，加快查找速度
-    existing_coords = set(zip(existing_data["longitude"], existing_data["latitude"]))
+    existing_coords = set(zip(existing_data["latitude"], existing_data["longitude"]))
 
     # 讀取 cities500.txt
     cities_df = pl.read_csv(
@@ -189,10 +195,10 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
     for row in pbar:
         pbar.set_description(f"查詢城市: {row['name']}")
 
-        loc = {"lon": row["longitude"], "lat": row["latitude"]}
+        loc = {"lat": row["latitude"], "lon": row["longitude"]}
 
         # 如果座標已經存在，跳過查詢
-        if (loc["lon"], loc["lat"]) in existing_coords:
+        if (loc["lat"], loc["lon"]) in existing_coords:
             continue
 
         try:
@@ -239,7 +245,7 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
                         ).alias("admin_1"),
                         pl.col("admin_3").alias("admin_2"),
                         pl.col("admin_4").alias("admin_3"),
-                        pl.lit(None).alias("admin_4"),
+                        pl.lit(None, dtype=pl.String).alias("admin_4"),
                     )
 
                 # 省轄縣
@@ -281,7 +287,7 @@ def test():
         "--locationiq-api-key", type=str, required=True, help="LocationIQ API Key"
     )
     parser.add_argument(
-        "--locationiq-qps", type=int, default=1, help="LocationIQ 每秒查詢次數限制"
+        "--locationiq-qps", type=int, default=2, help="LocationIQ 每秒查詢次數限制"
     )
 
     parser.add_argument("--overwrite", action="store_true")

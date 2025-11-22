@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 import polars as pl
-from core.utils import logger
+from core.utils import logger, fill_admin_columns
 from core.schemas import ADMIN1_SCHEMA, GEODATA_SCHEMA, CITIES_SCHEMA
 
 
@@ -53,7 +53,11 @@ class GeoDataHandler(ABC):
         )
 
     @abstractmethod
-    def extract_from_shapefile(self, shapefile_path: str, output_csv: str) -> None:
+    def extract_from_shapefile(
+        self,
+        shapefile_path: str,
+        output_csv: str,
+    ) -> None:
         """從 Shapefile 提取資料並儲存為標準化 CSV。
 
         Args:
@@ -107,7 +111,7 @@ class GeoDataHandler(ABC):
             raise FileNotFoundError(error_msg)
 
         # 讀取 CSV
-        df = pl.read_csv(csv_path)
+        df = fill_admin_columns(pl.read_csv(csv_path))
         logger.info(f"成功讀取 CSV，共 {df.height} 筆資料")
 
         # 呼叫前處理鉤子

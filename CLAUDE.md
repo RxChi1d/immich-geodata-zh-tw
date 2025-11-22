@@ -124,6 +124,15 @@
 - **Python 套件管理工具**：uv
 - **uv 管理的虛擬環境**：`.venv/`
 
+## 版本管理
+
+本專案使用兩種獨立的版本號：
+
+- **專案版本**（如 0.1.0）：遵循語義化版本規範，代表功能、API、錯誤修復的變更。專案版本變更時需更新發布說明、CHANGELOG 等面向用戶的文檔。
+- **快取 Schema 版本**（如 1.0）：定義於 `TranslationCacheStore.VERSION`，僅在快取資料結構不相容時升級。快取版本幾乎不變動（可能整個 1.x 專案生命週期都維持 schema 1.0）。
+
+**規則**：兩者獨立管理，專案版本升級不會影響快取 schema 版本，避免不必要的快取重建。
+
 ## 架構說明
 
 ### 地理資料處理流程（ETL 模式）
@@ -148,7 +157,7 @@ core/geodata/
   - 讀取 Shapefile（使用 geopandas）
   - 計算多邊形中心點（使用適當的投影）
   - 轉換為 WGS84 座標
-  - 輸出標準化欄位：longitude, latitude, admin_1-4, country
+  - 輸出標準化欄位：latitude, longitude, country, admin_1-4
 
 #### 2. Transform（轉換）
 - `convert_to_cities_schema(csv_path)`: 將標準 CSV 轉成 CITIES_SCHEMA，負責生成 geoname_id、對應行政區與補齊時區、國家代碼。
@@ -207,6 +216,8 @@ uv run pytest              # 4. 執行單元測試
 ```
 
 ## 開發注意事項
+
+- **Logger 使用**：任何檔案/代碼若有使用 logger 紀錄 log（新檔或修改既有程式碼）之需求，務必匯入 `from core.utils import logger` 使用專案統一設定，不可直接 `from loguru import logger`。
 
 ### 模組化設計原則
 - **單一檔案不得超過 500 行程式碼**

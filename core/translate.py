@@ -7,7 +7,12 @@ import opencc
 import polars as pl
 
 from core.schemas import ADMIN1_SCHEMA, GEODATA_SCHEMA, CITIES_SCHEMA
-from core.utils import ensure_folder_exists, logger, load_alternate_names
+from core.utils import (
+    ensure_folder_exists,
+    logger,
+    load_alternate_names,
+    fill_admin_columns,
+)
 
 # 初始化簡繁轉換器
 converter_t2s = opencc.OpenCC("t2s")
@@ -18,18 +23,18 @@ def find_duplicate_in_meta(meta_data):
     duplicated_entries = []
 
     for country, df in meta_data.items():
-        # 計算 (longitude, latitude) 的出現次數
+        # 計算 (latitude, longitude) 的出現次數
         duplicate_locs = (
-            df.group_by(["longitude", "latitude"])
+            df.group_by(["latitude", "longitude"])
             .agg(pl.count().alias("count"))
             .filter(pl.col("count") > 1)  # 只保留重複的組合
-            .select(["longitude", "latitude"])
+            .select(["latitude", "longitude"])
         )
 
-        # 如果有重複的 (longitude, latitude)，將完整資訊加入結果
+        # 如果有重複的 (latitude, longitude)，將完整資訊加入結果
         if not duplicate_locs.is_empty():
             duplicate_rows = df.join(
-                duplicate_locs, on=["longitude", "latitude"], how="inner"
+                duplicate_locs, on=["latitude", "longitude"], how="inner"
             )
             duplicate_rows = duplicate_rows.with_columns(
                 pl.lit(country).alias("country_code")
@@ -41,19 +46,11 @@ def find_duplicate_in_meta(meta_data):
         duplicated_df = pl.concat(duplicated_entries)
         print(duplicated_df)
     else:
-        print("No non-unique longitude/latitude found.")
+        print("No non-unique latitude/longitude found.")
 
 
 def is_chinese(text):
-    """
-    判斷給定的文字是否為中文。
-
-    Args:
-        text (str): 要檢查的文字。
-
-    Returns:
-        bool: 如果文字是中文，返回 True，否則返回 False。
-    """
+    """判斷給定的文字是否為中文。"""
 
     return bool(regex.match(r"^[\p{Script_Extensions=Han}-]+$", text))
 
@@ -115,9 +112,11 @@ def load_metadata_list(metadata_folder):
 
     for file_path in glob(f"{metadata_folder}/*.csv"):
         key = os.path.splitext(os.path.basename(file_path))[0]
-        metadata_dict[key] = pl.read_csv(
-            file_path,
-            schema=GEODATA_SCHEMA,
+        metadata_dict[key] = fill_admin_columns(
+            pl.read_csv(
+                file_path,
+                schema=GEODATA_SCHEMA,
+            )
         )
 
     return metadata_dict
@@ -192,10 +191,10 @@ def translate_cities500(
         if country not in meta_data:
             return None
 
-        # 在 meta_data[country] DataFrame 中查找對應的 (longitude, latitude)
+        # 在 meta_data[country] DataFrame 中查找對應的 (latitude, longitude)
         result = meta_data[country].filter(
-            (pl.col("longitude") == row["longitude"])
-            & (pl.col("latitude") == row["latitude"])
+            (pl.col("latitude") == row["latitude"])
+            & (pl.col("longitude") == row["longitude"])
         )
 
         # 如果有匹配的行，取出 admin_2
@@ -210,7 +209,7 @@ def translate_cities500(
         return None  # 若無匹配則回傳 None
 
     cities500_df = cities500_df.with_columns(
-        pl.struct(["country_code", "longitude", "latitude"])
+        pl.struct(["country_code", "latitude", "longitude"])
         .map_elements(translate_from_metadata, return_dtype=pl.String)
         .alias("translated_name")
     )
