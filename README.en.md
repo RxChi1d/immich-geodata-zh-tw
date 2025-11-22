@@ -8,7 +8,7 @@
 
 This project delivers reverse geocoding enhancements tailored for users in Taiwan, providing natural and accurate location display that reflects local reading habits.
 
-Currently supports: 🇹🇼 **Taiwan** | 🇯🇵 **Japan** | 🌏 **Traditional Chinese localization for other regions**
+Currently supports: 🇹🇼 **Taiwan** | 🇯🇵 **Japan** | 🇰🇷 **South Korea** | 🌏 **Traditional Chinese localization for other regions**
 
 ## Design Philosophy
 
@@ -16,6 +16,7 @@ We focus on the Taiwan user experience and apply the most suitable language stra
 
 - **Taiwan**: Uses NLSC datasets to fix country and administrative naming issues
 - **Japan**: Uses 国土数値情報 datasets and preserves native names (漢字 + かな)
+- **South Korea**: Uses admdongkor project data and provides Traditional Chinese translations
 - **Other regions**: Provides Traditional Chinese translations, falling back to English when no common translation exists
 
 > [!TIP]
@@ -43,6 +44,7 @@ We focus on the Taiwan user experience and apply the most suitable language stra
   - [Administrative Optimization Strategy](#administrative-optimization-strategy)
     - [🇹🇼 Taiwan](#-taiwan)
     - [🇯🇵 Japan](#-japan)
+    - [🇰🇷 South Korea](#-south-korea)
   - [Update Geographic Data](#update-geographic-data)
     - [Integrated Deployment](#integrated-deployment)
     - [Manual Deployment](#manual-deployment-1)
@@ -51,6 +53,7 @@ We focus on the Taiwan user experience and apply the most suitable language stra
     - [2. Extract Raw Geographic Data (Optional)](#2-extract-raw-geographic-data-optional)
       - [Taiwan Data Extraction](#taiwan-data-extraction)
       - [Japan Data Extraction](#japan-data-extraction)
+      - [South Korea Data Extraction](#south-korea-data-extraction)
     - [3. Complete Data Processing Workflow](#3-complete-data-processing-workflow)
       - [Register LocationIQ API](#register-locationiq-api)
       - [Execute Data Processing](#execute-data-processing)
@@ -65,6 +68,7 @@ The project applies region-specific language handling to reflect the expectation
 | --- | --- | --- | --- |
 | 🇹🇼 Taiwan | Official Traditional Chinese names | NLSC (National Land Surveying and Mapping Center) | Fixes incorrect country labels and missing municipality names |
 | 🇯🇵 Japan | Native Japanese (漢字 + かな) | 国土数値情報ダウンロードサービス | Displays official Japanese names without translating them |
+| 🇰🇷 South Korea | Traditional Chinese translations | admdongkor (Official administrative boundaries) | Provides Traditional Chinese translations |
 | 🌏 Others | Traditional Chinese translations | Custom glossary → GeoNames translations → GeoNames English | Prioritizes Taiwan-style translations; falls back when unavailable |
 
 > **Why keep Japanese in Japanese?**
@@ -91,7 +95,12 @@ The geographic data used in this project mainly comes from the following sources
     - **Dataset**: Administrative Area Data (World Geodetic System)
     - **License**: Japanese Government Open Data
     - **Purpose**: As the primary data source for Japan administrative boundaries and names
-5.  **Other References**
+5.  **admdongkor** (South Korea)
+    - **Source**: [admdongkor](https://github.com/vuski/admdongkor)
+    - **Dataset**: South Korean official administrative boundary data (GeoJSON format)
+    - **License**: MIT License
+    - **Purpose**: As the primary data source for South Korea administrative boundaries and names
+6.  **Other References**
     - **Ministry of Economic Affairs International Trade Administration & Ministry of Foreign Affairs of Taiwan**: As reference sources for Chinese translations of some countries/regions
 
 > [!NOTE]
@@ -208,10 +217,17 @@ Please go to this project's [Releases page](https://github.com/RxChi1d/immich-ge
 ### 🇯🇵 Japan
 
 - **Preserve native names**: Keeps the original kanji + kana combinations (e.g., 「静岡県」 instead of "Shizuoka Prefecture")
-- **Context-aware subdivision handling**: Handles standard cities, special wards, designated cities, and Tokyo’s special wards
+- **Context-aware subdivision handling**: Handles standard cities, special wards, designated cities, and Tokyo's special wards
 - **Intelligent district prefixes**: Adds district names only when multiple towns share the same name within a prefecture
 
 > 📖 See [Japan Administrative Processing (zh-TW)](docs/zh-tw/japan-admin-processing.md) • [Japan Administrative Processing (English)](docs/en/japan-admin-processing.md)
+
+### 🇰🇷 South Korea
+
+- **Traditional Chinese translations**: Extracts official administrative boundaries from admdongkor project and auto-translates to Traditional Chinese
+- **Administrative naming optimization**: Metropolitan cities unified with "市" suffix (Seoul City, Busan City, Daegu City, etc.)
+- **Special administrative divisions**: Jeju Province distinguished from Jeju City, Sejong City uses industry-standard translations
+- **Administrative hierarchy handling**: Auto-splits "City + District/County" structure, supports special administrative structures
 
 ## Update Geographic Data
 
@@ -265,6 +281,18 @@ Data source: [国土数値情報](https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjT
 uv run python main.py extract --country JP \
   --shapefile geoname_data/N03-20250101_GML/N03-20250101.shp \
   --output meta_data/jp_geodata.csv
+```
+
+#### South Korea Data Extraction
+
+Data source: [admdongkor](https://github.com/vuski/admdongkor)
+
+```bash
+# 1. Download official administrative boundary data from admdongkor project and extract
+# 2. Execute extraction command
+uv run python main.py extract --country KR \
+  --shapefile geoname_data/admdongkor/[filename].shp \
+  --output meta_data/kr_geodata.csv
 ```
 
 After extraction is complete, the data will be automatically integrated when executing `main.py release`.
