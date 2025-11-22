@@ -59,7 +59,10 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           name: ${{ env.VERSION_TAG }} # Use input when manual or the pushed tag name
-          artifacts: "output/release.*"
+          artifacts: |
+            output/release.*
+            LICENSE
+            update_data.sh
           draft: false
           generateReleaseNotes: false # Keep false unless you want auto-generated notes
           commit: main # Or specify the commit SHA/branch if needed
