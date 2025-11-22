@@ -1,6 +1,7 @@
 """地理資料處理器抽象基類（ETL 模式）。"""
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 import polars as pl
 from core.utils import logger, fill_admin_columns
 from core.schemas import ADMIN1_SCHEMA, GEODATA_SCHEMA, CITIES_SCHEMA
@@ -224,6 +225,65 @@ class GeoDataHandler(ABC):
             .round(cls.COORD_DECIMAL_PLACES)
             .alias(longitude_column),
         )
+
+    def _save_extract_csv(
+        self,
+        df: pl.DataFrame,
+        output_csv: str,
+        sort_columns: list[str] | None = None,
+    ) -> None:
+        """標準化並儲存 extract 階段產生的 CSV 檔案。
+
+        執行標準收尾步驟：
+        1. 全欄位排序
+        2. 移除無效座標
+        3. 標準化座標精度
+        4. 建立輸出目錄
+        5. 寫入 CSV
+        6. 記錄日誌
+        7. 顯示前五筆資料
+
+        Args:
+            df: 待儲存的 DataFrame。
+            output_csv: 輸出 CSV 檔案路徑。
+            sort_columns: 排序欄位列表。預設為完整欄位順序。
+
+        Raises:
+            Exception: 儲存過程中發生的任何錯誤。
+        """
+        # 預設排序欄位
+        if sort_columns is None:
+            sort_columns = [
+                "latitude",
+                "longitude",
+                "country",
+                "admin_1",
+                "admin_2",
+                "admin_3",
+                "admin_4",
+            ]
+
+        # 全欄位排序可在資料更新時最小化 git diff，便於版本追蹤
+        df = df.sort(sort_columns)
+
+        # 移除無效的資料點
+        df = df.filter(
+            pl.col("longitude").is_not_null() & pl.col("latitude").is_not_null()
+        )
+
+        # 固定經緯度小數位數以確保輸出穩定性
+        df = self.standardize_coordinate_precision(df)
+
+        # 儲存 CSV
+        output_path = Path(output_csv)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"正在儲存 CSV 檔案: {output_path}")
+        df.write_csv(output_path)
+        logger.info(f"成功儲存 CSV 檔案，共 {len(df)} 筆資料")
+
+        # 顯示前五筆資料供檢查
+        logger.info(df.head(5))
 
     @classmethod
     def prepare_cities_source(cls, df: pl.DataFrame) -> pl.DataFrame:

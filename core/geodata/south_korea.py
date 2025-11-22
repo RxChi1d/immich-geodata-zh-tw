@@ -7,7 +7,6 @@ import geopandas as gpd
 import pyproj
 import numpy as np
 from collections.abc import Callable
-from pathlib import Path
 
 from core.utils import logger
 from core.utils.wikidata_translator import (
@@ -624,27 +623,8 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
                 ]
             )
 
-            # 排序：便於版本控制差異比對
-            df = df.sort(["country", "admin_1", "admin_2"])
-
-            # 過濾：移除無效座標
-            df = df.filter(
-                pl.col("longitude").is_not_null() & pl.col("latitude").is_not_null()
-            )
-
-            # 標準化座標精度（預設 8 位小數）
-            df = self.standardize_coordinate_precision(df)
-
-            # 建立輸出目錄並寫入 CSV
-            output_path = Path(output_csv)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-
-            logger.info(f"正在儲存 CSV 檔案: {output_path}")
-            df.write_csv(output_path)
-            logger.info(f"成功儲存 CSV 檔案，共 {len(df)} 筆資料")
-
-            # 顯示前五筆供檢查
-            logger.info(df.head(5))
+            # 標準化並儲存 CSV
+            self._save_extract_csv(df, output_csv)
 
         except Exception as e:
             logger.error(f"處理 GeoJSON 時發生錯誤: {e}")
