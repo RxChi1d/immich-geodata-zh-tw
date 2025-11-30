@@ -67,7 +67,21 @@
 
 ---
 
-## 5. 其他參考資料
+## 5. admdongkor
+
+- **來源**: vuski/admdongkor (GitHub)
+- **資料集**: 南韓最新行政區邊界資料 (GeoJSON)
+- **授權**: 無額外限制 (No additional restrictions; attribution requested)
+- **使用方式**: 南韓地區行政區邊界與地名資料
+- **資料來源**: https://github.com/vuski/admdongkor
+
+**授權聲明**:
+
+> 本專案使用來自 [admdongkor](https://github.com/vuski/admdongkor) 專案的南韓行政區邊界資料。作者聲明不對修改後的資料設置額外限制，僅建議標示出處。
+
+---
+
+## 6. 其他參考資料
 
 ### 國家/地區中文譯名參考
 
