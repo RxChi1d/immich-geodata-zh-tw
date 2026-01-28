@@ -21,9 +21,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-      - name: Merge main into nightly
+      - name: Reset nightly to main
         run: |
           git fetch origin main
-          git merge --no-ff origin/main -m "chore(workflows): sync main into nightly"
-      - name: Push nightly
-        run: git push origin nightly
+          git reset --hard origin/main
+      - name: Force push nightly
+        run: git push --force origin nightly

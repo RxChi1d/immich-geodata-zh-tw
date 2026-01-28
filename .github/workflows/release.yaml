@@ -22,6 +22,7 @@ jobs:
     environment: Action Env
     permissions:
       contents: write
+      pull-requests: write
     runs-on: ubuntu-latest
     env:
       # Prefer manual input when dispatched; otherwise use the pushed tag name
@@ -71,5 +72,21 @@ jobs:
           prerelease: ${{ contains(env.VERSION_TAG, 'a') || contains(env.VERSION_TAG, 'b') || contains(env.VERSION_TAG, 'rc') || contains(env.VERSION_TAG, 'alpha') || contains(env.VERSION_TAG, 'beta') }} # Mark alpha/beta/rc as pre-release
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
+          branch: release-meta-data/${{ env.TODAY }}
           commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
           file_pattern: meta_data/*
+      - name: Create PR for meta_data
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          branch="release-meta-data/${{ env.TODAY }}"
+          existing=$(gh pr list --head "$branch" --state open --json number --jq 'length')
+          if [ "$existing" -eq 0 ]; then
+            gh pr create \
+              --base main \
+              --head "$branch" \
+              --title "chore(geodata): 發布後更新 meta_data ${{ env.TODAY }}" \
+              --body "這是 release 流程產生的 meta_data 更新，請審核後合併。"
+          else
+            echo "已有開啟中的 PR，跳過建立。"
+          fi
