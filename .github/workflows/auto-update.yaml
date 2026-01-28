@@ -16,12 +16,14 @@ jobs:
     environment: Action Env
     permissions:
       contents: write
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: nightly
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -73,11 +75,27 @@ jobs:
             如果遇到 Immich 沒有更新數據，請手動修改 geodata-date.txt 文件，將其內容中的時間修改為更新的時間（比如當前時間）。
           draft: false
           generateReleaseNotes: false
-          commit: main
+          commit: nightly
           tag: nightly # Use the fixed 'nightly' tag
           makeLatest: false # Do NOT mark this as the latest release
       - uses: stefanzweifel/git-auto-commit-action@v5
         if: steps.check_changes.outputs.has_changes == 'true'
         with:
+          branch: nightly
           commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
           file_pattern: meta_data/*
+      - name: Create PR to main
+        if: steps.check_changes.outputs.has_changes == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existing=$(gh pr list --head nightly --state open --json number --jq 'length')
+          if [ "$existing" -eq 0 ]; then
+            gh pr create \
+              --base main \
+              --head nightly \
+              --title "chore(geodata): 自動更新 ${{ env.TODAY }}" \
+              --body "這是 nightly 自動更新產生的 geodata 變更，請審核後合併。"
+          else
+            echo "已有開啟中的 PR，跳過建立。"
+          fi

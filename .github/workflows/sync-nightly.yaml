@@ -1,0 +1,29 @@
+name: Sync Nightly
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+
+jobs:
+  sync:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout nightly
+        uses: actions/checkout@v4
+        with:
+          ref: nightly
+          fetch-depth: 0
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Merge main into nightly
+        run: |
+          git fetch origin main
+          git merge --no-ff origin/main -m "chore(workflows): sync main into nightly"
+      - name: Push nightly
+        run: git push origin nightly
