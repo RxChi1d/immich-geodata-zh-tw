@@ -26,4 +26,4 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
       - name: Force push nightly
-        run: git push --force origin nightly
+        run: git push --force origin HEAD:refs/heads/nightly
