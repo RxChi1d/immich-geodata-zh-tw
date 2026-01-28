@@ -72,14 +72,15 @@ jobs:
           prerelease: ${{ contains(env.VERSION_TAG, 'a') || contains(env.VERSION_TAG, 'b') || contains(env.VERSION_TAG, 'rc') || contains(env.VERSION_TAG, 'alpha') || contains(env.VERSION_TAG, 'beta') }} # Mark alpha/beta/rc as pre-release
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          branch: release-meta-data/${{ env.TODAY }}
+          branch: chore/update-meta-data-${{ env.TODAY }}
+          create_branch: true
           commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
           file_pattern: meta_data/*
       - name: Create PR for meta_data
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          branch="release-meta-data/${{ env.TODAY }}"
+          branch="chore/update-meta-data-${{ env.TODAY }}"
           existing=$(gh pr list --head "$branch" --state open --json number --jq 'length')
           if [ "$existing" -eq 0 ]; then
             gh pr create \
