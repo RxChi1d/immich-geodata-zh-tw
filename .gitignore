@@ -46,3 +46,4 @@ uv.lock
 
 # Python version file (project uses specific Python version)
 .python-version
+.worktrees
