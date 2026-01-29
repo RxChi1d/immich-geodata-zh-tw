@@ -56,11 +56,13 @@ jobs:
           else
             echo "ℹ️ 沒有檔案變更，跳過 commit 和 release"
           fi
-      - name: Delete existing nightly release
+      - name: Delete existing nightly releases
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
-          gh release delete nightly --yes || true
+          # Delete old nightly tag (cleanup from previous versions)
           gh api repos/${{ github.repository }}/git/refs/tags/nightly --method DELETE || true
+          # Delete old nightly-* releases (keep only latest)
+          gh release list --limit 100 | grep "^nightly-" | cut -f3 | tail -n +2 | xargs -I {} gh release delete {} --yes || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create Release
@@ -76,7 +78,7 @@ jobs:
           draft: false
           generateReleaseNotes: false
           commit: nightly
-          tag: nightly # Use the fixed 'nightly' tag
+          tag: nightly-${{ env.TODAY }}
           makeLatest: false # Do NOT mark this as the latest release
       - uses: stefanzweifel/git-auto-commit-action@v5
         if: steps.check_changes.outputs.has_changes == 'true'
