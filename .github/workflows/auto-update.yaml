@@ -1,8 +1,6 @@
-# Simple workflow for deploying static content to GitHub Pages
 name: Auto Update
 
 on:
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
   schedule:
     - cron: "33 3 * * 5"
@@ -12,7 +10,7 @@ defaults:
     shell: bash
 
 jobs:
-  release:
+  auto-update:
     environment: Action Env
     permissions:
       contents: write
@@ -38,40 +36,28 @@ jobs:
         run: echo "TODAY=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
       - name: Build
         run: uv run python main.py release --locationiq-api-key "${{ secrets.LOCATIONIQ_API_KEY }}" --country-code "KR" "TH"
-      - name: Check for changes
-        id: check_changes
-        run: |
-          # Check for any changes in working directory
-          if ! git diff --quiet || git ls-files --others --exclude-standard | grep -q .; then
-            echo "Changes detected in working directory"
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-          else
-            echo "No changes detected in working directory"
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-          fi
-      - name: Display check result
-        run: |
-          if [ "${{ steps.check_changes.outputs.has_changes }}" == "true" ]; then
-            echo "✅ 檢測到檔案變更，將進行 commit 和 release"
-          else
-            echo "ℹ️ 沒有檔案變更，跳過 commit 和 release"
-          fi
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        id: auto-commit
+        with:
+          branch: nightly
+          commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
+          file_pattern: meta_data/*
       - name: Delete existing nightly releases
-        if: steps.check_changes.outputs.has_changes == 'true'
+        if: steps.auto-commit.outputs.changes_detected == 'true'
         run: |
-          # Delete old nightly tag (cleanup from previous versions)
+          # 刪除舊的 nightly tag（清理先前版本遺留）
           gh api repos/${{ github.repository }}/git/refs/tags/nightly --method DELETE || true
-          # Delete old nightly-* releases (keep only latest)
+          # 刪除舊的 nightly-* releases（僅保留最新）
           gh release list --limit 100 | grep "^nightly-" | cut -f3 | tail -n +2 | xargs -I {} gh release delete {} --yes || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create Release
-        if: steps.check_changes.outputs.has_changes == 'true'
+        if: steps.auto-commit.outputs.changes_detected == 'true'
         uses: ncipollo/release-action@v1
         with:
           name: Automated Nightly Build ${{ env.TODAY }}
           artifacts: "output/release.*"
-          body: | 
+          body: |
             這是定期自動生成的 nightly 版本 (包含最新 geodata)，可能未經充分測試。建議使用標有 "Latest" 的穩定版本。
             如果發現問題請提 issue 並暫時選擇到 [此處](https://github.com/RxChi1d/immich-geodata-zh-tw/releases) 選擇手動發布的 Release 文件。
             如果遇到 Immich 沒有更新數據，請手動修改 geodata-date.txt 文件，將其內容中的時間修改為更新的時間（比如當前時間）。
@@ -79,15 +65,9 @@ jobs:
           generateReleaseNotes: false
           commit: nightly
           tag: nightly-${{ env.TODAY }}
-          makeLatest: false # Do NOT mark this as the latest release
-      - uses: stefanzweifel/git-auto-commit-action@v5
-        if: steps.check_changes.outputs.has_changes == 'true'
-        with:
-          branch: nightly
-          commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
-          file_pattern: meta_data/*
+          makeLatest: false # nightly 不標記為 latest
       - name: Create PR to main
-        if: steps.check_changes.outputs.has_changes == 'true'
+        if: steps.auto-commit.outputs.changes_detected == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

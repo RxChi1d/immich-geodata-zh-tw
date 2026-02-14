@@ -1,17 +1,15 @@
-# Simple workflow for deploying static content to GitHub Pages
 name: Release
 
 on:
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
     inputs:
       version_tag:
-        description: '請輸入語意化版本標籤 (例如: v1.0.0)' # Input for semantic version tag
+        description: '請輸入語意化版本標籤 (例如: v1.0.0)'
         required: true
         type: string
   push:
     tags:
-      - 'v*' # Trigger when pushing semantic version tags like v1.0.0, v1.0.0a1, etc.
+      - 'v*' # 語意化版本標籤，例如 v1.0.0、v1.0.0a1
 
 defaults:
   run:
@@ -25,17 +23,17 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-latest
     env:
-      # Prefer manual input when dispatched; otherwise use the pushed tag name
+      # 手動觸發時使用輸入值，否則使用推送的 tag 名稱
       VERSION_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version_tag || github.ref_name }}
     steps:
-      - name: Validate version tag (PEP 440)
+      - name: 驗證版本標籤 (PEP 440)
         run: |
-          echo "Validating VERSION_TAG: ${VERSION_TAG}"
-          # Allow: vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCHaN/bN/rcN (PEP 440 pre-releases)
+          echo "驗證 VERSION_TAG: ${VERSION_TAG}"
+          # 允許格式：vMAJOR.MINOR.PATCH 或 vMAJOR.MINOR.PATCHaN/bN/rcN（PEP 440 預發布版本）
           REGEX='^v[0-9]+\.[0-9]+\.[0-9]+((a|b|rc)[0-9]+)?$'
           if [[ ! "$VERSION_TAG" =~ $REGEX ]]; then
-            echo "❌ Invalid VERSION_TAG: $VERSION_TAG"
-            echo "Expected (PEP 440): vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCHaN/bN/rcN"
+            echo "❌ 無效的 VERSION_TAG: $VERSION_TAG"
+            echo "預期格式 (PEP 440): vMAJOR.MINOR.PATCH 或 vMAJOR.MINOR.PATCHaN/bN/rcN"
             exit 1
           fi
       - name: Checkout
@@ -59,24 +57,27 @@ jobs:
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          name: ${{ env.VERSION_TAG }} # Use input when manual or the pushed tag name
+          name: ${{ env.VERSION_TAG }}
           artifacts: |
             output/release.*
             LICENSE
             update_data.sh
           draft: false
-          generateReleaseNotes: false # Keep false unless you want auto-generated notes
-          commit: main # Or specify the commit SHA/branch if needed
-          tag: ${{ env.VERSION_TAG }} # Use input when manual or the pushed tag
-          makeLatest: ${{ !contains(env.VERSION_TAG, 'a') && !contains(env.VERSION_TAG, 'b') && !contains(env.VERSION_TAG, 'rc') && !contains(env.VERSION_TAG, 'alpha') && !contains(env.VERSION_TAG, 'beta') }} # Only mark stable versions as latest
-          prerelease: ${{ contains(env.VERSION_TAG, 'a') || contains(env.VERSION_TAG, 'b') || contains(env.VERSION_TAG, 'rc') || contains(env.VERSION_TAG, 'alpha') || contains(env.VERSION_TAG, 'beta') }} # Mark alpha/beta/rc as pre-release
+          generateReleaseNotes: false
+          commit: main
+          tag: ${{ env.VERSION_TAG }}
+          # 僅穩定版本標記為 latest；含預發布標識（a/b/rc/alpha/beta）的標記為 prerelease
+          makeLatest: ${{ !contains(env.VERSION_TAG, 'a') && !contains(env.VERSION_TAG, 'b') && !contains(env.VERSION_TAG, 'rc') && !contains(env.VERSION_TAG, 'alpha') && !contains(env.VERSION_TAG, 'beta') }}
+          prerelease: ${{ contains(env.VERSION_TAG, 'a') || contains(env.VERSION_TAG, 'b') || contains(env.VERSION_TAG, 'rc') || contains(env.VERSION_TAG, 'alpha') || contains(env.VERSION_TAG, 'beta') }}
       - uses: stefanzweifel/git-auto-commit-action@v5
+        id: auto-commit
         with:
           branch: chore/update-meta-data-${{ env.TODAY }}
           create_branch: true
           commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
           file_pattern: meta_data/*
       - name: Create PR for meta_data
+        if: steps.auto-commit.outputs.changes_detected == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
