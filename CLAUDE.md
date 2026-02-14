@@ -112,6 +112,42 @@
 - **Cross-Platform Compatibility**: Resolved Windows-specific path issues
 ```
 
+### Release Notes 撰寫規範
+
+**重要**：GitHub Release Notes 與 CHANGELOG 共用 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 分類規範。
+
+#### 分類與 Emoji 對應
+
+| 類別 | Emoji | 說明 |
+|------|-------|------|
+| Added | 🚀 | 新功能 |
+| Changed | 🔄 | 現有功能變更、資料更新 |
+| Deprecated | ⚠️ | 即將移除的功能 |
+| Removed | 🗑️ | 已移除的功能 |
+| Fixed | 🐛 | 錯誤修復 |
+| Security | 🔒 | 安全性修復 |
+
+**注意**：不使用 Conventional Commit 的分類（feat, fix, chore 等），因為 Release Notes 面向最終用戶。
+
+#### 範例格式
+```markdown
+# What's Changed
+
+## 🐛 Fixed
+
+- 修正 nightly 動態 tag 與分支命名衝突問題，確保自動更新流程穩定執行
+
+## 🔄 Changed
+
+- 更新泰國地理資料（2026-01-29、2026-02-13）
+
+---
+
+**完整變更記錄**: [v2.2.1...v2.2.2](https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.1...v2.2.2)
+
+**發布日期**: 2026-02-13
+```
+
 ## 專案概述
 
 本專案為 Immich 提供反向地理編碼功能的臺灣特化優化，旨在提升地理資訊的準確性及使用體驗。主要功能包括：
