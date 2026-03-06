@@ -21,7 +21,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: nightly
+          ref: main
+      - name: Create nightly branch
+        run: git checkout -B nightly
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -42,13 +44,10 @@ jobs:
           branch: nightly
           commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
           file_pattern: meta_data/*
-      - name: Delete existing nightly releases
+          push_options: '--force'
+      - name: Delete existing nightly release
         if: steps.auto-commit.outputs.changes_detected == 'true'
-        run: |
-          # 刪除舊的 nightly tag（清理先前版本遺留）
-          gh api repos/${{ github.repository }}/git/refs/tags/nightly --method DELETE || true
-          # 刪除舊的 nightly-* releases（僅保留最新）
-          gh release list --limit 100 | grep "^nightly-" | cut -f3 | tail -n +2 | xargs -I {} gh release delete {} --yes || true
+        run: gh release delete nightly --yes --cleanup-tag || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create Release
@@ -64,8 +63,9 @@ jobs:
           draft: false
           generateReleaseNotes: false
           commit: nightly
-          tag: nightly-${{ env.TODAY }}
-          makeLatest: false # nightly 不標記為 latest
+          tag: nightly
+          makeLatest: false
+          prerelease: true
       - name: Create PR to main
         if: steps.auto-commit.outputs.changes_detected == 'true'
         env:
