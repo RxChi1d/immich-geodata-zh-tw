@@ -1149,9 +1149,11 @@ class WikidataTranslator:
                                     instance_of_qids.append(datavalue["value"]["id"])
                             except (KeyError, TypeError):
                                 continue
+                        # Reason: 每筆寫入即標記 dirty，與 _batch_get_labels 一致；
+                        #         避免批次中途例外時已寫入資料未被 flush
                         p31_cache[qid] = instance_of_qids
+                        self._mark_cache_dirty()
 
-                    self._mark_cache_dirty()
                     logger.debug(
                         f"批次 {i // batch_size + 1}: 成功查詢 {len(batch)} 個 QID 的 P31"
                     )

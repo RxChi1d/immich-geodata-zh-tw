@@ -41,21 +41,13 @@ def pack(output_dir):
         "output/cities500_translated.txt": os.path.join(geodata_dir, "cities500.txt"),
     }
 
-    for src, dst in files_to_copy.items():
-        try:
-            shutil.copy(src, dst)
-            logger.info(f"複製 {src} 到 {dst} 成功")
-        except IOError:
-            logger.error(f"複製 {src} 失敗！退出。")
-            exit(1)
-
     # 複製授權相關檔案到 release 根目錄
     license_files = {
         "LICENSE": os.path.join(release_dir, "LICENSE"),
         "NOTICE.md": os.path.join(release_dir, "NOTICE.md"),
     }
 
-    for src, dst in license_files.items():
+    for src, dst in {**files_to_copy, **license_files}.items():
         try:
             shutil.copy(src, dst)
             logger.info(f"複製 {src} 到 {dst} 成功")

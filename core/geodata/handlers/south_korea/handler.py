@@ -227,18 +227,14 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
                 ]
             )
 
-            # 解析 admin_3：從 adm_nm 移除 sidonm 和 sggnm
-            # Reason: Polars 尚未支援動態長度 pattern 的 str.replace_all，
-            #         故仍以 map_elements 處理；改用 struct 一次傳入三欄以減少查找成本
+            # 解析 admin_3：從 adm_nm 逐欄移除 sidonm 與 sggnm 後 trim。
+            # Reason: Polars 的 str.replace_all 支援以欄位表達式作為 pattern，
+            #         可完全向量化，比 map_elements 快一個量級。
             df = df.with_columns(
-                pl.struct(["adm_nm", "sidonm", "sggnm"])
-                .map_elements(
-                    lambda row: row["adm_nm"]
-                    .replace(row["sidonm"], "")
-                    .replace(row["sggnm"], "")
-                    .strip(),
-                    return_dtype=pl.String,
-                )
+                pl.col("adm_nm")
+                .str.replace_all(pl.col("sidonm"), pl.lit(""), literal=True)
+                .str.replace_all(pl.col("sggnm"), pl.lit(""), literal=True)
+                .str.strip_chars()
                 .alias("admin_3")
             )
 

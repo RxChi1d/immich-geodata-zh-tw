@@ -2,7 +2,7 @@ import os
 import polars as pl
 from pathlib import Path
 
-from core.utils import logger, calculate_global_max_geoname_id
+from core.utils import logger, calculate_global_max_geoname_id, ensure_folder_exists
 from core.schemas import CITIES_SCHEMA, ADMIN1_SCHEMA
 from core.geodata import get_handler, get_all_handlers
 
@@ -123,16 +123,10 @@ def update_admin1_data(
             csv_path = f"meta_data/{country_code.lower()}_geodata.csv"
             new_admin1 = handler.generate_admin1_records(csv_path, base_id)
 
-            # 計算使用的最大 ID
-            max_id_used = new_admin1.select(
-                pl.col("geoname_id").cast(pl.Int64).max()
-            ).item()
-
-            # 更新最大 ID
-            max_id = max_id_used
-            logger.info(
-                f"{country_code} admin1 使用的 ID 範圍: {base_id} - {max_id_used}"
-            )
+            # Reason: generate_admin1_records 以 base_id 連續分配 ID，
+            #         直接由長度推算最大值即可，免去再次 cast+max 掃描。
+            max_id = base_id + new_admin1.height - 1
+            logger.info(f"{country_code} admin1 使用的 ID 範圍: {base_id} - {max_id}")
 
             # 移除舊的該國資料
             admin1_df = admin1_df.filter(
@@ -148,8 +142,7 @@ def update_admin1_data(
             logger.error(f"處理 {country_code} admin1 時發生錯誤: {e}")
 
     # 儲存 admin1CodesASCII_optimized.txt
-    # 確保輸出資料夾存在
-    Path(admin1_output).parent.mkdir(parents=True, exist_ok=True)
+    ensure_folder_exists(admin1_output)
     admin1_df.write_csv(admin1_output, separator="\t", include_header=False)
     logger.info(f"admin1CodesASCII.txt 更新完成，儲存至 {admin1_output}")
 
@@ -209,8 +202,7 @@ def update_cities500_data(
     )
 
     # 儲存結果
-    # 確保輸出資料夾存在
-    Path(output_file).parent.mkdir(parents=True, exist_ok=True)
+    ensure_folder_exists(output_file)
     cities500_df.write_csv(output_file, separator="\t", include_header=False)
     logger.info(
         f"cities500.txt 更新完成 ({cities500_df.height} 筆資料)，儲存至 {output_file}"
