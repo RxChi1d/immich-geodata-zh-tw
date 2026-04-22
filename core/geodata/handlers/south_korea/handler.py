@@ -1,6 +1,7 @@
 """南韓地理資料處理器。"""
 
 from collections.abc import Callable
+from typing import ClassVar
 
 import polars as pl
 import geopandas as gpd
@@ -27,20 +28,20 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
     使用動態 UTM 區選擇方法（結合 Albers 投影）計算中心點。
     """
 
-    COUNTRY_NAME = "南韓"
-    COUNTRY_CODE = "KR"
-    TIMEZONE = "Asia/Seoul"
+    COUNTRY_NAME: ClassVar[str] = "南韓"
+    COUNTRY_CODE: ClassVar[str] = "KR"
+    TIMEZONE: ClassVar[str] = "Asia/Seoul"
 
     # 以南韓為中心的 Albers 等面積圓錐投影，供 UTM 區判定使用
-    ALBERS_PROJ4 = (
+    ALBERS_PROJ4: ClassVar[str] = (
         "+proj=aea +lat_1=33 +lat_2=43 +lat_0=37 +lon_0=127.5 "
         "+x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs"
     )
 
     # 對照表與過濾關鍵字由 translations.py 集中維護
-    CITY_DISTRICT_REGEX = CITY_DISTRICT_REGEX
-    ADMIN1_NAME_MAP = ADMIN1_NAME_MAP
-    SEJONG_ADMIN2_MAP = SEJONG_ADMIN2_MAP
+    CITY_DISTRICT_REGEX: ClassVar[str] = CITY_DISTRICT_REGEX
+    ADMIN1_NAME_MAP: ClassVar[dict[str, str]] = ADMIN1_NAME_MAP
+    SEJONG_ADMIN2_MAP: ClassVar[dict[str, str]] = SEJONG_ADMIN2_MAP
 
     def _normalize_special_admin_structures(self, df: pl.DataFrame) -> pl.DataFrame:
         """正規化特殊行政區結構（如世宗特別自治市）。

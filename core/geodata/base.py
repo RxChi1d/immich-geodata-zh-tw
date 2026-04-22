@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from datetime import date
 from pathlib import Path
+from typing import ClassVar
 
 import polars as pl
 
@@ -28,12 +29,12 @@ class GeoDataHandler(GeoSpatialMixin, Admin1Mixin, ABC):
     """
 
     # 基底共用設定，可由子類視需求覆寫
-    COORD_DECIMAL_PLACES: int = 8
+    COORD_DECIMAL_PLACES: ClassVar[int] = 8
 
     # 子類必須覆寫的類別變數
-    COUNTRY_NAME: str = ""
-    COUNTRY_CODE: str = ""
-    TIMEZONE: str = ""
+    COUNTRY_NAME: ClassVar[str] = ""
+    COUNTRY_CODE: ClassVar[str] = ""
+    TIMEZONE: ClassVar[str] = ""
 
     # Schema 引用（從 core.schemas 匯入，供子類繼承）
     ADMIN1_SCHEMA = ADMIN1_SCHEMA

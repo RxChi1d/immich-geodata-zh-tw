@@ -39,11 +39,10 @@ class GeoSpatialMixin:
         """
         gdf = gdf.drop(columns=["geometry"])
         for col in gdf.columns:
-            if gdf[col].dtype == "object":
-                if fillna_object:
-                    gdf[col] = gdf[col].fillna("").astype(str)
-                else:
-                    gdf[col] = gdf[col].astype(str)
+            if gdf[col].dtype != "object":
+                continue
+            series = gdf[col].fillna("") if fillna_object else gdf[col]
+            gdf[col] = series.astype(str)
         return pl.from_pandas(gdf)
 
     def _calculate_centroids_utm(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:

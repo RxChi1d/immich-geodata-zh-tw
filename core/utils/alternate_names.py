@@ -55,22 +55,16 @@ def create_alternate_map(alternate_file: str, output_path: str) -> None:
 
     data = data.filter(data["lang"].is_in(CHINESE_PRIORITY))  # 僅保留中文名稱
 
-    # 創建 `priority` 欄位，作為優先級判斷
-    # - 如果 `is_preferred_name` 為 1，則優先級為 0
-    # - 如果 `is_preferred_name` 為 0，則優先級為 CHINESE_PRIORITY 中 key 的 index + 1
+    # Reason: is_preferred_name=1 為最高優先；其餘依 CHINESE_PRIORITY 索引決定順序
+    priority_map = {lang: i + 1 for i, lang in enumerate(CHINESE_PRIORITY)}
     data = data.with_columns(
         pl.when(pl.col("is_preferred_name") == 1)
-        .then(pl.lit(0))  # is_preferred_name == "1"，則優先級為 0
+        .then(pl.lit(0, dtype=pl.UInt8))
         .otherwise(
-            pl.col("lang")
-            .fill_null("")
-            .map_elements(
-                lambda x: (
-                    CHINESE_PRIORITY.index(x) + 1
-                    if x in CHINESE_PRIORITY
-                    else len(CHINESE_PRIORITY) + 1
-                ),
-                return_dtype=pl.UInt8,  # 明確指定回傳型別
+            pl.col("lang").replace_strict(
+                priority_map,
+                default=len(CHINESE_PRIORITY) + 1,
+                return_dtype=pl.UInt8,
             )
         )
         .alias("priority")

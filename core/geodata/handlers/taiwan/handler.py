@@ -1,5 +1,7 @@
 """臺灣地理資料處理器。"""
 
+from typing import ClassVar
+
 import polars as pl
 import geopandas as gpd
 
@@ -14,12 +16,12 @@ class TaiwanGeoDataHandler(GeoDataHandler):
     資料來源：中華民國國土測繪中心 (NLSC) 村(里)界資料。
     """
 
-    COUNTRY_NAME = "臺灣"
-    COUNTRY_CODE = "TW"
-    TIMEZONE = "Asia/Taipei"
+    COUNTRY_NAME: ClassVar[str] = "臺灣"
+    COUNTRY_CODE: ClassVar[str] = "TW"
+    TIMEZONE: ClassVar[str] = "Asia/Taipei"
 
     # 臺灣直轄市與省轄市列表（供 locationiq 流程引用）
-    MUNICIPALITIES: list[str] = [
+    MUNICIPALITIES: ClassVar[list[str]] = [
         "臺北市",
         "新北市",
         "桃園市",

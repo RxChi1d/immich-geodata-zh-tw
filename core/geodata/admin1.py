@@ -124,19 +124,20 @@ class Admin1Mixin:
 
         admin1_mapping = cls.get_admin1_mapping(csv_path)
 
-        admin1_records = []
-        for idx, admin1_name in enumerate(unique_admin1):
+        admin1_records: list[dict[str, str]] = []
+        for admin1_name in unique_admin1:
             admin1_code = admin1_mapping.get(admin1_name)
             if admin1_code is None:
                 logger.warning(f"無法找到 {admin1_name} 的 admin1_code，跳過")
                 continue
 
+            # Reason: 使用 len(admin1_records) 作為當前索引，確保 geoname_id 連續無間隔
             admin1_records.append(
                 {
                     "id": admin1_code,
                     "name": admin1_name,
                     "asciiname": admin1_name,
-                    "geoname_id": str(base_geoname_id + idx),
+                    "geoname_id": str(base_geoname_id + len(admin1_records)),
                 }
             )
 

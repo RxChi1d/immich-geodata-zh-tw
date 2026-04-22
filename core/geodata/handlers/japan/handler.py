@@ -1,5 +1,7 @@
 """日本地理資料處理器。"""
 
+from typing import ClassVar
+
 import polars as pl
 import geopandas as gpd
 
@@ -15,12 +17,12 @@ class JapanGeoDataHandler(GeoDataHandler):
     使用動態 UTM 區選擇方法（結合 Albers 投影）計算中心點。
     """
 
-    COUNTRY_NAME = "日本"
-    COUNTRY_CODE = "JP"
-    TIMEZONE = "Asia/Tokyo"
+    COUNTRY_NAME: ClassVar[str] = "日本"
+    COUNTRY_CODE: ClassVar[str] = "JP"
+    TIMEZONE: ClassVar[str] = "Asia/Tokyo"
 
     # 以日本為中心的 Albers 等面積圓錐投影，供 UTM 區判定使用
-    ALBERS_PROJ4 = (
+    ALBERS_PROJ4: ClassVar[str] = (
         "+proj=aea +lat_1=30 +lat_2=45 +lat_0=37.5 +lon_0=138 "
         "+x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs"
     )
@@ -28,7 +30,7 @@ class JapanGeoDataHandler(GeoDataHandler):
     # 彈性設定：政令市 admin_2 顯示策略
     # True: 僅顯示市名（例：横浜市）- 提升顯示一致性，降低 Immich 誤判率
     # False: 顯示市名＋區名（例：横浜市中区）- 提供更細緻的行政區資訊
-    SEIREI_SHI_CITY_NAME_ONLY = True
+    SEIREI_SHI_CITY_NAME_ONLY: ClassVar[bool] = True
 
     def extract_from_shapefile(
         self,
@@ -166,7 +168,7 @@ class JapanGeoDataHandler(GeoDataHandler):
 
             gun_town_counts = unique_gun_towns.group_by(
                 ["N03_001", "clean_n03_004"]
-            ).agg(pl.count().alias("gun_count"))
+            ).agg(pl.len().alias("gun_count"))
 
             duplicate_gun_towns = gun_town_counts.filter(pl.col("gun_count") > 1)
 
