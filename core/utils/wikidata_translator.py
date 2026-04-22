@@ -59,6 +59,12 @@ def _normalize_text(value: Any) -> str:
     return str(value).strip()
 
 
+def _dedupe_keep_order(values: Iterable[str]) -> list[str]:
+    """保序去重，避免破壞原本順位。"""
+
+    return list(dict.fromkeys(values))
+
+
 def build_translation_item_id(
     level: AdminLevel,
     parent_chain: Sequence[str],
@@ -421,7 +427,7 @@ class BatchTranslationRunner:
 
             def _progress_callback(processed: int, _: int) -> None:
                 if progress_bar is not None:
-                    progress_bar.update(processed - progress_bar.n)
+                    progress_bar.update(max(0, processed - progress_bar.n))
 
             progress_callback = _progress_callback
 
@@ -553,6 +559,8 @@ class BatchTranslationRunner:
             if data.get("cached"):
                 results[item_id] = data.get("result", {})
                 success_count += 1
+                if result_bar is not None:
+                    result_bar.update(1)
                 continue
 
             qids = data.get("qids", []) or []
@@ -1052,8 +1060,8 @@ class WikidataTranslator:
 
         try:
             # 構建語言列表（目標語言 + 回退語言）
-            langs = [self.target_lang] + self.fallback_langs
-            langs_str = "|".join(set(langs))
+            langs = _dedupe_keep_order([self.target_lang, *self.fallback_langs])
+            langs_str = "|".join(langs)
 
             js = self._wd_api(
                 {
@@ -1102,7 +1110,7 @@ class WikidataTranslator:
             {qid: {language: label}} 對照表
         """
         # 步驟 1: 去重
-        unique_qids = list(set(qids))
+        unique_qids = _dedupe_keep_order(qids)
 
         # 步驟 2: 檢查快取，過濾未快取的 QID
         uncached_qids = [
@@ -1124,8 +1132,8 @@ class WikidataTranslator:
 
                 try:
                     # 構建語言列表（目標語言 + 回退語言）
-                    langs = [self.target_lang] + self.fallback_langs
-                    langs_str = "|".join(set(langs))
+                    langs = _dedupe_keep_order([self.target_lang, *self.fallback_langs])
+                    langs_str = "|".join(langs)
 
                     # 批次 API 請求
                     # Reason: 使用 | 分隔多個 QID，一次請求取得多個實體的標籤
@@ -1190,7 +1198,7 @@ class WikidataTranslator:
             {qid: [P31_qid1, P31_qid2, ...]} 對照表
         """
         # 步驟 1: 去重
-        unique_qids = list(set(qids))
+        unique_qids = _dedupe_keep_order(qids)
 
         # 步驟 2: 檢查快取，過濾未快取的 QID
         uncached_qids = [
@@ -1272,6 +1280,10 @@ class WikidataTranslator:
 
         Returns:
             (翻譯結果, 來源標記, 使用的語言)
+
+        Notes:
+            zhwiki 僅在所有指定語言都沒有命中時才作為備援，
+            以避免覆寫既定的回退順序（zh-tw → zh-hant → zh → OpenCC → en → 原文）。
         """
         # 1. 優先使用目標語言
         if self.target_lang in labels:
