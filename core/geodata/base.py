@@ -1,13 +1,19 @@
 """地理資料處理器抽象基類（ETL 模式）。"""
 
 from abc import ABC, abstractmethod
+from datetime import date
 from pathlib import Path
+
 import polars as pl
+
 from core.utils import logger, fill_admin_columns
 from core.schemas import ADMIN1_SCHEMA, GEODATA_SCHEMA, CITIES_SCHEMA
+from core.geodata.admin1 import Admin1Mixin
+from core.geodata.geospatial import GeoSpatialMixin
+from core.geodata.registry import register_handler, get_handler, get_all_handlers
 
 
-class GeoDataHandler(ABC):
+class GeoDataHandler(GeoSpatialMixin, Admin1Mixin, ABC):
     """地理資料處理器（ETL 模式）。
 
     提供三階段處理流程：
@@ -97,22 +103,18 @@ class GeoDataHandler(ABC):
             FileNotFoundError: 當 CSV 檔案不存在時。
             ValueError: 當 CSV 缺少必要欄位時。
         """
-        from pathlib import Path
-
         logger.info(f"正在轉換 {cls.COUNTRY_NAME} 地理資料...")
 
-        # 驗證檔案存在
-        input_file = Path(csv_path)
-        if not input_file.exists():
+        # Reason: 不做 exists() 預檢（TOCTOU），讓 read_csv 直接報錯後轉為中文訊息
+        try:
+            df = fill_admin_columns(pl.read_csv(csv_path))
+        except FileNotFoundError as exc:
             error_msg = (
-                f"輸入檔案不存在: {input_file}\n"
+                f"輸入檔案不存在: {csv_path}\n"
                 f"建議：請先執行 extract 階段以生成 CSV 檔案"
             )
             logger.error(error_msg)
-            raise FileNotFoundError(error_msg)
-
-        # 讀取 CSV
-        df = fill_admin_columns(pl.read_csv(csv_path))
+            raise FileNotFoundError(error_msg) from exc
         logger.info(f"成功讀取 CSV，共 {df.height} 筆資料")
 
         # 呼叫前處理鉤子
@@ -134,22 +136,18 @@ class GeoDataHandler(ABC):
         # 獲取 admin1_mapping
         admin1_mapping = cls.get_admin1_mapping(csv_path)
 
-        # 生成唯一的 geoname_id
+        # 生成唯一的 geoname_id（向量化）
         df = df.with_columns(
-            pl.Series(
-                "geoname_id",
-                [base_geoname_id + i for i in range(df.height)],
-            ).cast(pl.Int64)
+            (pl.int_range(pl.len(), dtype=pl.Int64) + base_geoname_id).alias(
+                "geoname_id"
+            )
         )
 
-        # 將 admin_1 映射到 admin1_code
+        # 將 admin_1 映射到 admin1_code（"XX.YY"）
         df = df.with_columns(
             pl.col("admin_1")
-            .map_elements(
-                lambda name: admin1_mapping.get(name, None),
-                return_dtype=pl.String,
-            )
-            .alias("admin1_code_full")  # 暫存完整代碼 "XX.YY"
+            .replace_strict(admin1_mapping, default=None, return_dtype=pl.String)
+            .alias("admin1_code_full")
         )
 
         # 檢查是否有無法映射的 admin_1
@@ -160,11 +158,11 @@ class GeoDataHandler(ABC):
                 f"以下 admin_1 無法映射到 admin1_code（將設為 None）: {missing_names}"
             )
 
-        # 提取 admin1_code 的數字/字母部分（"XX.YY" -> "YY"）
+        # 提取 admin1_code 的數字/字母部分（"XX.YY" -> "YY"；null 自然傳遞）
         df = df.with_columns(
-            pl.when(pl.col("admin1_code_full").is_not_null())
-            .then(pl.col("admin1_code_full").str.split(".").list.last())
-            .otherwise(None)
+            pl.col("admin1_code_full")
+            .str.split(".")
+            .list.last()
             .alias("admin1_code_mapped")
         )
 
@@ -225,74 +223,6 @@ class GeoDataHandler(ABC):
             .round(cls.COORD_DECIMAL_PLACES)
             .alias(longitude_column),
         )
-
-    @staticmethod
-    def get_diverse_sample(
-        df: pl.DataFrame,
-        n: int = 5,
-    ) -> pl.DataFrame:
-        """取得多樣化的資料樣本（階層式去重）。
-
-        使用階層式去重策略，優先確保不同的省/道/市（admin_1），
-        資料不足時才使用更細的層級（admin_2, admin_3, admin_4）。
-
-        階層式邏輯：
-        1. 先用 admin_1 去重，如果結果 >= n，回傳前 n 筆
-        2. 如果不足，用 admin_1 + admin_2 去重，如果結果 >= n，回傳前 n 筆
-        3. 依此類推到 admin_3, admin_4
-        4. 如果所有層級都不足 n 筆，回傳所有去重後的結果
-
-        Args:
-            df: 來源 DataFrame。
-            n: 要取樣的資料筆數（預設 5）。
-
-        Returns:
-            包含最多 n 筆多樣化資料的 DataFrame。
-
-        Examples:
-            >>> # 5 個不同的 admin_1，n=5 → 回傳 5 筆（每個 admin_1 一筆）
-            >>> df = pl.DataFrame({
-            ...     "admin_1": ["台北市", "新北市", "台中市", "台南市", "高雄市"],
-            ...     "admin_2": ["中正區", "板橋區", "西屯區", "東區", "前金區"],
-            ... })
-            >>> result = GeoDataHandler.get_diverse_sample(df, n=5)
-            >>> len(result)
-            5
-
-            >>> # 3 個 admin_1，n=5 → 先用 admin_1 得 3 筆，不足，
-            >>> # 改用 admin_1+admin_2 得 5 筆
-            >>> df = pl.DataFrame({
-            ...     "admin_1": ["台北市", "台北市", "新北市", "新北市", "台中市"],
-            ...     "admin_2": ["中正區", "大安區", "板橋區", "新莊區", "西屯區"],
-            ... })
-            >>> result = GeoDataHandler.get_diverse_sample(df, n=5)
-            >>> len(result)
-            5
-        """
-        # 固定使用 admin_1-4 的階層式去重
-        diversity_columns = ["admin_1", "admin_2", "admin_3", "admin_4"]
-
-        # 過濾掉不存在於 DataFrame 中的欄位
-        available_columns = [col for col in diversity_columns if col in df.columns]
-
-        # 如果沒有可用的去重欄位，直接回傳前 n 筆
-        if not available_columns:
-            return df.head(n)
-
-        # 階層式去重：從最粗粒度（admin_1）開始，逐步擴展到更細的層級
-        for level in range(1, len(available_columns) + 1):
-            # 當前層級的 subset（例如：["admin_1"], ["admin_1", "admin_2"], ...）
-            subset = available_columns[:level]
-
-            # 使用當前層級的欄位組合進行去重
-            result = df.unique(subset=subset, keep="first")
-
-            # 如果這個層級的 unique 結果已經 >= n，就使用它
-            if len(result) >= n:
-                return result.head(n)
-
-        # 如果所有層級都不足 n 筆，回傳所有去重後的結果
-        return result
 
     def _save_extract_csv(
         self,
@@ -386,16 +316,22 @@ class GeoDataHandler(ABC):
             ...                 )
             ...         return df.sort(["admin_1", "admin_2"])
         """
-        # 標準化空值：將空字串或 "" 轉為 None
+        # 標準化空值：將空字串、'""'、字面值 "nan"/"None" 轉為 None
+        # Reason: pandas astype(str) 對 NaN/None 會產生 "nan"/"None" 字面值；
+        #         extract 階段如未統一填補，這些字串會滲漏進 cities500 輸出
+        null_sentinels = ["", '""', "nan", "None"]
         admin_cols = ["admin_1", "admin_2", "admin_3", "admin_4"]
-        for col in admin_cols:
-            if col in df.columns:
-                df = df.with_columns(
-                    pl.when((pl.col(col) == "") | (pl.col(col) == '""'))
+        present_cols = [col for col in admin_cols if col in df.columns]
+        if present_cols:
+            df = df.with_columns(
+                [
+                    pl.when(pl.col(col).is_in(null_sentinels))
                     .then(None)
                     .otherwise(pl.col(col))
                     .alias(col)
-                )
+                    for col in present_cols
+                ]
+            )
 
         # 排序以確保輸出穩定性
         sort_cols = [col for col in ["admin_1", "admin_2"] if col in df.columns]
@@ -431,8 +367,6 @@ class GeoDataHandler(ABC):
             ...             ...
             ...         }, schema=cls.CITIES_SCHEMA)
         """
-        from datetime import date
-
         # 獲取今天的日期字串
         today_date_str = date.today().strftime("%Y-%m-%d")
 
@@ -461,214 +395,6 @@ class GeoDataHandler(ABC):
             },
             schema=cls.CITIES_SCHEMA,
         )
-
-    @classmethod
-    def prepare_admin1_source(cls, df: pl.DataFrame) -> pl.DataFrame:
-        """前處理 admin1 來源資料的鉤子方法。
-
-        預設行為為直接回傳輸入 DataFrame。
-        子類可覆寫此方法以進行資料前處理，例如：
-        - 正規化行政區名稱（去除空白、替換舊稱）
-        - 額外排序或過濾特定記錄
-        - 合併或分割欄位
-
-        Args:
-            df: 從 CSV 讀取的原始 DataFrame。
-
-        Returns:
-            前處理後的 DataFrame。
-
-        Example:
-            >>> class CustomHandler(GeoDataHandler):
-            ...     @classmethod
-            ...     def prepare_admin1_source(cls, df: pl.DataFrame) -> pl.DataFrame:
-            ...         # 正規化名稱，移除前後空白
-            ...         return df.with_columns(
-            ...             pl.col("admin_1").str.strip_chars().alias("admin_1")
-            ...         )
-        """
-        return df
-
-    @classmethod
-    def generate_admin1_records(
-        cls, csv_path: str, base_geoname_id: int
-    ) -> pl.DataFrame:
-        """從地理資料 CSV 產生 admin1 記錄（預設實作）。
-
-        此方法提供通用的 admin1 記錄產生流程：
-        1. 讀取 CSV 檔案
-        2. 呼叫 prepare_admin1_source 進行前處理
-        3. 提取唯一的 admin_1 值並排序
-        4. 透過 get_admin1_mapping 取得或生成 mapping
-        5. 分配 geoname_id 並建立符合 ADMIN1_SCHEMA 的 DataFrame
-
-        子類可選擇：
-        - 覆寫 prepare_admin1_source 進行資料前處理
-        - 完全覆寫此方法以實作特殊邏輯
-
-        Args:
-            csv_path: extract_from_shapefile 產生的 CSV 路徑。
-            base_geoname_id: geoname_id 起始值。
-
-        Returns:
-            符合 ADMIN1_SCHEMA 的 DataFrame。
-
-        Raises:
-            FileNotFoundError: 當 CSV 檔案不存在時。
-            ValueError: 當 CSV 缺少 admin_1 欄位或無有效資料時。
-
-        說明:
-            此方法用於產生「新的」admin1 記錄，這些記錄會取代 admin1CodesASCII.txt 中
-            對應國家的資料。例如臺灣需要將縣市層級提升為 admin1。
-        """
-        from pathlib import Path
-
-        logger.info(f"正在為 {cls.COUNTRY_NAME} 生成 admin1 記錄...")
-
-        # 驗證檔案存在
-        input_file = Path(csv_path)
-        if not input_file.exists():
-            error_msg = (
-                f"輸入檔案不存在: {input_file}\n"
-                f"建議：請先執行 extract 階段以生成 CSV 檔案"
-            )
-            logger.error(error_msg)
-            raise FileNotFoundError(error_msg)
-
-        # 讀取 CSV
-        df = pl.read_csv(csv_path)
-
-        # 呼叫前處理鉤子
-        df = cls.prepare_admin1_source(df)
-
-        # 驗證必要欄位
-        if "admin_1" not in df.columns:
-            error_msg = (
-                f"CSV 檔案缺少 'admin_1' 欄位\n"
-                f"檔案路徑: {csv_path}\n"
-                f"可用欄位: {df.columns}\n"
-                f"建議：請檢查 extract_from_shapefile 的實作"
-            )
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-
-        # 提取唯一的 admin_1 並排序
-        unique_admin1 = sorted(df["admin_1"].unique().to_list())
-
-        if not unique_admin1:
-            error_msg = "CSV 檔案中沒有有效的 admin_1 資料"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-
-        # 獲取 admin1_mapping
-        admin1_mapping = cls.get_admin1_mapping(csv_path)
-
-        # 建立 admin1 記錄
-        admin1_records = []
-        for idx, admin1_name in enumerate(unique_admin1):
-            admin1_code = admin1_mapping.get(admin1_name)
-            if admin1_code is None:
-                logger.warning(f"無法找到 {admin1_name} 的 admin1_code，跳過")
-                continue
-
-            admin1_records.append(
-                {
-                    "id": admin1_code,  # 例如 "TW.01"
-                    "name": admin1_name,
-                    "asciiname": admin1_name,
-                    "geoname_id": str(base_geoname_id + idx),
-                }
-            )
-
-        # 建立 DataFrame
-        admin1_df = pl.DataFrame(admin1_records, schema=cls.ADMIN1_SCHEMA)
-
-        logger.info(f"產生了 {admin1_df.height} 筆 {cls.COUNTRY_NAME} admin1 記錄")
-        logger.info(
-            f"Admin1 geoname_id 範圍: {base_geoname_id} - "
-            f"{base_geoname_id + admin1_df.height - 1}"
-        )
-
-        return admin1_df
-
-    @classmethod
-    def get_admin1_mapping(cls, csv_path: str | None = None) -> dict[str, str]:
-        """獲取或生成 ADMIN1_MAPPING（支援緩存）。
-
-        Args:
-            csv_path: CSV 檔案路徑。若為 None，自動使用標準路徑：
-                      meta_data/{country_code}_geodata.csv
-
-        Returns:
-            admin1 名稱到代碼的映射字典。
-
-        Example:
-            >>> TaiwanHandler.get_admin1_mapping()  # 自動使用 meta_data/tw_geodata.csv
-            >>> JapanHandler.get_admin1_mapping("custom/path.csv")  # 使用自訂路徑
-        """
-        cache_attr = "_admin1_mapping_cache"
-
-        # 檢查緩存
-        if not hasattr(cls, cache_attr) or getattr(cls, cache_attr) is None:
-            # 自動推導路徑（與 main.py 的 extract 輸出路徑一致）
-            if csv_path is None:
-                csv_path = f"meta_data/{cls.COUNTRY_CODE.lower()}_geodata.csv"
-
-            # 直接調用類別方法生成 mapping
-            mapping = cls.generate_admin1_mapping_from_csv(csv_path)
-
-            # 緩存到類別屬性
-            setattr(cls, cache_attr, mapping)
-            logger.info(f"已緩存 {cls.COUNTRY_NAME} 的 admin1_mapping")
-
-        return getattr(cls, cache_attr)
-
-    @classmethod
-    def generate_admin1_mapping_from_csv(cls, csv_path: str) -> dict[str, str]:
-        """從 CSV 自動生成 ADMIN1_MAPPING。
-
-        根據 admin_1 欄位的唯一值，按字母順序排序後編號。
-        編號格式：{COUNTRY_CODE}.{編號}（位數根據數量自動調整）
-
-        Args:
-            csv_path: extract_from_shapefile 產生的 CSV 檔案路徑。
-
-        Returns:
-            admin_1 名稱到代碼的映射字典。
-
-        Example:
-            >>> mapping = TaiwanGeoDataHandler.generate_admin1_mapping_from_csv(
-            ...     "meta_data/tw_geodata.csv"
-            ... )
-            >>> # 如果有 22 個 admin_1，生成 TW.01 到 TW.22
-        """
-        logger.info(f"正在從 {csv_path} 生成 {cls.COUNTRY_NAME} 的 admin_1 mapping...")
-
-        df = pl.read_csv(csv_path)
-
-        # 提取唯一的 admin_1 值並排序
-        admin1_list = sorted(df["admin_1"].unique().to_list())
-
-        # 計算需要的位數
-        total_count = len(admin1_list)
-        num_digits = len(str(total_count))
-
-        # 生成 mapping
-        mapping = {}
-        for idx, admin1_name in enumerate(admin1_list, start=1):
-            code = f"{cls.COUNTRY_CODE}.{str(idx).zfill(num_digits)}"
-            mapping[admin1_name] = code
-
-        logger.info(f"生成了 {total_count} 個 admin_1 代碼（{num_digits} 位數）")
-        if total_count <= 10:
-            # 如果數量較少，顯示所有 mapping
-            logger.info(f"Admin1 mapping: {mapping}")
-        else:
-            # 數量較多時，顯示前 3 個範例
-            sample_items = list(mapping.items())[:3]
-            logger.info(f"Admin1 mapping 範例: {dict(sample_items)} ...")
-
-        return mapping
 
     def replace_in_dataset(
         self,
@@ -722,52 +448,10 @@ class GeoDataHandler(ABC):
         return output_df, max_id_used
 
 
-_HANDLER_REGISTRY: dict[str, type[GeoDataHandler]] = {}
-
-
-def register_handler(country_code: str):
-    """註冊處理器的裝飾器。
-
-    Args:
-        country_code: 國家代碼（ISO 3166-1 alpha-2）。
-    """
-
-    def decorator(handler_class: type[GeoDataHandler]) -> type[GeoDataHandler]:
-        _HANDLER_REGISTRY[country_code.upper()] = handler_class
-        return handler_class
-
-    return decorator
-
-
-def get_handler(country_code: str) -> type[GeoDataHandler]:
-    """取得指定國家的處理器類別。
-
-    Args:
-        country_code: 國家代碼（ISO 3166-1 alpha-2）。
-
-    Returns:
-        處理器類別。
-
-    Raises:
-        ValueError: 當國家代碼不存在時。
-    """
-    country_code = country_code.upper()
-    if country_code not in _HANDLER_REGISTRY:
-        available = ", ".join(sorted(_HANDLER_REGISTRY.keys()))
-        raise ValueError(
-            f"未找到國家 '{country_code}' 的處理器。可用的國家: {available}"
-        )
-    return _HANDLER_REGISTRY[country_code]
-
-
-def get_all_handlers() -> list[str]:
-    """取得所有已註冊的 Handler 國家代碼列表。
-
-    Returns:
-        已註冊的國家代碼列表（按字母順序排序）。
-
-    Example:
-        >>> get_all_handlers()
-        ['JP', 'TW']
-    """
-    return sorted(_HANDLER_REGISTRY.keys())
+# 註冊表 API 維持從 base 模組可匯入，減少呼叫端遷移成本
+__all__ = [
+    "GeoDataHandler",
+    "register_handler",
+    "get_handler",
+    "get_all_handlers",
+]

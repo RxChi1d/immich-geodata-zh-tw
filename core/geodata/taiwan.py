@@ -7,20 +7,6 @@ from core.utils import logger
 from core.geodata.base import GeoDataHandler, register_handler
 
 
-# 臺灣直轄市列表
-_MUNICIPALITIES = [
-    "臺北市",
-    "新北市",
-    "桃園市",
-    "臺中市",
-    "臺南市",
-    "高雄市",
-    "基隆市",
-    "新竹市",
-    "嘉義市",
-]
-
-
 @register_handler("TW")
 class TaiwanGeoDataHandler(GeoDataHandler):
     """臺灣地理資料處理器。
@@ -32,18 +18,25 @@ class TaiwanGeoDataHandler(GeoDataHandler):
     COUNTRY_CODE = "TW"
     TIMEZONE = "Asia/Taipei"
 
-    MUNICIPALITIES = _MUNICIPALITIES
+    # 臺灣直轄市與省轄市列表（供 locationiq 流程引用）
+    MUNICIPALITIES: list[str] = [
+        "臺北市",
+        "新北市",
+        "桃園市",
+        "臺中市",
+        "臺南市",
+        "高雄市",
+        "基隆市",
+        "新竹市",
+        "嘉義市",
+    ]
 
     def extract_from_shapefile(
         self,
         shapefile_path: str,
         output_csv: str,
-        *,
-        google_api_key: str | None = None,
     ) -> None:
         try:
-            _ = google_api_key
-
             logger.info(f"正在讀取 Shapefile: {shapefile_path}")
 
             # 使用 geopandas 讀取 Shapefile
@@ -69,23 +62,16 @@ class TaiwanGeoDataHandler(GeoDataHandler):
             gdf["longitude"] = centroids.x
             gdf["latitude"] = centroids.y
 
-            # 移除 geometry 欄位
-            gdf = gdf.drop(columns=["geometry"])
-
-            # 將所有 object 類型的欄位轉換為字串
-            for col in gdf.columns:
-                if gdf[col].dtype == "object":
-                    gdf[col] = gdf[col].astype(str)
-
-            # 轉換為 Polars DataFrame
-            df = pl.from_pandas(gdf)
+            # 轉換為 Polars DataFrame（共用 helper 處理 geometry/字串轉換）
+            # Reason: TW 沿用既有行為，NaN 透過 astype(str) 保留為 "None"/"nan" 字面值
+            df = self._gdf_to_polars(gdf, fillna_object=False)
 
             # 選擇需要的欄位並重新命名
             df = df.select(
                 [
                     pl.col("latitude"),
                     pl.col("longitude"),
-                    pl.lit("臺灣").alias("country"),  # 國家
+                    pl.lit(self.COUNTRY_NAME).alias("country"),
                     pl.col("COUNTYNAME").alias("admin_1"),  # 縣市
                     pl.col("TOWNNAME").alias("admin_2"),  # 鄉鎮市區
                     pl.col("VILLNAME").alias("admin_3"),  # 村里

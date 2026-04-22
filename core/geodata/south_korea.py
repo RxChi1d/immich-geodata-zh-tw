@@ -1,12 +1,9 @@
 """南韓地理資料處理器。"""
 
-import re
+from collections.abc import Callable
 
 import polars as pl
 import geopandas as gpd
-import pyproj
-import numpy as np
-from collections.abc import Callable
 
 from core.utils import logger
 from core.utils.wikidata_translator import (
@@ -28,7 +25,14 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
     COUNTRY_CODE = "KR"
     TIMEZONE = "Asia/Seoul"
 
-    CITY_DISTRICT_PATTERN = re.compile(r"^(?P<city>.+?시)(?P<district>.+?(?:구|군))$")
+    # 以南韓為中心的 Albers 等面積圓錐投影，供 UTM 區判定使用
+    ALBERS_PROJ4 = (
+        "+proj=aea +lat_1=33 +lat_2=43 +lat_0=37 +lon_0=127.5 "
+        "+x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs"
+    )
+
+    # 市＋區/郡合併名稱的拆分 pattern（named capture groups）
+    CITY_DISTRICT_REGEX = r"^(?P<_city>.+?시)(?P<_district>.+?(?:구|군))$"
 
     # 廣域市/道名稱對照表（韓文 → 台灣常用繁體中文名稱）
     # Reason: 使用台灣地圖常見的簡潔名稱，而非 Google Maps 的正式官方名稱
@@ -90,86 +94,6 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
         "금남면": "錦南面",
     }
 
-    def _get_utm_epsg_from_lon(self, longitude: float) -> int:
-        """根據經度計算 UTM 區的 EPSG 代碼。"""
-        zone = int((longitude + 180) / 6) + 1
-        return 32600 + zone
-
-    def _calculate_centroids_utm(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-        """使用動態 UTM 區選擇計算中心點（向量化）。
-
-        結合 Albers 投影和動態 UTM 區選擇，提供高精確度的中心點計算。
-        """
-        # 確保使用 WGS84 座標系統
-        if gdf.crs.to_epsg() != 4326:
-            logger.info("正在轉換到 WGS84...")
-            gdf = gdf.to_crs(epsg=4326)
-
-        # 使用 Albers 投影計算準確的中心點經度
-        # Reason: 邊界框平均值對於不規則形狀可能不準確，
-        #         特別是在 UTM 區邊界附近（南韓橫跨 126°E）
-        logger.info("正在計算準確的幾何中心點（使用 Albers 投影）...")
-
-        # 定義以南韓為中心的 Albers 等面積圓錐投影
-        korea_albers = pyproj.CRS.from_proj4(
-            "+proj=aea +lat_1=33 +lat_2=43 +lat_0=37 +lon_0=127.5 "
-            "+x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs"
-        )
-
-        # 投影到 Albers 並計算中心點
-        gdf_albers = gdf.to_crs(korea_albers)
-        centroids_albers = gdf_albers.geometry.centroid
-
-        # 將中心點轉回 WGS84 以取得準確的經度
-        centroids_wgs84_temp = centroids_albers.to_crs(epsg=4326)
-        center_lons = centroids_wgs84_temp.x
-
-        # 根據準確的中心點經度計算 UTM 區（向量化）
-        logger.info("正在根據中心點經度決定 UTM 區...")
-        utm_zones = ((center_lons + 180) / 6).astype(int) + 1
-        utm_epsgs = 32600 + utm_zones
-
-        # 將 UTM 區資訊加入 GeoDataFrame
-        gdf["_utm_zone"] = utm_zones
-        gdf["_utm_epsg"] = utm_epsgs
-
-        logger.info(f"識別到 {utm_epsgs.nunique()} 個不同的 UTM 區")
-
-        # 建立陣列儲存結果（初始化為 NaN）
-        longitudes = np.full(len(gdf), np.nan)
-        latitudes = np.full(len(gdf), np.nan)
-
-        # 按 UTM 區批次處理（依 UTM EPSG 分組）
-        # Reason: 每個 UTM 區需要不同的投影，
-        #         但在每個區內我們一次處理所有幾何體（向量化）
-        logger.info("正在按 UTM 區批次計算中心點...")
-        for utm_epsg, group_idx in gdf.groupby("_utm_epsg").groups.items():
-            # 取得此 UTM 區的幾何體
-            group_gdf = gdf.iloc[group_idx]
-
-            # 轉換到 UTM 投影（批次操作，非迴圈）
-            group_utm = group_gdf.to_crs(epsg=utm_epsg)
-
-            # 在 UTM 中計算中心點（向量化）
-            centroids_utm = group_utm.geometry.centroid
-
-            # 轉回 WGS84（批次操作）
-            centroids_wgs84 = centroids_utm.to_crs(epsg=4326)
-
-            # 使用向量化的 .x 和 .y 屬性提取座標
-            # Reason: 直接使用 NumPy 陣列運算，無 Python 迴圈
-            longitudes[group_idx] = centroids_wgs84.x.values
-            latitudes[group_idx] = centroids_wgs84.y.values
-
-        # 將座標加入 GeoDataFrame（向量化賦值）
-        gdf["longitude"] = longitudes
-        gdf["latitude"] = latitudes
-
-        # 清理暫存欄位
-        gdf = gdf.drop(columns=["_utm_zone", "_utm_epsg"])
-
-        return gdf
-
     def _normalize_special_admin_structures(self, df: pl.DataFrame) -> pl.DataFrame:
         """正規化特殊行政區結構（如世宗特別自治市）。
 
@@ -220,32 +144,8 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
 
         return df
 
-    def _split_city_district_name(self, name: str) -> tuple[str, str]:
-        """拆分韓文的「市＋區/郡」合併名稱。
-
-        Args:
-            name: sggnm 欄位中的韓文名稱
-
-        Returns:
-            以 (city, district) 形式回傳，若無法拆分則 district 為空字串
-        """
-
-        if not name or "시" not in name:
-            return name, ""
-
-        match = self.CITY_DISTRICT_PATTERN.match(name)
-        if not match:
-            return name, ""
-
-        city = match.group("city")
-        district = match.group("district")
-        if not district.endswith(("구", "군")):
-            return name, ""
-
-        return city, district
-
     def _normalize_city_district_hierarchy(self, df: pl.DataFrame) -> pl.DataFrame:
-        """將市＋區合併名稱拆分並調整 admin 層級。"""
+        """將市＋區合併名稱拆分並調整 admin 層級（向量化）。"""
 
         if "sggnm" not in df.columns:
             return df
@@ -253,36 +153,26 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
         if "admin_4" not in df.columns:
             df = df.with_columns(pl.lit(None, dtype=pl.String).alias("admin_4"))
 
+        # 使用 Polars 原生 regex 提取 named capture groups；不符合的 row 兩欄皆為 null
         df = df.with_columns(
-            [
-                pl.col("sggnm")
-                .map_elements(
-                    lambda name: self._split_city_district_name(name)[0],
-                    return_dtype=pl.String,
-                )
-                .alias("_city_part"),
-                pl.col("sggnm")
-                .map_elements(
-                    lambda name: self._split_city_district_name(name)[1],
-                    return_dtype=pl.String,
-                )
-                .alias("_district_part"),
-            ]
-        )
+            pl.col("sggnm").str.extract_groups(self.CITY_DISTRICT_REGEX).alias("_parts")
+        ).unnest("_parts")
 
-        split_mask = pl.col("_district_part") != ""
+        split_mask = pl.col("_district").is_not_null()
         split_count = df.filter(split_mask).height
         if split_count > 0:
             logger.info(f"偵測到 {split_count} 筆市＋區合併名稱，正在拆分階層...")
 
+        # Reason: with_columns 並行評估所有 expr，讀到的都是原始欄位值，
+        #         因此可安全地在同一個 with_columns 中同時更新 sggnm/admin_3/admin_4
         df = df.with_columns(
             [
                 pl.when(split_mask)
-                .then(pl.col("_city_part"))
+                .then(pl.col("_city"))
                 .otherwise(pl.col("sggnm"))
                 .alias("sggnm"),
                 pl.when(split_mask)
-                .then(pl.col("_district_part"))
+                .then(pl.col("_district"))
                 .otherwise(pl.col("admin_3"))
                 .alias("admin_3"),
                 pl.when(split_mask)
@@ -292,7 +182,7 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
             ]
         )
 
-        return df.drop(["_city_part", "_district_part"])
+        return df.drop(["_city", "_district"])
 
     @staticmethod
     def _build_candidate_filter() -> Callable[[str, dict], bool]:
@@ -392,19 +282,10 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
             logger.info("使用方法：動態 UTM 區選擇（結合 Albers 投影進行 UTM 區判定）")
             gdf = self._calculate_centroids_utm(gdf)
 
-            # 移除不需要的幾何欄位
-            gdf = gdf.drop(columns=["geometry"])
-
-            # 統一資料型態：將 object 類型轉為字串並填充 NaN
-            for col in gdf.columns:
-                if gdf[col].dtype == "object":
-                    gdf[col] = gdf[col].fillna("").astype(str)
-
-            # 轉換為 Polars DataFrame 以進行高效的資料處理
-            df = pl.from_pandas(gdf)
+            # 轉換為 Polars DataFrame（共用 helper 處理 geometry/字串轉換）
+            df = self._gdf_to_polars(gdf)
 
             # === 步驟 2: 提取並解析行政區欄位 ===
-            # 先建立所需的基本欄位
             df = df.select(
                 [
                     pl.col("latitude"),
@@ -416,30 +297,18 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
             )
 
             # 解析 admin_3：從 adm_nm 移除 sidonm 和 sggnm
-            # Reason: Polars 不支援動態模式的 str.replace，需使用 apply 或分步處理
-            def extract_admin3(row):
-                """從完整地名中提取 admin_3（洞/邑/面）。"""
-                adm_nm = row["adm_nm"]
-                sidonm = row["sidonm"]
-                sggnm = row["sggnm"]
-
-                # 移除 sidonm 和 sggnm
-                result = adm_nm.replace(sidonm, "").replace(sggnm, "").strip()
-                return result
-
-            # 使用 map_rows 進行逐列處理
+            # Reason: Polars 尚未支援動態長度 pattern 的 str.replace_all，
+            #         故仍以 map_elements 處理；改用 struct 一次傳入三欄以減少查找成本
             df = df.with_columns(
-                [
-                    pl.struct(["adm_nm", "sidonm", "sggnm"])
-                    .map_elements(
-                        lambda row: row["adm_nm"]
-                        .replace(row["sidonm"], "")
-                        .replace(row["sggnm"], "")
-                        .strip(),
-                        return_dtype=pl.String,
-                    )
-                    .alias("admin_3")
-                ]
+                pl.struct(["adm_nm", "sidonm", "sggnm"])
+                .map_elements(
+                    lambda row: row["adm_nm"]
+                    .replace(row["sidonm"], "")
+                    .replace(row["sggnm"], "")
+                    .strip(),
+                    return_dtype=pl.String,
+                )
+                .alias("admin_3")
             )
 
             # === 步驟 2.5: 正規化特殊行政區結構（世宗特別自治市）===
@@ -547,45 +416,46 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
                 )
 
             logger.info(
-                f"Admin_2 翻譯完成，唯一組合: {len(admin2_lookup)} (含手動 {len(sejong_lookup)})"
+                f"Admin_2 翻譯完成，唯一組合: {len(admin2_lookup)} "
+                f"(含手動 {len(sejong_lookup)})"
             )
 
-            # 步驟 3.3: 建立對照字典並應用到 DataFrame
+            # 步驟 3.3: 應用翻譯結果到 DataFrame
             logger.info("正在應用翻譯結果...")
 
-            # 建立 Admin_1 對照字典
+            # Admin_1：用 replace(mapping) 映射，找不到的保留原韓文
             admin1_map = {
                 ko_name: data["translated"] for ko_name, data in admin1_lookup.items()
             }
 
-            # 應用翻譯到 DataFrame
-            df = df.with_columns(
-                [
-                    pl.col("sidonm")
-                    .map_elements(
-                        lambda x: admin1_map.get(x, x), return_dtype=pl.String
-                    )
-                    .alias("chinese_admin_1"),
-                    pl.struct(["sidonm", "sggnm"])
-                    .map_elements(
-                        lambda row: admin2_lookup.get(
-                            (row["sidonm"], row["sggnm"]), row["sggnm"]
-                        ),
-                        return_dtype=pl.String,
-                    )
-                    .alias("chinese_admin_2"),
-                    # Reason: Admin_3 保留韓文原文以降低 API 請求次數
-                    pl.col("admin_3").alias("chinese_admin_3"),
-                ]
+            # Admin_2：將 (sidonm, sggnm) → 翻譯 的 lookup 轉為 DataFrame 後 left join
+            admin2_df = pl.DataFrame(
+                {
+                    "sidonm": [k[0] for k in admin2_lookup],
+                    "sggnm": [k[1] for k in admin2_lookup],
+                    "chinese_admin_2": list(admin2_lookup.values()),
+                },
+                schema={
+                    "sidonm": pl.String,
+                    "sggnm": pl.String,
+                    "chinese_admin_2": pl.String,
+                },
             )
+
+            df = df.with_columns(
+                pl.col("sidonm").replace(admin1_map).alias("chinese_admin_1"),
+                # Reason: Admin_3 保留韓文原文以降低 API 請求次數
+                pl.col("admin_3").alias("chinese_admin_3"),
+            ).join(admin2_df, on=["sidonm", "sggnm"], how="left")
+
+            # 找不到翻譯時 fallback 回韓文 sggnm
+            df = df.with_columns(pl.col("chinese_admin_2").fill_null(pl.col("sggnm")))
 
             # 針對光州移除 Wikidata 消歧義括號
             # Reason: 光州的東區/西區在 Wikidata 中帶有 "(光州)" 消歧義標記，
             #         但 admin_1 已經標明是「光州」，不需要重複標註
             gwangju_parent = "광주광역시"
             gwangju_df_before = df.filter(pl.col("sidonm") == gwangju_parent)
-
-            # 統計處理前有括號的記錄數
             disambig_count_before = gwangju_df_before.filter(
                 pl.col("chinese_admin_2").str.contains(r"\([^)]+\)")
             ).height
@@ -599,13 +469,11 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
                 .alias("chinese_admin_2")
             )
 
-            # 統計移除的消歧義標記數量
             if disambig_count_before > 0:
                 logger.info(
                     f"已移除光州 {disambig_count_before} 筆 Admin_2 的 Wikidata 消歧義括號"
                 )
 
-            # 顯示翻譯統計
             logger.info(f"Admin_1 翻譯數量: {len(admin1_map)}")
             logger.info(f"Admin_2 翻譯數量: {len(admin2_lookup)}")
             logger.info("Admin_3 保留韓文原文（未翻譯）")
@@ -615,7 +483,7 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
                 [
                     pl.col("latitude"),
                     pl.col("longitude"),
-                    pl.lit("南韓").alias("country"),  # 國家名稱
+                    pl.lit(self.COUNTRY_NAME).alias("country"),
                     pl.col("chinese_admin_1").alias("admin_1"),  # 繁體中文廣域市/道
                     pl.col("chinese_admin_2").alias("admin_2"),  # 繁體中文市/區/郡
                     pl.col("chinese_admin_3").alias("admin_3"),  # 繁體中文洞/邑/面
