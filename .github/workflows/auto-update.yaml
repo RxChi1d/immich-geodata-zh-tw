@@ -22,8 +22,8 @@ jobs:
         with:
           fetch-depth: 0
           ref: main
-      - name: Create nightly branch
-        run: git checkout -B nightly
+      - name: Create nightly-build branch
+        run: git checkout -B nightly-build
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -41,7 +41,7 @@ jobs:
       - uses: stefanzweifel/git-auto-commit-action@v5
         id: auto-commit
         with:
-          branch: nightly
+          branch: nightly-build
           commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
           file_pattern: meta_data/*
           push_options: '--force'
@@ -62,7 +62,7 @@ jobs:
             如果遇到 Immich 沒有更新數據，請手動修改 geodata-date.txt 文件，將其內容中的時間修改為更新的時間（比如當前時間）。
           draft: false
           generateReleaseNotes: false
-          commit: nightly
+          commit: nightly-build
           tag: nightly
           makeLatest: false
           prerelease: true
@@ -71,11 +71,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          existing=$(gh pr list --head nightly --state open --json number --jq 'length')
+          existing=$(gh pr list --head nightly-build --state open --json number --jq 'length')
           if [ "$existing" -eq 0 ]; then
             gh pr create \
               --base main \
-              --head nightly \
+              --head nightly-build \
               --title "chore(geodata): 自動更新 ${{ env.TODAY }}" \
               --body "這是 nightly 自動更新產生的 geodata 變更，請審核後合併。"
           else
