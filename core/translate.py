@@ -19,36 +19,6 @@ converter_t2s = opencc.OpenCC("t2s")
 converter_s2t = opencc.OpenCC("s2t")
 
 
-def find_duplicate_in_meta(meta_data):
-    duplicated_entries = []
-
-    for country, df in meta_data.items():
-        # 計算 (latitude, longitude) 的出現次數
-        duplicate_locs = (
-            df.group_by(["latitude", "longitude"])
-            .agg(pl.count().alias("count"))
-            .filter(pl.col("count") > 1)  # 只保留重複的組合
-            .select(["latitude", "longitude"])
-        )
-
-        # 如果有重複的 (latitude, longitude)，將完整資訊加入結果
-        if not duplicate_locs.is_empty():
-            duplicate_rows = df.join(
-                duplicate_locs, on=["latitude", "longitude"], how="inner"
-            )
-            duplicate_rows = duplicate_rows.with_columns(
-                pl.lit(country).alias("country_code")
-            )
-            duplicated_entries.append(duplicate_rows)
-
-    # 合併結果並顯示
-    if duplicated_entries:
-        duplicated_df = pl.concat(duplicated_entries)
-        print(duplicated_df)
-    else:
-        print("No non-unique latitude/longitude found.")
-
-
 def is_chinese(text):
     """判斷給定的文字是否為中文。"""
 
@@ -183,36 +153,48 @@ def translate_cities500(
         schema=CITIES_SCHEMA,
     )
 
-    # 1.  先處理 meta_data 匹配
-    def translate_from_metadata(row):
-        country = row["country_code"]
+    # 1. 先處理 meta_data 匹配
+    # Reason: 原本以 map_elements + DataFrame.filter 逐列查表（N+1），
+    #         改為一次組合所有國家 meta 並 left join；Python 端僅對
+    #         「唯一的 admin_2 值」做中文/簡繁檢查，顯著降低呼叫次數。
+    if meta_data:
+        meta_combined = pl.concat(
+            [
+                meta_df.select(
+                    pl.lit(country).alias("country_code"),
+                    pl.col("latitude"),
+                    pl.col("longitude"),
+                    pl.col("admin_2").alias("_meta_admin_2"),
+                )
+                for country, meta_df in meta_data.items()
+            ]
+        ).unique(subset=["country_code", "latitude", "longitude"], keep="first")
 
-        # 確保 country 存在於 meta_data
-        if country not in meta_data:
-            return None
-
-        # 在 meta_data[country] DataFrame 中查找對應的 (latitude, longitude)
-        result = meta_data[country].filter(
-            (pl.col("latitude") == row["latitude"])
-            & (pl.col("longitude") == row["longitude"])
+        cities500_df = cities500_df.join(
+            meta_combined,
+            on=["country_code", "latitude", "longitude"],
+            how="left",
         )
 
-        # 如果有匹配的行，取出 admin_2
-        if not result.is_empty():
-            item = result["admin_2"].item()
-            if not is_chinese(item):
-                return None
-            if is_simplified_chinese(item):
-                return converter_s2t.convert(item)
-            return item
+        unique_admin2 = cities500_df["_meta_admin_2"].drop_nulls().unique().to_list()
+        translation_map: dict[str, str | None] = {}
+        for name in unique_admin2:
+            if not is_chinese(name):
+                translation_map[name] = None
+            elif is_simplified_chinese(name):
+                translation_map[name] = converter_s2t.convert(name)
+            else:
+                translation_map[name] = name
 
-        return None  # 若無匹配則回傳 None
-
-    cities500_df = cities500_df.with_columns(
-        pl.struct(["country_code", "latitude", "longitude"])
-        .map_elements(translate_from_metadata, return_dtype=pl.String)
-        .alias("translated_name")
-    )
+        cities500_df = cities500_df.with_columns(
+            pl.col("_meta_admin_2")
+            .replace_strict(translation_map, default=None, return_dtype=pl.String)
+            .alias("translated_name")
+        ).drop("_meta_admin_2")
+    else:
+        cities500_df = cities500_df.with_columns(
+            pl.lit(None, dtype=pl.String).alias("translated_name")
+        )
 
     # 2. 透過 alternate_name 進行翻譯
     cities500_df = (
@@ -303,8 +285,6 @@ def translate_cities500(
     # 5. 記錄未處理的行 (現在判斷 final_name)
     unprocessed = cities500_df.filter(pl.col("final_name").is_null())
     if not unprocessed.is_empty():
-        # for row in unprocessed.iter_rows(named=True):
-        #     logger.warning(f"未處理的行: {row['geoname_id']} {row['name']}")
         logger.warning(f"未翻譯的地名數量 (final_name is null): {unprocessed.height}")
 
     # 6. 處理例外情況 (應用於 final_name)

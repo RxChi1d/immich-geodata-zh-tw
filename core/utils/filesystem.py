@@ -11,23 +11,21 @@ from .logging import logger
 
 def rebuild_folder(folder: str = "output") -> None:
     """
-    重建資料夾（刪除後重新建立）。
+    重建資料夾：確保執行後資料夾存在且為空。
 
-    如果資料夾存在，會先完整刪除再重新建立空資料夾。
-    若資料夾不存在，則不執行任何操作。
+    若資料夾存在則完整刪除再重新建立；若不存在則直接建立。
 
     Args:
         folder: 要重建的資料夾路徑，預設為 "output"
-
-    Example:
-        >>> rebuild_folder("temp_data")
-        # 會刪除 temp_data 資料夾並重新建立
     """
     if os.path.exists(folder):
         logger.info(f"正在刪除資料夾 {folder}")
         shutil.rmtree(folder, ignore_errors=True)
         os.makedirs(folder, exist_ok=True)
         logger.info(f"已重建資料夾 {folder}")
+    else:
+        os.makedirs(folder, exist_ok=True)
+        logger.info(f"已建立資料夾 {folder}")
 
 
 def ensure_folder_exists(file_path: str) -> None:

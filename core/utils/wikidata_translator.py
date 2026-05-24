@@ -696,11 +696,6 @@ class TranslationCacheStore:
             },
         }
 
-    def create_empty(self) -> dict:
-        """提供測試快速產生全新快取字典。"""
-
-        return self._create_empty_payload()
-
     def _ensure_index(self) -> None:
         self.data.setdefault("indexes", {}).setdefault("by_name", {})
 
@@ -861,11 +856,6 @@ class WikidataTranslator:
             cache_path=self.cache_path,
         )
         self.cache = self._load_cache()
-
-    def _create_empty_cache(self) -> dict:
-        """提供兼容舊測試的空白快取。"""
-
-        return self.cache_store.create_empty()
 
     def _load_cache(self) -> dict:
         """取得目前快取內容。"""
@@ -1045,55 +1035,6 @@ class WikidataTranslator:
             logger.warning(f"P131 驗證失敗 ({candidate_qid}, {parent_qid}): {e}")
             return False
 
-    def _get_labels(self, qid: str) -> dict:
-        """取得實體的多語言標籤。
-
-        Args:
-            qid: Wikidata QID
-
-        Returns:
-            語言代碼 -> 標籤的對照表
-        """
-        # 檢查快取（新路徑）
-        if qid in self.cache.get("cache", {}).get("labels", {}):
-            return self.cache["cache"]["labels"][qid]
-
-        try:
-            # 構建語言列表（目標語言 + 回退語言）
-            langs = _dedupe_keep_order([self.target_lang, *self.fallback_langs])
-            langs_str = "|".join(langs)
-
-            js = self._wd_api(
-                {
-                    "action": "wbgetentities",
-                    "ids": qid,
-                    "props": "labels|sitelinks",
-                    "languages": langs_str,
-                }
-            )
-
-            entity = js.get("entities", {}).get(qid, {})
-            labels_data = entity.get("labels", {})
-            sitelinks = entity.get("sitelinks", {})
-
-            # 整理標籤
-            labels = {lang: labels_data[lang]["value"] for lang in labels_data}
-
-            # 加入中文維基百科標題（如果有）
-            zhwiki_title = sitelinks.get("zhwiki", {}).get("title")
-            if zhwiki_title:
-                labels["zhwiki"] = zhwiki_title
-
-            # 快取標籤（新路徑）
-            self.cache.setdefault("cache", {}).setdefault("labels", {})[qid] = labels
-            self._mark_cache_dirty()
-
-            return labels
-
-        except Exception as e:
-            logger.warning(f"取得標籤失敗 ({qid}): {e}")
-            return {}
-
     def _batch_get_labels(
         self, qids: list[str], batch_size: int = 50
     ) -> dict[str, dict]:
@@ -1109,18 +1050,14 @@ class WikidataTranslator:
         Returns:
             {qid: {language: label}} 對照表
         """
-        # 步驟 1: 去重
         unique_qids = _dedupe_keep_order(qids)
+        labels_cache = self.cache.setdefault("cache", {}).setdefault("labels", {})
+        uncached_qids = [qid for qid in unique_qids if qid not in labels_cache]
 
-        # 步驟 2: 檢查快取，過濾未快取的 QID
-        uncached_qids = [
-            qid
-            for qid in unique_qids
-            if qid not in self.cache.get("cache", {}).get("labels", {})
-        ]
-
-        # 步驟 3: 分批查詢（每批最多 50 個）
         if uncached_qids:
+            langs_str = "|".join(
+                _dedupe_keep_order([self.target_lang, *self.fallback_langs])
+            )
             logger.info(
                 f"需要批次查詢 {len(uncached_qids)} 個 QID 的標籤"
                 f"（分 {(len(uncached_qids) + batch_size - 1) // batch_size} 批）"
@@ -1128,43 +1065,29 @@ class WikidataTranslator:
 
             for i in range(0, len(uncached_qids), batch_size):
                 batch = uncached_qids[i : i + batch_size]
-                ids_str = "|".join(batch)  # Q8684|Q41164|Q515
 
                 try:
-                    # 構建語言列表（目標語言 + 回退語言）
-                    langs = _dedupe_keep_order([self.target_lang, *self.fallback_langs])
-                    langs_str = "|".join(langs)
-
-                    # 批次 API 請求
-                    # Reason: 使用 | 分隔多個 QID，一次請求取得多個實體的標籤
                     js = self._wd_api(
                         {
                             "action": "wbgetentities",
-                            "ids": ids_str,
+                            "ids": "|".join(batch),
                             "props": "labels|sitelinks",
                             "languages": langs_str,
                         }
                     )
 
-                    # 解析結果並快取
                     for qid, entity in js.get("entities", {}).items():
                         labels_data = entity.get("labels", {})
-                        sitelinks = entity.get("sitelinks", {})
-
-                        # 整理標籤
                         labels = {
                             lang: labels_data[lang]["value"] for lang in labels_data
                         }
-
-                        # 加入中文維基百科標題（如果有）
-                        zhwiki_title = sitelinks.get("zhwiki", {}).get("title")
+                        zhwiki_title = (
+                            entity.get("sitelinks", {}).get("zhwiki", {}).get("title")
+                        )
                         if zhwiki_title:
                             labels["zhwiki"] = zhwiki_title
-
-                        # 快取標籤
-                        self.cache.setdefault("cache", {}).setdefault("labels", {})[
-                            qid
-                        ] = labels
+                        # Reason: 每筆寫入即標記 dirty，避免 labels dict comprehension 中途拋例外時遺失已寫入的快取
+                        labels_cache[qid] = labels
                         self._mark_cache_dirty()
 
                     logger.debug(
@@ -1175,15 +1098,9 @@ class WikidataTranslator:
                     logger.warning(
                         f"批次取得標籤失敗（批次 {i // batch_size + 1}）: {e}"
                     )
-                    # Reason: 批次查詢失敗時繼續處理下一批，避免全部失敗
                     continue
 
-        # 步驟 4: 回傳所有 QID 的標籤（含快取）
-        return {
-            qid: self.cache["cache"]["labels"][qid]
-            for qid in unique_qids
-            if qid in self.cache["cache"]["labels"]
-        }
+        return {qid: labels_cache[qid] for qid in unique_qids if qid in labels_cache}
 
     def _batch_get_instance_of(
         self, qids: list[str], batch_size: int = 50
@@ -1197,17 +1114,10 @@ class WikidataTranslator:
         Returns:
             {qid: [P31_qid1, P31_qid2, ...]} 對照表
         """
-        # 步驟 1: 去重
         unique_qids = _dedupe_keep_order(qids)
+        p31_cache = self.cache.setdefault("cache", {}).setdefault("instance_of", {})
+        uncached_qids = [qid for qid in unique_qids if qid not in p31_cache]
 
-        # 步驟 2: 檢查快取，過濾未快取的 QID
-        uncached_qids = [
-            qid
-            for qid in unique_qids
-            if qid not in self.cache.get("cache", {}).get("instance_of", {})
-        ]
-
-        # 步驟 3: 分批查詢（每批最多 50 個）
         if uncached_qids:
             logger.info(
                 f"需要批次查詢 {len(uncached_qids)} 個 QID 的 P31 屬性"
@@ -1216,41 +1126,32 @@ class WikidataTranslator:
 
             for i in range(0, len(uncached_qids), batch_size):
                 batch = uncached_qids[i : i + batch_size]
-                ids_str = "|".join(batch)
 
                 try:
-                    # 批次 API 請求
                     js = self._wd_api(
                         {
                             "action": "wbgetentities",
-                            "ids": ids_str,
+                            "ids": "|".join(batch),
                             "props": "claims",
-                            "languages": "en",  # P31 不需要多語言
+                            "languages": "en",
                         }
                     )
 
-                    # 解析結果並快取
                     for qid, entity in js.get("entities", {}).items():
-                        claims = entity.get("claims", {})
-                        p31_claims = claims.get("P31", [])
-
-                        # 提取 P31 的 QID 列表
-                        instance_of_qids = []
-                        for claim in p31_claims:
+                        instance_of_qids: list[str] = []
+                        for claim in entity.get("claims", {}).get("P31", []):
                             try:
                                 mainsnak = claim.get("mainsnak", {})
-                                if mainsnak.get("snaktype") == "value":
-                                    datavalue = mainsnak.get("datavalue", {})
-                                    if datavalue.get("type") == "wikibase-entityid":
-                                        p31_qid = datavalue["value"]["id"]
-                                        instance_of_qids.append(p31_qid)
+                                if mainsnak.get("snaktype") != "value":
+                                    continue
+                                datavalue = mainsnak.get("datavalue", {})
+                                if datavalue.get("type") == "wikibase-entityid":
+                                    instance_of_qids.append(datavalue["value"]["id"])
                             except (KeyError, TypeError):
                                 continue
-
-                        # 快取 P31 資訊
-                        self.cache.setdefault("cache", {}).setdefault(
-                            "instance_of", {}
-                        )[qid] = instance_of_qids
+                        # Reason: 每筆寫入即標記 dirty，與 _batch_get_labels 一致；
+                        #         避免批次中途例外時已寫入資料未被 flush
+                        p31_cache[qid] = instance_of_qids
                         self._mark_cache_dirty()
 
                     logger.debug(
@@ -1258,18 +1159,13 @@ class WikidataTranslator:
                     )
 
                 except Exception as e:
+                    # Reason: 批次查詢失敗時繼續處理下一批，避免全部失敗
                     logger.warning(
                         f"批次取得 P31 失敗（批次 {i // batch_size + 1}）: {e}"
                     )
-                    # Reason: 批次查詢失敗時繼續處理下一批，避免全部失敗
                     continue
 
-        # 步驟 4: 回傳所有 QID 的 P31（含快取）
-        return {
-            qid: self.cache["cache"]["instance_of"][qid]
-            for qid in unique_qids
-            if qid in self.cache["cache"]["instance_of"]
-        }
+        return {qid: p31_cache[qid] for qid in unique_qids if qid in p31_cache}
 
     def _select_best_label(self, labels: dict, name: str) -> tuple[str, str, str]:
         """從多語言標籤中選擇最佳翻譯。
@@ -1317,11 +1213,9 @@ class WikidataTranslator:
         self,
         name: str,
         parent_qid: str | None = None,
-        instance_of_qid: str | None = None,
     ) -> dict:
         """翻譯單一地名（沿用批次核心邏輯）。"""
 
-        _ = instance_of_qid  # 保留參數以維持 API 一致性
         normalized_name = _normalize_text(name)
         if not normalized_name:
             raise ValueError("name 不可為空字串")

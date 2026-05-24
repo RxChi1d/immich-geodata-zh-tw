@@ -46,8 +46,8 @@ def get_loc_from_locationiq(lat, lon):
     使用 LocationIQ API 根據經緯度取得地理位置資訊。
 
     Args:
-        lat (float): 經度
-        lon (float): 緯度
+        lat (float): 緯度
+        lon (float): 經度
 
     Returns:
         dict: 包含地理位置資訊的字典，如果查詢失敗則返回 None。
@@ -73,7 +73,6 @@ def get_loc_from_locationiq(lat, lon):
             return response.json()
     except requests.exceptions.RequestException as e:
         logger.error(f"{lat},{lon} 查詢失敗: {e}")
-        pass
     return None
 
 
@@ -187,6 +186,14 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
     # 篩選指定國家
     specific_country_df = cities_df.filter(pl.col("country_code") == country_code)
 
+    # Reason: 臺灣行政區對照表在迴圈外一次載入為 dict，避免每筆查詢都重讀檔案＋filter
+    tw_admin1_lookup: dict[str, str] = {}
+    if country_code == "TW":
+        admin1_map = pl.read_csv(os.path.join("output", "tw_admin1_map.csv"))
+        tw_admin1_lookup = dict(
+            zip(admin1_map["new_id"].to_list(), admin1_map["name"].to_list())
+        )
+
     # 初始化空 DataFrame 來儲存 API 查詢結果
     result_df = pl.DataFrame(schema=GEODATA_SCHEMA)
     pbar = tqdm(
@@ -212,51 +219,34 @@ def process_file(cities500_file, output_file, country_code, batch_size=100):
                 )
                 continue
 
-            """
-            1. 直轄市/省轄市
-                1.1. admin_2 在列表中
-                1.2. 根據 row 的 admin1_code ，在 admin1_map 的 new_id 中找到對應的中文名 (TW.{admin1_code})，填入 admin_1
-                1.3. admin_3 的數值填入 admin_2
-                1.4. admin_4 的數值填入 admin_3
-                1.5. 空值填入 admin_4
-            
-            2. 省轄縣
-                2.1. admin_2 不會在列表中
-                2.2. 根據 row 的 admin1_code ，在 admin1_map 的 new_id 中找到對應的中文名 (TW.{admin1_code})，填入 admin_1
-                
-            """
-
-            # 臺灣特殊處理
+            # 臺灣特殊處理：依行政層級類型改寫 admin_1 ~ admin_4
+            #   直轄市/省轄市 (admin_2 ∈ MUNICIPALITIES)：admin_1 改用對照表中文名，
+            #       admin_3/admin_4 上移一層，admin_4 設為 None。
+            #   省轄縣（其他情況）：僅用對照表中文名覆寫 admin_1。
             if country_code == "TW":
-                # 讀取臺灣行政區對照表
-                admin1_map = pl.read_csv(
-                    os.path.join("output", "tw_admin1_map.csv"),
-                )
+                admin_1_key = f"TW.{row['admin1_code']}"
+                admin_1_name = tw_admin1_lookup.get(admin_1_key)
+                if admin_1_name is None:
+                    # Reason: 對照表缺失（資料髒或 tw_admin1_map.csv 尚未重建）
+                    #         時僅警告並保留 API 回傳的 admin_1，避免整批中斷
+                    logger.warning(
+                        f"找不到 TW admin1 對照: {admin_1_key}，保留原 admin_1"
+                    )
+                    admin_1_expr = pl.col("admin_1")
+                else:
+                    admin_1_expr = pl.lit(admin_1_name).alias("admin_1")
 
-                admin_1 = f"TW.{row['admin1_code']}"
-
-                # 直轄市/省轄市
                 if record_df["admin_2"].item() in MUNICIPALITIES:
+                    # 直轄市/省轄市：原 admin_3/admin_4 上移一層
                     record_df = record_df.with_columns(
-                        pl.lit(
-                            admin1_map.filter(pl.col("new_id") == admin_1)[
-                                "name"
-                            ].item()
-                        ).alias("admin_1"),
+                        admin_1_expr,
                         pl.col("admin_3").alias("admin_2"),
                         pl.col("admin_4").alias("admin_3"),
                         pl.lit(None, dtype=pl.String).alias("admin_4"),
                     )
-
-                # 省轄縣
                 else:
-                    record_df = record_df.with_columns(
-                        pl.lit(
-                            admin1_map.filter(pl.col("new_id") == admin_1)[
-                                "name"
-                            ].item()
-                        ).alias("admin_1")
-                    )
+                    # 省轄縣：僅覆寫 admin_1
+                    record_df = record_df.with_columns(admin_1_expr)
 
             # 合併結果
             result_df = result_df.vstack(record_df)
@@ -290,9 +280,9 @@ def test():
         "--locationiq-qps", type=int, default=2, help="LocationIQ 每秒查詢次數限制"
     )
 
-    parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--country-code", type=str, default="TW")
     parser.add_argument("--output-folder", type=str, default="./output")
+    parser.add_argument("--batch-size", type=int, default=100)
     args = parser.parse_args()
 
     # 使用參數設定 LocationIQ 配置
@@ -308,7 +298,7 @@ def test():
     output_file = os.path.join(meta_data_folder, f"{args.country_code}.csv")
     ensure_folder_exists(output_file)
 
-    process_file(cities500_file, output_file, args.country_code, args.overwrite)
+    process_file(cities500_file, output_file, args.country_code, args.batch_size)
 
 
 if __name__ == "__main__":

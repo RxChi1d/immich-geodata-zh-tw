@@ -4,7 +4,6 @@ GeoName ID 計算工具模組。
 提供全域最大 geoname_id 掃描功能，用於為新增的地理資料分配唯一 ID。
 """
 
-from pathlib import Path
 import polars as pl
 from .logging import logger
 
@@ -44,32 +43,24 @@ def calculate_global_max_geoname_id() -> int:
     logger.info("開始計算全域最大 geoname_id...")
 
     for file_path, schema in files_to_check:
-        if not Path(file_path).exists():
-            logger.debug(f"檔案不存在，跳過: {file_path}")
-            continue
-
         try:
-            # 判斷檔案類型並使用對應的 separator
-            separator = "\t"
-
-            df = pl.read_csv(
-                file_path, separator=separator, has_header=False, schema=schema
-            )
+            df = pl.read_csv(file_path, separator="\t", has_header=False, schema=schema)
 
             if df.is_empty():
                 logger.debug(f"檔案為空，跳過: {file_path}")
                 continue
 
-            # 轉換為整數再計算最大值
             file_max_id = df.select(pl.col("geoname_id").cast(pl.Int64).max()).item()
-
-            if file_max_id is not None and file_max_id > max_id:
-                max_id = file_max_id
-                logger.debug(f"從 {file_path} 中找到最大 ID: {file_max_id}")
-
-        except Exception as e:
-            logger.warning(f"讀取 {file_path} 時發生錯誤，跳過: {e}")
+        except FileNotFoundError:
+            logger.debug(f"檔案不存在，跳過: {file_path}")
             continue
+        except Exception as e:
+            logger.warning(f"處理 {file_path} 時發生錯誤，跳過: {e}")
+            continue
+
+        if file_max_id is not None and file_max_id > max_id:
+            max_id = file_max_id
+            logger.debug(f"從 {file_path} 中找到最大 ID: {file_max_id}")
 
     logger.info(f"全域最大 geoname_id: {max_id}")
     return max_id
