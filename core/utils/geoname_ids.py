@@ -45,18 +45,19 @@ def calculate_global_max_geoname_id() -> int:
     for file_path, schema in files_to_check:
         try:
             df = pl.read_csv(file_path, separator="\t", has_header=False, schema=schema)
+
+            if df.is_empty():
+                logger.debug(f"檔案為空，跳過: {file_path}")
+                continue
+
+            file_max_id = df.select(pl.col("geoname_id").cast(pl.Int64).max()).item()
         except FileNotFoundError:
             logger.debug(f"檔案不存在，跳過: {file_path}")
             continue
         except Exception as e:
-            logger.warning(f"讀取 {file_path} 時發生錯誤，跳過: {e}")
+            logger.warning(f"處理 {file_path} 時發生錯誤，跳過: {e}")
             continue
 
-        if df.is_empty():
-            logger.debug(f"檔案為空，跳過: {file_path}")
-            continue
-
-        file_max_id = df.select(pl.col("geoname_id").cast(pl.Int64).max()).item()
         if file_max_id is not None and file_max_id > max_id:
             max_id = file_max_id
             logger.debug(f"從 {file_path} 中找到最大 ID: {file_max_id}")
