@@ -134,6 +134,33 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
         return df.drop(["_city", "_district"])
 
     @staticmethod
+    def _derive_admin3_column(df: pl.DataFrame) -> pl.DataFrame:
+        """從完整行政區名稱拆出 admin_3。
+
+        Args:
+            df: 包含 sidonm, sggnm, adm_nm 欄位的 DataFrame。
+
+        Returns:
+            新增或覆蓋 admin_3 欄位後的 DataFrame。
+        """
+
+        def remove_parent_names(row: dict[str, str]) -> str:
+            """移除每列各自的廣域與市區名稱。"""
+            adm_nm = row["adm_nm"]
+            sidonm = row["sidonm"]
+            sggnm = row["sggnm"]
+
+            return adm_nm.replace(sidonm, "").replace(sggnm, "").strip()
+
+        # Reason: Polars 1.33.0 尚不支援以欄位表達式作為 str.replace_all 的 pattern；
+        #         這裡每列的 sidonm/sggnm 都不同，因此保留逐列字串處理避免 extract 失敗。
+        return df.with_columns(
+            pl.struct(["adm_nm", "sidonm", "sggnm"])
+            .map_elements(remove_parent_names, return_dtype=pl.String)
+            .alias("admin_3")
+        )
+
+    @staticmethod
     def _build_candidate_filter() -> Callable[[str, dict], bool]:
         """建立候選過濾器，排除議會機構等非行政區實體。
 
@@ -228,15 +255,7 @@ class SouthKoreaGeoDataHandler(GeoDataHandler):
             )
 
             # 解析 admin_3：從 adm_nm 逐欄移除 sidonm 與 sggnm 後 trim。
-            # Reason: Polars 的 str.replace_all 支援以欄位表達式作為 pattern，
-            #         可完全向量化，比 map_elements 快一個量級。
-            df = df.with_columns(
-                pl.col("adm_nm")
-                .str.replace_all(pl.col("sidonm"), pl.lit(""), literal=True)
-                .str.replace_all(pl.col("sggnm"), pl.lit(""), literal=True)
-                .str.strip_chars()
-                .alias("admin_3")
-            )
+            df = self._derive_admin3_column(df)
 
             # === 步驟 2.5: 正規化特殊行政區結構（世宗特別自治市）===
             df = self._normalize_special_admin_structures(df)
