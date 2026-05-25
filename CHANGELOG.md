@@ -29,6 +29,50 @@
 
 ---
 
+## [2.2.4] - 2026-05-25
+
+### Changed
+- **地理資料維護更新**：更新臺灣、日本、南韓與泰國反向地理編碼資料，讓 release 套件與最新可用來源資料保持同步。
+- **地理資料處理架構**：整理國別 Handler 結構、註冊流程、共用 admin/geospatial 工具與 Polars 資料處理流程，維持既有輸出行為並提升後續維護性。
+- **南韓資料處理**：拆分南韓翻譯與特殊規則資料，讓地名轉換邏輯更清楚、可測且易於調整。
+- **測試覆蓋**：新增 geodata handler registry、admin1 mapping、南韓處理器與 geoname ID 掃描相關測試，保護架構整理後的既有行為。
+
+### Fixed
+- **Nightly workflow refspec 衝突**：將內部 nightly 建構分支改為 `nightly-build`，避免與公開 `nightly` tag 衝突，並維持既有 nightly release 行為不變。
+- **Wikidata 翻譯穩定性**：保留語言回退順序，並改善進度與快取命中顯示。
+- **Admin1 mapping cache**：避免同一程序中重新產生 CSV 後仍讀到舊 mapping。
+- **資料正規化與檔案處理**：強化空值 sentinel、檔案讀取錯誤訊息，以及 malformed `geoname_id` 的處理。
+
+## [2.2.3] - 2026-03-06
+
+### Changed
+- **泰國地理資料更新**：更新泰國反向地理編碼資料，讓 release 套件持續同步最新來源資料。
+- **Release Notes 規範**：補充發布說明撰寫規範，統一分類、emoji 與比較連結格式。
+
+### Fixed
+- **自動更新變更偵測**：統一 release 與 auto-update workflow 的變更判斷方式，減少重複邏輯並避免不必要的發布流程。
+- **Nightly 發布策略**：改用單一 `nightly` tag 與 pre-release，避免自動更新累積大量動態 tag。
+
+## [2.2.2] - 2026-02-13
+
+### Changed
+- **泰國地理資料更新**：更新 2026-01-29 與 2026-02-13 的泰國反向地理編碼資料。
+
+### Fixed
+- **Nightly tag 與分支命名衝突**：調整動態 nightly tag 產生方式，避免與分支名稱衝突並確保自動更新流程穩定執行。
+
+## [2.2.1] - 2026-01-29
+
+### Changed
+- **泰國地理資料更新**：匯入 2025-12-05 的泰國反向地理編碼資料。
+- **Release 流程審核**：release 與 auto-update 變更改由 Pull Request 進入主分支，讓資料更新與發布流程更可追蹤。
+- **Nightly 同步流程**：新增 main 到 nightly 的同步流程，確保穩定版本修正能自動帶入 nightly 建構。
+- **資料來源聲明**：補充南韓資料來源 `admdongkor` 的授權與歸屬資訊。
+
+### Fixed
+- **Nightly 分支同步**：調整 release 分支命名與同步方式，避免 nightly 分支、tag 與自動同步流程互相衝突。
+- **Release 套件內容**：移除 release 打包階段對 `update_data.sh` 的額外處理，讓壓縮檔內容與 repository 版本一致。
+
 ## [2.2.0] - 2025-11-22
 
 ### Added
@@ -220,7 +264,11 @@
 
 特定變更的詳細資訊請參閱 [提交歷史](https://github.com/RxChi1d/immich-geodata-zh-tw/commits/main) 或 [發佈頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases)。
 
-[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.0...HEAD
+[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.4...HEAD
+[2.2.4]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.3...v2.2.4
+[2.2.3]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.2...v2.2.3
+[2.2.2]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.1...v2.2.2
+[2.2.1]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v1.2.2...v2.0.0
