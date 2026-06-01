@@ -2,6 +2,12 @@ name: Auto Update
 
 on:
   workflow_dispatch:
+    inputs:
+      validate_only:
+        description: '只驗證 Rust binary artifact，不更新 nightly release'
+        required: false
+        type: boolean
+        default: false
   schedule:
     - cron: "33 3 * * 5"
 
@@ -10,35 +16,73 @@ defaults:
     shell: bash
 
 jobs:
+  rust-binary:
+    permissions:
+      contents: read
+      actions: write
+    uses: ./.github/workflows/build-rust-binary.yaml
+    with:
+      checkout_ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true' && github.ref || 'main' }}
+
   auto-update:
     environment: Action Env
+    needs: rust-binary
     permissions:
+      actions: read
       contents: write
       pull-requests: write
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: main
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true' && github.ref || 'main' }}
       - name: Create nightly-build branch
         run: git checkout -B nightly-build
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Download Rust binary
+        uses: actions/download-artifact@v8
         with:
-          python-version: "3.13"
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
-      - name: Install dependencies
-        run: uv sync
+          name: ${{ needs.rust-binary.outputs.artifact_name }}
+          path: .rust-binary
+      - name: Verify Rust binary artifact
+        run: |
+          binary=".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}"
+          expected_source_hash="${{ needs.rust-binary.outputs.source_hash }}"
+          actual_source_hash="$(.github/scripts/compute-rust-source-hash.sh)"
+          if [[ "${actual_source_hash}" != "${expected_source_hash}" ]]; then
+            echo "Rust source hash 不符合 binary manifest"
+            echo "expected=${expected_source_hash}"
+            echo "actual=${actual_source_hash}"
+            exit 1
+          fi
+          chmod +x "${binary}"
+          (
+            cd .rust-binary
+            sha256sum -c "${{ needs.rust-binary.outputs.binary_filename }}.sha256"
+            sha256sum -c "${{ needs.rust-binary.outputs.binary_filename }}.tar.gz.sha256"
+          )
+          actual_binary_sha="$(cut -d ' ' -f1 ".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}.sha256")"
+          if [[ "${actual_binary_sha}" != "${{ needs.rust-binary.outputs.binary_sha256 }}" ]]; then
+            echo "Rust binary SHA-256 不符合 workflow output"
+            exit 1
+          fi
+          "${binary}" help >/dev/null
+          "${binary}" release \
+            --fixture-mode \
+            --pass-locationiq \
+            --output-folder /tmp/rust-release-smoke
       - name: Set current date as env variable
+        if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         run: echo "TODAY=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
-      - name: Build
-        run: uv run python main.py release --locationiq-api-key "${{ secrets.LOCATIONIQ_API_KEY }}" --country-code "KR" "TH"
+      - name: Build with Rust
+        if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
+        run: |
+          ".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}" release \
+            --locationiq-api-key "${{ secrets.LOCATIONIQ_API_KEY }}" \
+            --country-code "TH"
       - uses: stefanzweifel/git-auto-commit-action@v5
+        if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         id: auto-commit
         with:
           branch: nightly-build
@@ -55,7 +99,14 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           name: Automated Nightly Build ${{ env.TODAY }}
-          artifacts: "output/release.*"
+          artifacts: |
+            output/release.*
+            .rust-binary/${{ needs.rust-binary.outputs.binary_filename }}
+            .rust-binary/${{ needs.rust-binary.outputs.binary_filename }}.sha256
+            .rust-binary/${{ needs.rust-binary.outputs.binary_filename }}.tar.gz
+            .rust-binary/${{ needs.rust-binary.outputs.binary_filename }}.tar.gz.sha256
+            .rust-binary/${{ needs.rust-binary.outputs.binary_filename }}.ldd.txt
+            .rust-binary/${{ needs.rust-binary.outputs.binary_filename }}.manifest.json
           body: |
             這是定期自動生成的 nightly 版本 (包含最新 geodata)，可能未經充分測試。建議使用標有 "Latest" 的穩定版本。
             如果發現問題請提 issue 並暫時選擇到 [此處](https://github.com/RxChi1d/immich-geodata-zh-tw/releases) 選擇手動發布的 Release 文件。

@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout nightly-build
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: nightly-build
           fetch-depth: 0

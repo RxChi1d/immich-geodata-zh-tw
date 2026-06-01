@@ -1,0 +1,147 @@
+name: Validate Rust Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_prepare:
+        description: '跳過 prepare 下載步驟'
+        required: false
+        type: boolean
+        default: false
+      skip_locationiq:
+        description: '跳過 LocationIQ API 步驟'
+        required: false
+        type: boolean
+        default: true
+      country_codes:
+        description: 'GeoNames extra data 國家代碼；有 handler 的國家不需要列入'
+        required: false
+        type: string
+        default: 'TH'
+  push:
+    branches:
+      - migration/python-to-rust
+    paths:
+      - '.github/workflows/validate-rust-release.yaml'
+      - '.github/workflows/build-rust-binary.yaml'
+      - '.github/scripts/compute-rust-source-hash.sh'
+      - 'rust/**'
+      - 'meta_data/**'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  rust-binary:
+    permissions:
+      contents: read
+      actions: write
+    uses: ./.github/workflows/build-rust-binary.yaml
+
+  validate:
+    needs: rust-binary
+    permissions:
+      actions: read
+      contents: read
+    runs-on: ubuntu-24.04
+    env:
+      COUNTRY_CODES: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.country_codes || 'TH' }}
+      SKIP_LOCATIONIQ: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_locationiq || 'true' }}
+      SKIP_PREPARE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_prepare || 'false' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download Rust binary
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.rust-binary.outputs.artifact_name }}
+          path: .rust-binary
+
+      - name: Verify Rust binary artifact
+        run: |
+          binary=".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}"
+          expected_source_hash="${{ needs.rust-binary.outputs.source_hash }}"
+          actual_source_hash="$(.github/scripts/compute-rust-source-hash.sh)"
+          if [[ "${actual_source_hash}" != "${expected_source_hash}" ]]; then
+            echo "Rust source hash 不符合 binary manifest"
+            echo "expected=${expected_source_hash}"
+            echo "actual=${actual_source_hash}"
+            exit 1
+          fi
+
+          chmod +x "${binary}"
+          (
+            cd .rust-binary
+            sha256sum -c "${{ needs.rust-binary.outputs.binary_filename }}.sha256"
+            sha256sum -c "${{ needs.rust-binary.outputs.binary_filename }}.tar.gz.sha256"
+          )
+
+          actual_binary_sha="$(cut -d ' ' -f1 ".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}.sha256")"
+          if [[ "${actual_binary_sha}" != "${{ needs.rust-binary.outputs.binary_sha256 }}" ]]; then
+            echo "Rust binary SHA-256 不符合 workflow output"
+            exit 1
+          fi
+
+          "${binary}" help >/dev/null
+
+      - name: Run full Rust release validation
+        run: |
+          binary=".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}"
+          args=(
+            release
+            --profile
+            --data-folder geoname_data
+            --metadata-folder meta_data
+            --output-folder output
+          )
+
+          if [[ "${SKIP_PREPARE}" == "true" ]]; then
+            args+=(--pass-prepare)
+          fi
+          if [[ "${SKIP_LOCATIONIQ}" == "true" ]]; then
+            args+=(--pass-locationiq)
+          fi
+
+          read -r -a countries <<< "${COUNTRY_CODES}"
+          if [[ "${#countries[@]}" -eq 0 ]]; then
+            echo "至少需要一個 country code"
+            exit 1
+          fi
+          args+=(--country-code "${countries[@]}")
+
+          "${binary}" "${args[@]}" | tee /tmp/rust-release-validation.log
+
+      - name: Validate release archives
+        run: |
+          tar_dir="/tmp/rust-release-validation-targz"
+          mkdir -p "${tar_dir}"
+          tar -xzf output/release.tar.gz -C "${tar_dir}"
+          diff -qr output/release "${tar_dir}"
+          unzip -t output/release.zip
+          du -h output/release.tar.gz output/release.zip
+
+      - name: Collect validation logs
+        if: always()
+        run: |
+          mkdir -p validation-artifacts
+          if [[ -f /tmp/rust-release-validation.log ]]; then
+            cp /tmp/rust-release-validation.log validation-artifacts/rust-release-validation.log
+          else
+            echo "release validation log 尚未產生" > validation-artifacts/rust-release-validation.log
+          fi
+
+      - name: Upload validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rust-release-validation-${{ github.run_id }}
+          path: |
+            output/release.zip
+            output/release.tar.gz
+            output/release-tree.manifest
+            validation-artifacts/rust-release-validation.log
+          if-no-files-found: error
