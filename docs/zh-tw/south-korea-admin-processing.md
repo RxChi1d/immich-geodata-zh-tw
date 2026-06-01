@@ -121,12 +121,14 @@
 
 ### Rust Wikidata 翻譯來源與快取
 
-Rust production handler 會從本地 `geoname_data/KR_wikidata_cache.json` 或指定的
-Wikidata stub/cache 讀取翻譯結果，再套用內建 Admin 1 與世宗對照表。自動化驗證不呼叫
-即時 Wikidata 網路服務，避免 release gate 受到 API quota、上游資料漂移或網路狀態影響。
+Rust production handler 會使用通用 Wikidata translation cache pipeline 讀取並更新本地
+`geoname_data/KR_wikidata_cache.json`。若 cache 不存在或缺少翻譯項目，production
+extract 會查詢 Wikidata、補齊 context-aware cache，再套用內建 Admin 1 與世宗對照表。
+自動化 fixture 驗證仍使用指定的 `KR_wikidata_stub.json`，不呼叫即時 Wikidata 網路服務，
+避免 release gate 受到 API quota、上游資料漂移或網路狀態影響。
 
-若需要更新南韓翻譯來源，應先更新 cache/stub，再用真實 KR GeoJSON 重新執行 extract 與
-release parity 驗證。
+若需要更新南韓翻譯來源，使用真實 KR GeoJSON 重新執行 production extract 即可更新
+cache；fixture 或 parity 驗證若需要固定輸出，仍應使用對應的 stub/cache。
 
 **回退策略**：翻譯時依序嘗試以下語言來源
 

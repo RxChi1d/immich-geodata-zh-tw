@@ -120,14 +120,17 @@ Use a **built-in table** with Taiwanese short names (not the canonical Wikidata 
 
 ### Rust Wikidata Translation Source and Cache
 
-The Rust production handler reads translations from the local
-`geoname_data/KR_wikidata_cache.json` file or an explicitly supplied Wikidata
-stub/cache, then applies the built-in Admin 1 and Sejong mappings. Automated
-validation does not call the live Wikidata service, keeping release gates
-independent from API quota, upstream data drift, and network availability.
+The Rust production handler uses the shared Wikidata translation cache pipeline
+to read and update the local `geoname_data/KR_wikidata_cache.json` file. If the
+cache is missing or incomplete, production extract queries Wikidata, fills the
+context-aware cache, then applies the built-in Admin 1 and Sejong mappings.
+Automated fixture validation still uses the supplied `KR_wikidata_stub.json`
+without calling the live Wikidata service, keeping release gates independent
+from API quota, upstream data drift, and network availability.
 
-When South Korea translations need updates, refresh the cache/stub first, then
-rerun extract and release parity validation with the real KR GeoJSON source.
+When South Korea translations need updates, rerun production extract with the
+real KR GeoJSON source to update the cache. Fixture and parity validation should
+continue using the matching stub/cache when deterministic output is required.
 
 **Fallback order**:
 

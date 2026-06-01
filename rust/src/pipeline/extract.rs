@@ -10,6 +10,7 @@ use std::time::Instant;
 
 mod geometry;
 mod handlers;
+mod korea_wikidata;
 mod sources;
 mod types;
 
@@ -346,11 +347,11 @@ fn read_geospatial_rows_from_path_profiled(
         fs::read_to_string(source_path)
             .map_err(|error| format!("無法讀取 GeoJSON {}：{error}", source_path.display()))
     })?;
-    let context = profile.time("load_context", || {
-        country.load_context(source_path, korea_stub)
-    })?;
     let mut features = profile.time("parse_geojson", || {
         read_geojson_features_from_content(country, &content, source_path)
+    })?;
+    let context = profile.time("load_context", || {
+        country.load_context(source_path, korea_stub, &features)
     })?;
     let source_crs = features.first().and_then(|feature| feature.crs.clone());
     profile.time("centroid", || {
@@ -376,10 +377,10 @@ fn read_shapefile_rows_from_path_profiled(
     korea_stub: Option<&Path>,
     profile: &mut ExtractProfile,
 ) -> Result<Vec<ExtractRow>, String> {
-    let context = profile.time("load_context", || {
-        country.load_context(source_path, korea_stub)
-    })?;
     let mut features = profile.time("read_shapefile", || read_shapefile(country, source_path))?;
+    let context = profile.time("load_context", || {
+        country.load_context(source_path, korea_stub, &features)
+    })?;
     let source_crs = features.first().and_then(|feature| feature.crs.clone());
     profile.time("centroid", || {
         apply_country_centroids(country, &mut features, source_crs.as_deref())

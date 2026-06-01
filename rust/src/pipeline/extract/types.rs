@@ -239,13 +239,13 @@ impl Country {
     }
 }
 
-pub(super) fn korea_translation_source(source_path: &std::path::Path) -> Option<PathBuf> {
+pub(super) fn korea_stub_source(source_path: &std::path::Path) -> Option<PathBuf> {
     source_path
         .parent()
         .map(|parent| parent.join("KR_wikidata_stub.json"))
         .filter(|path| path.exists())
-        .or_else(|| {
-            let cache = std::path::Path::new("geoname_data").join("KR_wikidata_cache.json");
-            cache.exists().then_some(cache)
-        })
+}
+
+pub(super) fn korea_translation_cache_path() -> PathBuf {
+    std::path::Path::new("geoname_data").join("KR_wikidata_cache.json")
 }
