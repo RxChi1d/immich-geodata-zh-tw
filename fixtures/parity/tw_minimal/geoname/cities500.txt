@@ -1,0 +1,2 @@
+1001	舊臺北	舊臺北		25.04776000	121.53185000	P	PPL	TW		OLD				1000			Asia/Taipei	2024-01-01
+5000	Redwood Base	Redwood Base		37.00000000	-122.00000000	P	PPL	US		CA				1000			America/Los_Angeles	2024-01-01

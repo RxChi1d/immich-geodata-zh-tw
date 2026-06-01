@@ -1,0 +1,20 @@
+{
+  "base_geoname_id": 94000000,
+  "countries": [
+    "TW",
+    "JP",
+    "KR"
+  ],
+  "extra_files": [],
+  "min_population": 0,
+  "modification_date": "2026-01-01",
+  "name": "extract_logic_audit",
+  "stages": [
+    "extract",
+    "transform_cities_schema",
+    "admin1_load",
+    "cities500_load",
+    "translate",
+    "pack"
+  ]
+}

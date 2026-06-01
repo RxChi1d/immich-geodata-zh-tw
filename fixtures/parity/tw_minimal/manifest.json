@@ -1,0 +1,12 @@
+{
+  "base_geoname_id": 92000000,
+  "countries": [
+    "TW"
+  ],
+  "extra_files": [
+    "extra_data/US.txt"
+  ],
+  "min_population": 100,
+  "modification_date": "2026-01-01",
+  "name": "tw_minimal"
+}

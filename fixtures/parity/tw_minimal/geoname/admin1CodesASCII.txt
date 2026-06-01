@@ -1,0 +1,2 @@
+TW.OLD	Old Taiwan	Old Taiwan	100
+US.CA	California	California	5332921

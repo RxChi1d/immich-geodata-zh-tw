@@ -1,0 +1,31 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "N03_001": "測試県",
+        "N03_003": "第一郡",
+        "N03_004": "同名町",
+        "N03_005": ""
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [139.0, 36.0]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "N03_001": "測試県",
+        "N03_003": "第二郡",
+        "N03_004": "同名町",
+        "N03_005": ""
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [140.0, 36.5]
+      }
+    }
+  ]
+}

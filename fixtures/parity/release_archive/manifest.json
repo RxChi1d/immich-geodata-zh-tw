@@ -1,0 +1,13 @@
+{
+  "base_geoname_id": 95000000,
+  "countries": [
+    "TW"
+  ],
+  "extra_files": [],
+  "min_population": 0,
+  "modification_date": "2026-01-01",
+  "name": "release_archive",
+  "stages": [
+    "pack"
+  ]
+}

@@ -1,0 +1,4 @@
+TW.OLD	Old Taiwan	Old Taiwan	100
+JP.OLD	Old Japan	Old Japan	200
+KR.OLD	Old Korea	Old Korea	300
+US.CA	California	California	5332921

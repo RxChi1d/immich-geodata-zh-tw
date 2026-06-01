@@ -1,0 +1,29 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "COUNTYNAME": "臺北市",
+        "TOWNNAME": "信義區",
+        "VILLNAME": "西村里"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [121.564468, 25.033964]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "COUNTYNAME": "臺中市",
+        "TOWNNAME": "中區",
+        "VILLNAME": "綠川里"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.673648, 24.147736]
+      }
+    }
+  ]
+}

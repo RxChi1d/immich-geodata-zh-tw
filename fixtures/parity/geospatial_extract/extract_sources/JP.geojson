@@ -1,0 +1,31 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "N03_001": "北海道",
+        "N03_003": "",
+        "N03_004": "釧路市",
+        "N03_005": ""
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [144.381356, 42.984854]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "N03_001": "神奈川県",
+        "N03_003": "",
+        "N03_004": "横浜市",
+        "N03_005": "中区"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [139.642514, 35.443708]
+      }
+    }
+  ]
+}
