@@ -9,7 +9,7 @@
 - [中心點計算方法](#中心點計算方法)
 - [繁體中文翻譯策略](#繁體中文翻譯策略)
   - [翻譯層級與優先順序](#翻譯層級與優先順序)
-  - [WikidataTranslator 使用配置](#wikidatatranslator-使用配置)
+  - [Rust Wikidata 翻譯來源與快取](#rust-wikidata-翻譯來源與快取)
 - [資料正規化](#資料正規化)
   - [市區合併名稱拆分](#市區合併名稱拆分)
   - [同名地名處理](#同名地名處理)
@@ -119,21 +119,14 @@
 - 경기도 → 京畿道（保留「道」）
 - 제주특별자치도 → 濟州（去除後綴）
 
-### WikidataTranslator 使用配置
+### Rust Wikidata 翻譯來源與快取
 
-本專案使用 `WikidataTranslator` 進行地名翻譯。關於翻譯器的完整功能說明（搜尋、P131 驗證、批次查詢、快取機制等），請參考 WikidataTranslator 文檔。
+Rust production handler 會從本地 `geoname_data/KR_wikidata_cache.json` 或指定的
+Wikidata stub/cache 讀取翻譯結果，再套用內建 Admin 1 與世宗對照表。自動化驗證不呼叫
+即時 Wikidata 網路服務，避免 release gate 受到 API quota、上游資料漂移或網路狀態影響。
 
-#### 初始化參數
-
-```python
-translator = WikidataTranslator(
-    source_lang="ko",              # 來源語言：韓文
-    target_lang="zh-tw",           # 目標語言：繁體中文-臺灣
-    fallback_langs=["zh-hant", "zh", "en", "ko"],  # 回退語言順序
-    cache_path="geoname_data/KR_wikidata_cache.json",
-    use_opencc=True                # 啟用簡轉繁
-)
-```
+若需要更新南韓翻譯來源，應先更新 cache/stub，再用真實 KR GeoJSON 重新執行 extract 與
+release parity 驗證。
 
 **回退策略**：翻譯時依序嘗試以下語言來源
 
@@ -231,18 +224,7 @@ translator = WikidataTranslator(
 
 **處理邏輯**：
 
-在翻譯完成後，針對光州的 Admin 2 記錄移除結尾的消歧義括號：
-
-```python
-# 僅處理光州（광주광역시）的記錄
-gwangju_parent = "광주광역시"
-df = df.with_columns(
-    pl.when(pl.col("sidonm") == gwangju_parent)
-    .then(pl.col("chinese_admin_2").str.replace_all(r"\s*\([^)]+\)\s*$", ""))
-    .otherwise(pl.col("chinese_admin_2"))
-    .alias("chinese_admin_2")
-)
-```
+Rust handler 在翻譯完成後，僅針對 `sidonm == "광주광역시"` 的 Admin 2 記錄移除結尾的消歧義括號。實作位於 `rust/src/pipeline/extract/handlers.rs`，由 `strip_trailing_parenthetical` 控制此規則。
 
 **效果**：
 
@@ -298,34 +280,20 @@ df = df.with_columns(
 
 **問題**：世宗市於 2012 年成立，多數新設洞在 Wikidata 缺少中文標籤，導致翻譯回退至羅馬拼音（`Boram-dong`）甚至韓文原文。
 
-**解決方案**：建立涵蓋全部 24 個 Admin 2 地名的手動對照表（`core/geodata/south_korea.py` 中的 `SEJONG_ADMIN2_MAP`）。
+**解決方案**：Rust handler 內建涵蓋全部 24 個 Admin 2 地名的手動對照表（`rust/src/pipeline/extract/handlers.rs` 中的 `sejong_admin2`）。
 
 **對照表範例**：
 
-```python
-SEJONG_ADMIN2_MAP = {
-    # 8 個洞 (Dong) - Wikidata 無中文標籤
-    "보람동": "寶藍洞",
-    "대평동": "大坪洞",
-    "다정동": "多情洞",
-    "도담동": "嶋潭洞",
-    "고운동": "高運洞",
-    "종촌동": "鍾村洞",
-    "새롬동": "新羅洞",
-    "소담동": "素潭洞",
-
-    # 3 個韓文地名 - Wikidata 無中文與英文標籤
-    "어진동": "御珍洞",
-    "반곡동": "盤谷洞",
-    "해밀동": "海密洞",
-
-    # 以下為可選翻譯（已可通過 Wikidata 翻譯，但直接使用對照表提升效能）
-    "조치원읍": "鳥致院邑",
-    "부강면": "芙江面",
-    "장군면": "將軍面",
-    # ... 其他地名
-}
-```
+| 韓文 | 繁體中文 |
+|------|----------|
+| 보람동 | 寶藍洞 |
+| 대평동 | 大平洞 |
+| 다정동 | 多情洞 |
+| 도담동 | 陶潭洞 |
+| 고운동 | 高雲洞 |
+| 조치원읍 | 鳥致院邑 |
+| 부강면 | 芙江面 |
+| 장군면 | 將軍面 |
 
 **翻譯流程**：
 
@@ -340,8 +308,8 @@ SEJONG_ADMIN2_MAP = {
 | 原始韓文 | Wikidata 翻譯 | 手動對照表 |
 |---------|--------------|-----------|
 | 보람동 | Boram-dong ❌ | 寶藍洞 ✅ |
-| 대평동 | Daepyeong-dong ❌ | 大坪洞 ✅ |
-| 어진동 | 어진동 ❌ | 御珍洞 ✅ |
+| 대평동 | Daepyeong-dong ❌ | 大平洞 ✅ |
+| 어진동 | 어진동 ❌ | 汝珍洞 ✅ |
 | 조치원읍 | 鳥致院邑 ✅ | 鳥致院邑 ✅ |
 
 > [!NOTE]

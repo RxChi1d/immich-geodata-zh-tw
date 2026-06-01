@@ -43,6 +43,8 @@
     - [手動部署](#手動部署-1)
   - [開發者：本地資料處理](#開發者本地資料處理)
     - [1. 安裝依賴](#1-安裝依賴)
+    - [官方預編譯 Binary](#官方預編譯-binary)
+    - [本地編譯 Rust CLI](#本地編譯-rust-cli)
     - [2. 提取原始地理資料](#2-提取原始地理資料)
       - [臺灣資料提取](#臺灣資料提取)
       - [日本資料提取](#日本資料提取)
@@ -50,6 +52,7 @@
     - [3. 完整資料處理流程](#3-完整資料處理流程)
       - [註冊 LocationIQ API](#註冊-locationiq-api)
       - [執行資料處理](#執行資料處理)
+    - [4. Rust 驗證](#4-rust-驗證)
   - [致謝](#致謝)
   - [授權條款](#授權條款)
   
@@ -240,19 +243,39 @@
 
 ### 1. 安裝依賴
 
-首先安裝 uv（如果尚未安裝）：
+本機 production 資料處理預設使用 Rust CLI。請先安裝 Rust toolchain，並確認系統可使用
+`unzip`、`pkg-config` 與 PROJ development library（例如 Ubuntu 的 `libproj-dev`）。
 
-請參考 [uv 官方安裝指南](https://docs.astral.sh/uv/getting-started/installation/) 根據你的作業系統安裝 uv。
+#### 官方預編譯 Binary
 
-然後安裝專案依賴：
+GitHub Releases 目前只提供 Linux x86_64 的預編譯 Rust CLI binary，主要供
+GitHub Actions、Linux server 與 Immich container 類環境使用。macOS 與 Windows
+目前請使用本地編譯方式。
+
+#### 本地編譯 Rust CLI
+
+如需在非 Linux 環境或自訂 Linux 環境執行資料處理，請先安裝 Rust toolchain 與
+PROJ development library，再執行：
 
 ```bash
-uv sync
+cargo build --release --manifest-path rust/Cargo.toml
+```
+
+編譯完成後，binary 會位於：
+
+```bash
+rust/target/release/immich-geodata-migration
+```
+
+也可以直接用 `cargo run` 執行：
+
+```bash
+cargo run --release --manifest-path rust/Cargo.toml -- help
 ```
 
 ### 2. 提取原始地理資料
 
-如果你需要處理新的國家或更新現有的地理資料來源，可以使用 `extract` 命令從 Shapefile 提取資料。此步驟是選用的，僅在需要更新資料來源時執行。
+如果你需要處理新的國家或更新現有的地理資料來源，可以使用 `extract` 命令從 Shapefile 或 GeoJSON 提取資料。此步驟是選用的，僅在需要更新資料來源時執行。
 
 #### 臺灣資料提取
 
@@ -261,7 +284,7 @@ uv sync
 ```bash
 # 1. 下載「村(里)界（TWD97經緯度）」資料並解壓縮
 # 2. 執行提取命令
-uv run python main.py extract --country TW \
+cargo run --release --manifest-path rust/Cargo.toml -- extract --country TW \
   --shapefile geoname_data/VILLAGE_NLSC_1140825/VILLAGE_NLSC_1140825.shp \
   --output meta_data/tw_geodata.csv
 ```
@@ -273,7 +296,7 @@ uv run python main.py extract --country TW \
 ```bash
 # 1. 下載「行政区域データ（世界測地系）」並解壓縮
 # 2. 執行提取命令
-uv run python main.py extract --country JP \
+cargo run --release --manifest-path rust/Cargo.toml -- extract --country JP \
   --shapefile geoname_data/N03-20250101_GML/N03-20250101.shp \
   --output meta_data/jp_geodata.csv
 ```
@@ -285,12 +308,12 @@ uv run python main.py extract --country JP \
 ```bash
 # 1. 從 admdongkor 專案下載官方行政區邊界資料並解壓縮
 # 2. 執行提取命令
-uv run python main.py extract --country KR \
-  --shapefile geoname_data/admdongkor/[檔案名稱].shp \
+cargo run --release --manifest-path rust/Cargo.toml -- extract --country KR \
+  --shapefile geoname_data/HangJeongDong_verYYYYMMDD.geojson \
   --output meta_data/kr_geodata.csv
 ```
 
-提取完成後，執行 `main.py release` 時會自動整合這些資料。
+提取完成後，執行 Rust `release` 時會自動整合這些資料。
 
 ### 3. 完整資料處理流程
 
@@ -303,17 +326,47 @@ uv run python main.py extract --country KR \
 #### 執行資料處理
 
 ```bash
-uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH"
+cargo run --release --manifest-path rust/Cargo.toml -- release \
+  --locationiq-api-key "YOUR_API_KEY" \
+  --country-code "KR" "TH"
 ```
 
 > [!NOTE]
-> - 可以通過 `uv run python main.py --help` 或 `uv run python main.py release --help` 查看更多選項。
+> - 可以通過 `cargo run --manifest-path rust/Cargo.toml -- help` 查看更多選項。
 > - `--country-code` 參數可指定需要處理的國家代碼，多個代碼之間使用空格分隔。(目前僅測試過 "KR" "TH")
 
 > [!WARNING]
 > - 由於 LocationIQ 的 API 有請求次數限制 (可登入後於後台查看)，因此請注意要處理的國家的地名數量，以免超出限制。
 > - 本專案允許 LocationIQ 反向地理編碼查詢的進度恢復，若超過當日請求限制，可於更換 api 金鑰或次日繼續執行。
->   - 需加上 `--pass-cleanup`參數，以取消重設資料夾功能： `uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH" --pass-cleanup`。
+>   - 需加上 `--pass-cleanup` 參數，以取消重設資料夾功能： `cargo run --release --manifest-path rust/Cargo.toml -- release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH" --pass-cleanup`。
+
+### 4. Rust 驗證
+
+Rust CLI 提供 dry-run contract，可在不呼叫外部 API 或下載網路的情況下驗證
+release orchestration：
+
+```bash
+cargo run --manifest-path rust/Cargo.toml -- release \
+  --dry-run \
+  --locationiq-api-key "fixture" \
+  --country-code "KR" "TH" \
+  --batch-size 100 \
+  --locationiq-qps 2
+```
+
+需要驗證 release archive 與 `update_data.sh` 所需目錄結構時，可使用 fixture mode
+產生本地 smoke artifact：
+
+```bash
+cargo run --manifest-path rust/Cargo.toml -- release \
+  --fixture-mode \
+  --pass-locationiq \
+  --output-folder /tmp/rust-release-smoke
+```
+
+目前 release 與 nightly production workflow 已切換為 Rust production path，並保留
+Rust fixture release smoke 作為前置檢查。真實 GeoNames/Natural Earth 下載與
+LocationIQ quota path 的自動測試仍需使用 fixture、stub 或明確 dry-run gate。
 
 ## 致謝  
   

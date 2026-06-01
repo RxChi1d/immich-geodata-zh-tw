@@ -17,7 +17,7 @@
 
 ## 撰寫風格與格式
 
-- **程式碼**（Python, Bash, etc.）、**配置檔案**（YAML, TOML, etc.）：遵循 ruff 規範。如果有不同會在後續 `uv run ruff check .` 檢查出異常。
+- **程式碼**（Rust, Bash, YAML, TOML, etc.）：遵循各語言既有格式化工具與專案慣例。
 - **專案文檔、說明文字、文件模板**：遵循 Google 風格。
 - **Commit 與 PR 訊息**：遵循 Conventional Commit 格式與 Google 風格。
 - **Changelog**：遵循 Keep a Changelog 格式。
@@ -156,9 +156,8 @@
 行政區優化：解決臺灣直轄市與省轄縣市僅顯示地區名稱的問題。
 提升臺灣資料準確性：利用中華民國國土測繪中心 (NLSC) 的官方圖資處理臺灣地區的地理名稱與邊界資料，確保數據來源的權威性。
 
-- **Python 支援版本**：Python >= 3.13
-- **Python 套件管理工具**：uv
-- **uv 管理的虛擬環境**：`.venv/`
+- **正式資料處理工具鏈**：Rust CLI（`rust/`）
+- **Rust 主要檢查**：`cargo fmt`、`cargo clippy`、`cargo test`
 
 ## 版本管理
 
@@ -173,96 +172,96 @@
 
 ### 地理資料處理流程（ETL 模式）
 
-本專案採用 **Extract-Transform-Load (ETL)** 模式處理地理資料：
+本專案採用 **Extract-Transform-Load (ETL)** 模式處理地理資料。正式
+production path 已遷移至 Rust：
 
 ```
-core/geodata/
-├── base.py         # GeoDataHandler 抽象基類
-├── taiwan.py       # TaiwanGeoDataHandler
-└── japan.py        # JapanGeoDataHandler
+rust/src/pipeline/
+├── extract.rs              # TW/JP/KR 圖資讀取、座標轉換與 normalized CSV 輸出
+├── extract/handlers.rs     # 各國 extract handler 與行政區欄位規則
+├── prepare.rs              # GeoNames、Natural Earth 等來源下載與前處理
+├── admin1_load.rs          # admin1 replacement
+├── cities500_load.rs       # cities500 merge / handler replacement
+├── locationiq.rs           # LocationIQ metadata 產生與續跑
+├── translate.rs            # 繁中翻譯、OpenCC 與 alternate names
+└── pack.rs                 # release tree、zip 與 tar.gz 打包
 ```
 
-每個國家的 Handler 包含三個階段的方法：
+各國 Handler 仍保留相同 ETL 概念，但以 Rust enum/static dispatch 與型別化
+資料列實作，而不是 Python registry。
 
 #### 1. Extract（提取）
-- **方法**：`extract_from_shapefile(shapefile_path, output_csv)`
-- **功能**：從 Shapefile 提取資料並轉換為標準化 CSV
-- **輸入**：原始 Shapefile 檔案
+- **入口**：`cargo run --release --manifest-path rust/Cargo.toml -- extract`
+- **功能**：從 Shapefile、GeoJSON 或已正規化 CSV 提取資料並轉換為標準化 CSV。
+- **輸入**：原始 Shapefile、GeoJSON 或 normalized geodata CSV
 - **輸出**：`meta_data/{country}_geodata.csv`
 - **處理內容**：
-  - 讀取 Shapefile（使用 geopandas）
+  - 讀取 Shapefile/GeoJSON
   - 計算多邊形中心點（使用適當的投影）
   - 轉換為 WGS84 座標
   - 輸出標準化欄位：latitude, longitude, country, admin_1-4
 
 #### 2. Transform（轉換）
-- `convert_to_cities_schema(csv_path)`: 將標準 CSV 轉成 CITIES_SCHEMA，負責生成 geoname_id、對應行政區與補齊時區、國家代碼。
+- `transform_cities_schema`：將標準 CSV 轉成 CITIES_SCHEMA，負責生成
+  geoname_id、對應行政區與補齊時區、國家代碼。
 
 #### 3. Load（載入）
-- `replace_in_dataset(input_df, base_geoname_id)`: 以新資料覆蓋 cities500 中對應國家的紀錄並回傳更新結果。國家代碼由 Handler 實例的 `COUNTRY_CODE` 類別變數自動決定。
+- `admin1_load` 與 `cities500_load`：以 handler 生成資料覆蓋 GeoNames 中對應國家的
+  admin1/cities500 紀錄，並保留固定排序、ID 範圍與 schema。
 
 ### 常用指令
 
 ```bash
-python main.py extract --country TW --shapefile <path_to_tw_shapefile>
-python main.py extract --country JP --shapefile <path_to_jp_shapefile>
-python main.py enhance --country-code <country_code>
-```
+cargo run --release --manifest-path rust/Cargo.toml -- extract \
+  --country TW \
+  --shapefile <path_to_tw_shapefile> \
+  --output meta_data/tw_geodata.csv
 
-### 在程式中使用
+cargo run --release --manifest-path rust/Cargo.toml -- release \
+  --locationiq-api-key "<api_key>" \
+  --country-code KR TH
 
-```python
-from core.geodata import get_handler
-
-handler = get_handler("TW")()
-handler.extract_from_shapefile("path/to/file.shp", "output.csv")
-df = handler.convert_to_cities_schema("output.csv", base_geoname_id=92_000_000)
-updated_df, max_id = handler.replace_in_dataset(cities500_df, base_geoname_id=92_000_000)
+cargo run --release --manifest-path rust/Cargo.toml -- release \
+  --fixture-mode \
+  --pass-locationiq \
+  --output-folder /tmp/rust-release-smoke
 ```
 
 ### 擴充新國家
 
-1. 建立 `core/geodata/<country>.py`，繼承 `GeoDataHandler` 並加上 `@register_handler("<CC>")`。
-2. 實作 `extract_from_shapefile` 與 `convert_to_cities_schema`：
+1. 在 `rust/src/pipeline/extract/handlers.rs` 新增或拆分該國 handler。
+2. 實作該國資料來源讀取、座標轉換、行政區欄位對應與 normalized CSV 輸出：
    - `geoname_id` 從 `92_000_000` 起算。
    - 填寫正確時區與 `country_code`。
    - 輸出需符合 `CITIES_SCHEMA`。
-3. 執行 `python main.py extract --country <CC> ...` 與 `python main.py enhance --country-code <CC>` 驗證流程。
+3. 補上 Rust fixture、單元測試與真實資料驗證。
+4. 執行 Rust gates：
+   `cargo fmt --check`、`cargo clippy -- -D warnings`、`cargo test`。
 
-Registry 會自動載入新處理器，毋須調整其他檔案。
+Rust 版本目前採用明確註冊/dispatch，新增國家時需同步更新 CLI country parsing 與
+handler routing，避免 runtime magic 造成 release 行為不透明。
 
 ### 核心開發循環
 
-#### Git Hooks（pre-commit）
-
-專案使用 **pre-commit** 工具進行自動化品質檢查，配置檔案：`.pre-commit-config.yaml`。
-
-可以手動執行所有檢查：
-```bash
-uv run pre-commit run --all-files
-```
-
 開發過程中也可以使用以下命令做基本的檢查與測試：
 ```bash
-# 使用 uv（推薦）- 按照 CI 執行順序
-uv run ruff format .        # 1. 格式化程式碼
-uv run ruff check --fix .   # 2. 風格檢查並自動修正
-uv run mypy .               # 3. 類型檢查
-uv run pytest              # 4. 執行單元測試
+cargo fmt --manifest-path rust/Cargo.toml --check
+cargo clippy --manifest-path rust/Cargo.toml -- -D warnings
+cargo test --manifest-path rust/Cargo.toml
 ```
 
 ## 開發注意事項
 
-- **Logger 使用**：任何檔案/代碼若有使用 logger 紀錄 log（新檔或修改既有程式碼）之需求，務必匯入 `from core.utils import logger` 使用專案統一設定，不可直接 `from loguru import logger`。
+- **Rust logging**：production CLI 使用 Rust logging/tracing 慣例，新增 pipeline
+  訊息需避免輸出 API key、暫存路徑中敏感資訊或不可重現的 runtime metadata。
 
 ### 模組化設計原則
 - **單一檔案不得超過 500 行程式碼**
 - **每個模組都有清楚的職責分工**
-- **使用相對匯入**（`from .utils import compression`）
-- **每個函式都需要 Google 格式的 docstring**
+- **Rust public function 需有清楚 rustdoc 或註解**
 
 ### 測試要求
-- **為所有新功能撰寫 Pytest 單元測試**
+- **為所有 Rust production 新功能撰寫 `cargo test` 測試**
 - **至少包含：正常情境、邊界情況、失敗情況**
 - **測試應位於 `/tests` 資料夾中**
 - **使用 fixtures 提供測試資料**
@@ -280,7 +279,7 @@ uv run pytest              # 4. 執行單元測試
 
 ## AI 行為規範
 - **絕不假設缺漏的上下文，如有疑問務必提出問題確認。**
-- **嚴禁臆造不存在的函式或套件** —— 只能使用已知、驗證過的 Python 套件。
+- **嚴禁臆造不存在的函式或套件** —— 只能使用已知、驗證過的套件。
 - **在程式碼或測試中引用檔案路徑或模組名稱前，務必確認其存在。**
 - **除非有明確指示，或任務需求（見 `TASK.md`），**否則**不得刪除或覆蓋現有程式碼。**
 - **需要分析或拆解問題，通過 sequential thinking 進行更深度思考**
@@ -299,5 +298,11 @@ uv run pytest              # 4. 執行單元測試
 | 文字搜尋 | `rg` (ripgrep) | `grep`, `ag` |
 | 程式碼結構分析 | `ast-grep` | `grep`, `sed` |
 | 互動式選擇 | `fzf` | 手動篩選 |
-| 處理 JSON | `jq` | `python -m json.tool` |
+| 處理 JSON | `jq` | 手動解析 |
 | 處理 YAML/XML | `yq` | 手動解析 |
+
+## Rust Migration 完成狀態
+
+本專案 production pipeline 已完成 Rust 遷移。Python production implementation、
+parity runner 與 golden outputs 已退場；後續功能開發、修正與驗證以 Rust CLI、
+Rust tests、fixture release smoke 與真實資料 release gate 為準。

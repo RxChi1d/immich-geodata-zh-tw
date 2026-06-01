@@ -72,7 +72,7 @@
 
 - 過濾無效的座標點（經緯度為 null 的記錄）
 - 將所有 object 類型欄位轉換為字串格式，確保資料一致性
-- 使用基類共用方法處理排序與標準化輸出
+- 使用 Rust 共用輸出流程處理排序與標準化欄位
 
 ## 資料處理流程
 
@@ -84,7 +84,7 @@
 # 下載「村(里)界（TWD97經緯度）」資料並解壓縮
 
 # 2. 提取原始資料
-uv run python main.py extract --country TW \
+cargo run --release --manifest-path rust/Cargo.toml -- extract --country TW \
   --shapefile geoname_data/VILLAGE_NLSC_XXXXXX/VILLAGE_NLSC_XXXXXX.shp \
   --output meta_data/tw_geodata.csv
 ```

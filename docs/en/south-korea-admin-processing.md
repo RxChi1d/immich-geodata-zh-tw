@@ -9,7 +9,7 @@ This document captures the processing strategy, administrative hierarchy, transl
 - [Centroid Calculation Method](#centroid-calculation-method)
 - [Traditional Chinese Translation Strategy](#traditional-chinese-translation-strategy)
   - [Priority per Level](#priority-per-level)
-  - [WikidataTranslator Configuration](#wikidatatranslator-configuration)
+  - [Rust Wikidata Translation Source and Cache](#rust-wikidata-translation-source-and-cache)
 - [Data Normalization](#data-normalization)
   - [Split City-District Composite Names](#split-city-district-composite-names)
   - [Handling Duplicate Names](#handling-duplicate-names)
@@ -118,21 +118,16 @@ Use a **built-in table** with Taiwanese short names (not the canonical Wikidata 
 - `경기도` → Gyeonggi-do (retain "-do")
 - `제주특별자치도` → Jeju (drop the suffix)
 
-### WikidataTranslator Configuration
+### Rust Wikidata Translation Source and Cache
 
-`WikidataTranslator` performs the name resolution. See its documentation for search behavior, P131 validation, batching, cache mechanics, and more.
+The Rust production handler reads translations from the local
+`geoname_data/KR_wikidata_cache.json` file or an explicitly supplied Wikidata
+stub/cache, then applies the built-in Admin 1 and Sejong mappings. Automated
+validation does not call the live Wikidata service, keeping release gates
+independent from API quota, upstream data drift, and network availability.
 
-#### Initialization
-
-```python
-translator = WikidataTranslator(
-    source_lang="ko",
-    target_lang="zh-tw",
-    fallback_langs=["zh-hant", "zh", "en", "ko"],
-    cache_path="geoname_data/KR_wikidata_cache.json",
-    use_opencc=True,
-)
-```
+When South Korea translations need updates, refresh the cache/stub first, then
+rerun extract and release parity validation with the real KR GeoJSON source.
 
 **Fallback order**:
 
@@ -229,18 +224,10 @@ Gwangju's Dong-gu (East District) and Seo-gu (West District) have disambiguation
 
 **Processing logic**:
 
-After translation completes, remove trailing disambiguation parentheses from Gwangju's Admin 2 records:
-
-```python
-# Only process Gwangju (광주광역시) records
-gwangju_parent = "광주광역시"
-df = df.with_columns(
-    pl.when(pl.col("sidonm") == gwangju_parent)
-    .then(pl.col("chinese_admin_2").str.replace_all(r"\s*\([^)]+\)\s*$", ""))
-    .otherwise(pl.col("chinese_admin_2"))
-    .alias("chinese_admin_2")
-)
-```
+After translation completes, the Rust handler removes trailing disambiguation
+parentheses only when `sidonm == "광주광역시"`. The implementation lives in
+`rust/src/pipeline/extract/handlers.rs` and is controlled by
+`strip_trailing_parenthetical`.
 
 **Impact**:
 
@@ -278,7 +265,7 @@ If left untouched, Immich would display "Sejong > City Hall" instead of "Sejong 
 ### Two-Phase Solution
 
 1. **Normalize the hierarchy**: promote Sejong's dong/eup/myeon records from Admin 3 to Admin 2 and clear Admin 3.
-2. **Manual translation table**: translate all Admin 2 names via `SEJONG_ADMIN2_MAP` rather than Wikidata.
+2. **Manual translation table**: translate all Admin 2 names via the Rust `sejong_admin2` mapping rather than Wikidata.
 
 #### 1. Hierarchy Normalization
 
@@ -295,27 +282,19 @@ After:  Sejong → 대평동 → (empty)
 
 **Problem**: founded in 2012, Sejong's new neighborhoods often lack Traditional Chinese labels on Wikidata, forcing fallbacks to romanization ("Boram-dong") or Korean.
 
-**Solution**: `SEJONG_ADMIN2_MAP` in `core/geodata/south_korea.py` covers all 24 Admin 2 names.
+**Solution**: the Rust handler's `sejong_admin2` mapping in
+`rust/src/pipeline/extract/handlers.rs` covers all 24 Admin 2 names.
 
-```python
-SEJONG_ADMIN2_MAP = {
-    "보람동": "寶藍洞",
-    "대평동": "大坪洞",
-    "다정동": "多情洞",
-    "도담동": "嶋潭洞",
-    "고운동": "高運洞",
-    "종촌동": "鍾村洞",
-    "새롬동": "新羅洞",
-    "소담동": "素潭洞",
-    "어진동": "御珍洞",
-    "반곡동": "盤谷洞",
-    "해밀동": "海密洞",
-    "조치원읍": "鳥致院邑",
-    "부강면": "芙江面",
-    "장군면": "將軍面",
-    # ...remaining entries...
-}
-```
+| Korean | Traditional Chinese |
+|--------|---------------------|
+| 보람동 | 寶藍洞 |
+| 대평동 | 大平洞 |
+| 다정동 | 多情洞 |
+| 도담동 | 陶潭洞 |
+| 고운동 | 高雲洞 |
+| 조치원읍 | 鳥致院邑 |
+| 부강면 | 芙江面 |
+| 장군면 | 將軍面 |
 
 **Translation flow**:
 
@@ -330,8 +309,8 @@ Example: 보람동 → 寶藍洞
 | Korean | Wikidata Result | Manual Result |
 |--------|-----------------|---------------|
 | 보람동 | Boram-dong ❌ | 寶藍洞 ✅ |
-| 대평동 | Daepyeong-dong ❌ | 大坪洞 ✅ |
-| 어진동 | 어진동 ❌ | 御珍洞 ✅ |
+| 대평동 | Daepyeong-dong ❌ | 大平洞 ✅ |
+| 어진동 | 어진동 ❌ | 汝珍洞 ✅ |
 | 조치원읍 | 鳥致院邑 ✅ | 鳥致院邑 ✅ |
 
 > [!NOTE]

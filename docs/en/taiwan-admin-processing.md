@@ -58,7 +58,7 @@ The pipeline trusts the NLSC source without additional transformations:
 
 - Rows with missing coordinates are filtered out
 - Object columns are normalized to strings to keep the CSV consistent
-- Uses base class shared method for sorting and standardized output
+- Uses the shared Rust output path for sorting and standardized columns
 
 ## Processing Workflow
 
@@ -70,7 +70,7 @@ The end-to-end workflow looks like this:
 #    and download the "Village boundaries (TWD97 latitude & longitude)" package.
 
 # 2. Run the extraction script
-uv run python main.py extract --country TW \
+cargo run --release --manifest-path rust/Cargo.toml -- extract --country TW \
   --shapefile geoname_data/VILLAGE_NLSC_XXXXXX/VILLAGE_NLSC_XXXXXX.shp \
   --output meta_data/tw_geodata.csv
 ```
