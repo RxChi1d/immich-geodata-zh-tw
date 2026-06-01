@@ -159,14 +159,17 @@ impl TranslationDatasetBuilder {
         })
     }
 
-    pub fn build_admin1_names(
+    pub fn build_admin1_names<S>(
         &self,
-        names: impl IntoIterator<Item = String>,
-    ) -> Result<TranslationDataset, String> {
+        names: impl IntoIterator<Item = S>,
+    ) -> Result<TranslationDataset, String>
+    where
+        S: AsRef<str>,
+    {
         let mut seen = HashSet::new();
         let mut items = Vec::new();
         for name in names {
-            let name = normalize_text(&name);
+            let name = normalize_text(name.as_ref());
             if name.is_empty() || !seen.insert(name.clone()) {
                 continue;
             }
@@ -188,16 +191,20 @@ impl TranslationDatasetBuilder {
         )
     }
 
-    pub fn build_admin2_pairs(
+    pub fn build_admin2_pairs<P, N>(
         &self,
-        pairs: impl IntoIterator<Item = (String, String)>,
+        pairs: impl IntoIterator<Item = (P, N)>,
         deduplicate: bool,
-    ) -> Result<TranslationDataset, String> {
+    ) -> Result<TranslationDataset, String>
+    where
+        P: AsRef<str>,
+        N: AsRef<str>,
+    {
         let mut seen = HashSet::new();
         let mut items = Vec::new();
         for (parent, name) in pairs {
-            let parent = normalize_text(&parent);
-            let name = normalize_text(&name);
+            let parent = normalize_text(parent.as_ref());
+            let name = normalize_text(name.as_ref());
             if parent.is_empty() || name.is_empty() {
                 continue;
             }

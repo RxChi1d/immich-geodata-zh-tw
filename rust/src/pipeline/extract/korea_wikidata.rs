@@ -34,8 +34,7 @@ pub(super) fn build_korea_wikidata_cache(
         .iter()
         .map(korea_admin_components)
         .collect::<Vec<_>>();
-    let admin1_dataset =
-        builder.build_admin1_names(components.iter().map(|row| row.sidonm.clone()))?;
+    let admin1_dataset = builder.build_admin1_names(components.iter().map(|row| &row.sidonm))?;
     let options = WikidataClientOptions::new("ko", "zh-tw");
     let mut translator = WikidataTranslator::new(options, Some(cache_path.to_path_buf()), true)?;
     let admin1_results = translator.batch_translate(
@@ -49,7 +48,7 @@ pub(super) fn build_korea_wikidata_cache(
         components
             .iter()
             .filter(|row| row.sidonm != "세종특별자치시")
-            .map(|row| (row.sidonm.clone(), row.sggnm.clone())),
+            .map(|row| (&row.sidonm, &row.sggnm)),
         true,
     )?;
     let parent_qids = admin2_parent_qids(&admin1_dataset, &admin1_results, &admin2_dataset);
@@ -76,14 +75,23 @@ fn admin2_parent_qids(
     admin1_results: &HashMap<String, TranslationResult>,
     admin2_dataset: &TranslationDataset,
 ) -> HashMap<String, String> {
+    let admin1_qids = admin1_dataset
+        .items()
+        .iter()
+        .filter_map(|item| {
+            admin1_results
+                .get(&item.id)
+                .and_then(|result| result.qid.clone())
+                .map(|qid| (item.original_name.as_str(), qid))
+        })
+        .collect::<HashMap<_, _>>();
     let mut parent_qids = HashMap::new();
     for item in admin2_dataset.items() {
         let parent_name = item.parent_chain.last().cloned().unwrap_or_default();
-        let Some(parent_qid) = admin1_result_qid(admin1_dataset, admin1_results, &parent_name)
-        else {
+        let Some(parent_qid) = admin1_qids.get(parent_name.as_str()) else {
             continue;
         };
-        parent_qids.insert(item.id.clone(), parent_qid);
+        parent_qids.insert(item.id.clone(), parent_qid.clone());
     }
     parent_qids
 }
@@ -117,19 +125,6 @@ fn korea_translations_from_results(
     translations
 }
 
-fn admin1_result_qid(
-    dataset: &TranslationDataset,
-    results: &HashMap<String, TranslationResult>,
-    parent_name: &str,
-) -> Option<String> {
-    dataset
-        .items()
-        .iter()
-        .find(|item| item.original_name == parent_name)
-        .and_then(|item| results.get(&item.id))
-        .and_then(|result| result.qid.clone())
-}
-
 fn korea_result_text(item: &TranslationItem, result: &TranslationResult) -> String {
     if result.translated.is_empty() {
         item.original_name.clone()
@@ -143,6 +138,6 @@ fn korea_candidate_allowed(metadata: &WikidataCandidateMetadata) -> bool {
         let lower = label.to_ascii_lowercase();
         !EXCLUDED_KEYWORDS
             .iter()
-            .any(|keyword| lower.contains(&keyword.to_ascii_lowercase()))
+            .any(|keyword| lower.contains(keyword))
     })
 }

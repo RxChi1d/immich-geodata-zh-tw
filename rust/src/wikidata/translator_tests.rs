@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use super::{
-    AdminLevel, BatchTranslateOptions, TranslationDataset, TranslationItem, WikidataApi,
-    WikidataCandidateMetadata, WikidataClientOptions, WikidataTranslator,
+    AdminLevel, BatchTranslateOptions, TranslationDataset, TranslationItem, TranslationResult,
+    WikidataApi, WikidataCandidateMetadata, WikidataClientOptions, WikidataTranslator,
 };
 
 #[test]
@@ -57,6 +57,46 @@ fn parse_zhwiki_converted_title_prefers_converted_value() {
     );
 }
 
+#[test]
+fn batch_translate_returns_cached_results_without_network_calls() {
+    let item = TranslationItem::from_values(
+        AdminLevel::Admin1,
+        "서울특별시",
+        "ko",
+        "zh-tw",
+        vec!["KR".to_string()],
+        HashMap::new(),
+    )
+    .unwrap();
+    let dataset =
+        TranslationDataset::new(vec![item.clone()], AdminLevel::Admin1, "ko", "zh-tw", true)
+            .unwrap();
+    let mut translator = WikidataTranslator::with_client(
+        WikidataClientOptions::new("ko", "zh-tw"),
+        PanicApi,
+        None,
+        false,
+    )
+    .unwrap();
+    let cached = TranslationResult {
+        translated: "首爾市".to_string(),
+        qid: Some("Q8684".to_string()),
+        source: "cache".to_string(),
+        used_lang: "zh-tw".to_string(),
+        parent_verified: false,
+    };
+    translator
+        .cache_store
+        .set_translation(&item, &cached, None)
+        .unwrap();
+
+    let results = translator
+        .batch_translate(&dataset, BatchTranslateOptions::default())
+        .unwrap();
+
+    assert_eq!(results.get(&item.id), Some(&cached));
+}
+
 fn test_translator() -> WikidataTranslator<MockApi> {
     WikidataTranslator::with_client(
         WikidataClientOptions::new("ko", "zh-tw"),
@@ -102,5 +142,25 @@ impl WikidataApi for MockApi {
 
     fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
         Ok(r#"{"query":{"pages":{"1":{"title":"中區"}}}}"#.to_string())
+    }
+}
+
+struct PanicApi;
+
+impl WikidataApi for PanicApi {
+    fn search_entities_json(&self, _: &str, _: usize) -> Result<String, String> {
+        panic!("全 cache hit 不應呼叫 search")
+    }
+
+    fn get_entities_json(&self, _: &[String], _: &str, _: &[String]) -> Result<String, String> {
+        panic!("全 cache hit 不應呼叫 get_entities")
+    }
+
+    fn ask_p131_json(&self, _: &str, _: &str) -> Result<String, String> {
+        panic!("全 cache hit 不應呼叫 P131")
+    }
+
+    fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
+        panic!("全 cache hit 不應呼叫 zhwiki")
     }
 }

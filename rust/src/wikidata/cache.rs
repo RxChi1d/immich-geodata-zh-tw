@@ -180,6 +180,9 @@ impl TranslationCacheStore {
         max_dirty: usize,
         max_interval: Duration,
     ) -> Result<(), String> {
+        if self.dirty == 0 {
+            return Ok(());
+        }
         if self.cache_path.is_none() {
             self.dirty = 0;
             self.last_flush = Instant::now();
@@ -349,5 +352,52 @@ mod tests {
             .unwrap();
 
         assert_eq!(store.get_translation(&item), Some(result));
+    }
+
+    #[test]
+    fn force_flush_skips_clean_cache_without_creating_file() {
+        let path = unique_temp_cache_path("clean");
+        let mut store = TranslationCacheStore::load("ko", "zh-tw", Some(path.clone())).unwrap();
+
+        store
+            .flush_if_needed(true, 0, Duration::from_secs(0))
+            .unwrap();
+
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn force_flush_writes_dirty_cache() {
+        let path = unique_temp_cache_path("dirty");
+        let mut store = TranslationCacheStore::load("ko", "zh-tw", Some(path.clone())).unwrap();
+        let item = TranslationItem::from_values(
+            AdminLevel::Admin1,
+            "서울특별시",
+            "ko",
+            "zh-tw",
+            vec!["KR".to_string()],
+            HashMap::new(),
+        )
+        .unwrap();
+
+        store
+            .set_search_results(&item, &["Q8684".to_string()])
+            .unwrap();
+        store
+            .flush_if_needed(true, 0, Duration::from_secs(0))
+            .unwrap();
+
+        assert!(path.exists());
+        let _ = fs::remove_file(path);
+    }
+
+    fn unique_temp_cache_path(label: &str) -> PathBuf {
+        let suffix = format!(
+            "{}-{}-{}.json",
+            label,
+            std::process::id(),
+            Utc::now().timestamp_nanos_opt().unwrap()
+        );
+        std::env::temp_dir().join(format!("immich-wikidata-cache-test-{suffix}"))
     }
 }

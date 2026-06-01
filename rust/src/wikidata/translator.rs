@@ -39,6 +39,8 @@ pub struct WikidataCandidateMetadata {
 
 pub struct WikidataTranslator<C: WikidataApi> {
     options: WikidataClientOptions,
+    label_languages: Vec<String>,
+    claim_languages: Vec<String>,
     client: C,
     pub cache_store: TranslationCacheStore,
     opencc: Option<Converter>,
@@ -62,6 +64,11 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         cache_path: Option<PathBuf>,
         use_opencc: bool,
     ) -> Result<Self, String> {
+        let label_languages = dedupe_keep_order(
+            [options.target_lang.clone()]
+                .into_iter()
+                .chain(options.fallback_langs.iter().cloned()),
+        );
         let opencc = if use_opencc {
             Some(
                 opencc_rust::presets::cn2t::converter("cn", "t")
@@ -77,6 +84,8 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         )?;
         Ok(Self {
             options,
+            label_languages,
+            claim_languages: vec!["en".to_string()],
             client,
             cache_store,
             opencc,
@@ -92,32 +101,22 @@ impl<C: WikidataApi> WikidataTranslator<C> {
             return Ok(HashMap::new());
         }
         let batch_size = options.batch_size.max(1);
-        let mut search_results = HashMap::<String, SearchData>::new();
+        let mut results = HashMap::with_capacity(dataset.len());
+        let mut pending = Vec::<SearchData>::new();
         let mut cache_hits = 0_usize;
 
         for batch in dataset.items().chunks(batch_size) {
             for item in batch {
                 if let Some(result) = self.cache_store.get_translation(item) {
                     cache_hits += 1;
-                    search_results.insert(
-                        item.id.clone(),
-                        SearchData {
-                            item: item.clone(),
-                            cached: Some(result),
-                            qids: Vec::new(),
-                        },
-                    );
+                    results.insert(item.id.clone(), result);
                     continue;
                 }
                 let qids = self.search_wikidata(item);
-                search_results.insert(
-                    item.id.clone(),
-                    SearchData {
-                        item: item.clone(),
-                        cached: None,
-                        qids,
-                    },
-                );
+                pending.push(SearchData {
+                    item: item.clone(),
+                    qids,
+                });
             }
         }
 
@@ -129,25 +128,14 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         );
 
         if let Some(candidate_filter) = options.candidate_filter {
-            self.apply_candidate_filter(&mut search_results, candidate_filter)?;
+            self.apply_candidate_filter(&mut pending, candidate_filter)?;
         }
 
-        let all_qids = dedupe_keep_order(
-            search_results
-                .values()
-                .filter(|data| data.cached.is_none())
-                .flat_map(|data| data.qids.iter().cloned()),
-        );
+        let all_qids = dedupe_keep_order(pending.iter().flat_map(|data| data.qids.iter().cloned()));
         let all_labels = self.batch_get_labels(&all_qids)?;
-        let mut results = HashMap::new();
         let mut fallback_count = 0_usize;
 
-        for (item_id, data) in search_results {
-            if let Some(result) = data.cached {
-                results.insert(item_id, result);
-                continue;
-            }
-
+        for data in pending {
             let parent_qid = options
                 .parent_qids
                 .get(&data.item.id)
@@ -158,19 +146,19 @@ impl<C: WikidataApi> WikidataTranslator<C> {
                 self.cache_store
                     .set_translation(&data.item, &result, parent_qid)?;
                 fallback_count += 1;
-                results.insert(item_id, result);
+                results.insert(data.item.id, result);
                 continue;
             };
 
-            let labels = all_labels.get(&selected_qid).cloned().unwrap_or_default();
-            let mut result = self.select_best_label(&labels, &data.item.original_name);
+            let mut result =
+                self.select_best_label(all_labels.get(&selected_qid), &data.item.original_name);
             result.qid = Some(selected_qid.clone());
             if let Some(parent_qid) = parent_qid {
                 result.parent_verified = self.verify_p131(&selected_qid, parent_qid)?;
             }
             self.cache_store
                 .set_translation(&data.item, &result, parent_qid)?;
-            results.insert(item_id, result);
+            results.insert(data.item.id, result);
         }
 
         self.cache_store
@@ -200,21 +188,17 @@ impl<C: WikidataApi> WikidataTranslator<C> {
 
     fn apply_candidate_filter(
         &mut self,
-        search_results: &mut HashMap<String, SearchData>,
+        search_results: &mut [SearchData],
         candidate_filter: &dyn Fn(&str, &WikidataCandidateMetadata) -> bool,
     ) -> Result<(), String> {
         let qids = dedupe_keep_order(
             search_results
-                .values()
-                .filter(|data| data.cached.is_none())
+                .iter()
                 .flat_map(|data| data.qids.iter().cloned()),
         );
         let labels = self.batch_get_labels(&qids)?;
         let instance_of = self.batch_get_instance_of(&qids)?;
-        for data in search_results.values_mut() {
-            if data.cached.is_some() {
-                continue;
-            }
+        for data in search_results {
             data.qids.retain(|qid| {
                 let metadata = WikidataCandidateMetadata {
                     qid: qid.clone(),
@@ -241,15 +225,10 @@ impl<C: WikidataApi> WikidataTranslator<C> {
                 uncached.push(qid.clone());
             }
         }
-        let languages = dedupe_keep_order(
-            [self.options.target_lang.clone()]
-                .into_iter()
-                .chain(self.options.fallback_langs.iter().cloned()),
-        );
         for batch in uncached.chunks(ENTITY_BATCH_SIZE) {
-            let Ok(body) = self
-                .client
-                .get_entities_json(batch, "labels|sitelinks", &languages)
+            let Ok(body) =
+                self.client
+                    .get_entities_json(batch, "labels|sitelinks", &self.label_languages)
             else {
                 continue;
             };
@@ -278,7 +257,7 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         for batch in uncached.chunks(ENTITY_BATCH_SIZE) {
             let Ok(body) = self
                 .client
-                .get_entities_json(batch, "claims", &["en".to_string()])
+                .get_entities_json(batch, "claims", &self.claim_languages)
             else {
                 continue;
             };
@@ -323,9 +302,12 @@ impl<C: WikidataApi> WikidataTranslator<C> {
 
     fn select_best_label(
         &self,
-        labels: &HashMap<String, String>,
+        labels: Option<&HashMap<String, String>>,
         original_name: &str,
     ) -> TranslationResult {
+        let Some(labels) = labels else {
+            return TranslationResult::original(original_name);
+        };
         if let Some(label) = labels.get(&self.options.target_lang) {
             return wikidata_result(label, "wikidata", &self.options.target_lang);
         }
@@ -355,7 +337,6 @@ impl<C: WikidataApi> WikidataTranslator<C> {
 #[derive(Clone, Debug)]
 struct SearchData {
     item: TranslationItem,
-    cached: Option<TranslationResult>,
     qids: Vec<String>,
 }
 
