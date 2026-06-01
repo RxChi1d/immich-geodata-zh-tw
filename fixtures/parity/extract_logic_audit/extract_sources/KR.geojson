@@ -1,0 +1,41 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "sidonm": "세종특별자치시",
+        "sggnm": "세종시청",
+        "adm_nm": "세종특별자치시 보람동"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [127.2890, 36.4800]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "sidonm": "경기도",
+        "sggnm": "수원시팔달구",
+        "adm_nm": "경기도 수원시팔달구 인계동"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [127.0300, 37.2650]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "sidonm": "광주광역시",
+        "sggnm": "동구",
+        "adm_nm": "광주광역시 동구 충장동"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [126.9230, 35.1460]
+      }
+    }
+  ]
+}

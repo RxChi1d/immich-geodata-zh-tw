@@ -1,0 +1,4 @@
+1101	Old Taiwan City	Old Taiwan City		23.00000000	120.00000000	P	PPL	TW		OLD				1000			Asia/Taipei	2024-01-01
+1201	Old Japan City	Old Japan City		36.00000000	139.00000000	P	PPL	JP		OLD				1000			Asia/Tokyo	2024-01-01
+1301	Old Korea City	Old Korea City		37.00000000	127.00000000	P	PPL	KR		OLD				1000			Asia/Seoul	2024-01-01
+5332921	California Base	California Base		37.00000000	-122.00000000	P	PPL	US		CA				1000			America/Los_Angeles	2024-01-01

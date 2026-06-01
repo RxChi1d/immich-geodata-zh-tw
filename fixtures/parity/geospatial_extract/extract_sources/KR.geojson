@@ -1,0 +1,17 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "sidonm": "서울특별시",
+        "sggnm": "강남구",
+        "adm_nm": "서울특별시 강남구 역삼1동"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [127.0365, 37.5007]
+      }
+    }
+  ]
+}

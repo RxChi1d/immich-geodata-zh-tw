@@ -56,7 +56,7 @@ Different administrative categories have distinct display rules to balance reada
   - Matches common behavior on services such as Google Maps and OpenStreetMap, which show prefecture + city
   - Avoids misclassification when district centroids lie close together
   - Preserves complete information: individual ward records, centroids, and ward names (admin_3) are all retained in the dataset
-- **Configuration**: Set `SEIREI_SHI_CITY_NAME_ONLY = False` in `JapanGeoDataHandler` to revert to the "city + ward" display in admin_2. In this case, admin_3 will remain empty.
+- **Configuration**: The Rust production handler currently fixes this behavior to "city in admin_2, ward in admin_3". If the project needs to revert to "city + ward" in admin_2, update the Japan handler in `rust/src/pipeline/extract/handlers.rs` and refresh the parity fixtures and real-data validation.
 
 ### 4. District-Governed Towns and Villages (郡轄町村)
 
@@ -82,7 +82,7 @@ Different administrative categories have distinct display rules to balance reada
 ### Data Cleaning and Output
 
 - Trims empty strings and `None` values from `N03_003`, `N03_004`, and `N03_005` before applying the rules
-- Uses base class shared method for sorting and standardized output
+- Uses the shared Rust output path for sorting and standardized columns
 
 ## Processing Workflow
 
@@ -92,7 +92,7 @@ Different administrative categories have distinct display rules to balance reada
 #    and download the "Administrative boundary data (world geodetic system)" package.
 
 # 2. Run the extraction script
-uv run python main.py extract --country JP \
+cargo run --release --manifest-path rust/Cargo.toml -- extract --country JP \
   --shapefile geoname_data/N03-20250101_GML/N03-20250101.shp \
   --output meta_data/jp_geodata.csv
 ```

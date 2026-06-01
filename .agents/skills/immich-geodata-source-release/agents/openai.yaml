@@ -1,0 +1,7 @@
+interface:
+  display_name: "Immich Geodata 圖資更新"
+  short_description: "更新 TW/JP/KR 圖資與 release artifacts"
+  default_prompt: "使用 $immich-geodata-source-release 更新 TW/JP/KR 原始圖資，執行 Rust production extract/release pipeline，並驗證產物。"
+
+policy:
+  allow_implicit_invocation: true

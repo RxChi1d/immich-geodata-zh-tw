@@ -1,0 +1,28 @@
+[package]
+name = "immich-geodata-migration"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+flate2 = "1.1"
+geo = "0.30"
+indicatif = "0.18.3"
+opencc_rust = { package = "opencc-rust", git = "https://github.com/doggy8088/opencc-rust", rev = "c79ea78d" }
+polars = { version = "0.53.0", default-features = false, features = ["fmt", "polars-ops", "temporal"] }
+polars-io = { version = "0.53.0", default-features = false, features = ["csv", "temporal"] }
+proj = { version = "0.31.0", features = ["pkg_config"] }
+regex = "1.12.2"
+reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "rustls-tls"] }
+serde_json = "1.0"
+shapefile = "0.8.0"
+tar = "0.4"
+zip = { version = "2.4", default-features = false, features = ["deflate"] }
+
+[lib]
+name = "immich_geodata_migration"
+path = "src/lib.rs"
+
+[[bin]]
+name = "immich-geodata-migration"
+path = "src/main.rs"

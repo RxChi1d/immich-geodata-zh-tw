@@ -1,0 +1,2 @@
+4000	Redwood Preferred	Redwood Preferred		37.00000000	-122.00000000	P	PPL	US		CA				1000			America/Los_Angeles	2024-01-02
+4001	Tiny Place	Tiny Place		36.50000000	-121.50000000	P	PPL	US		CA				10			America/Los_Angeles	2024-01-02

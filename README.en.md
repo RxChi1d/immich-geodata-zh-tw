@@ -50,6 +50,8 @@ We focus on the Taiwan user experience and apply the most suitable language stra
     - [Manual Deployment](#manual-deployment-1)
   - [Developer: Local Data Processing](#developer-local-data-processing)
     - [1. Install Dependencies](#1-install-dependencies)
+    - [Official Prebuilt Binary](#official-prebuilt-binary)
+    - [Build the Rust CLI Locally](#build-the-rust-cli-locally)
     - [2. Extract Raw Geographic Data (Optional)](#2-extract-raw-geographic-data-optional)
       - [Taiwan Data Extraction](#taiwan-data-extraction)
       - [Japan Data Extraction](#japan-data-extraction)
@@ -245,19 +247,40 @@ Simply restart the Immich container to automatically update geographic data.
 
 ### 1. Install Dependencies
 
-First install uv (if not already installed):
+Local production data processing now uses the Rust CLI by default. Install a Rust toolchain, and
+make sure the system provides `unzip`, `pkg-config`, and a PROJ development library such as
+Ubuntu's `libproj-dev`.
 
-Please refer to the [uv official installation guide](https://docs.astral.sh/uv/getting-started/installation/) to install uv for your operating system.
+#### Official Prebuilt Binary
 
-Then install project dependencies:
+GitHub Releases currently provide a prebuilt Rust CLI binary for Linux x86_64 only. This binary
+primarily targets GitHub Actions, Linux servers, and Immich container-like environments. For macOS
+and Windows, build the CLI locally for now.
+
+#### Build the Rust CLI Locally
+
+To run data processing on non-Linux systems or customized Linux environments, install a Rust
+toolchain and the PROJ development library, then run:
 
 ```bash
-uv sync
+cargo build --release --manifest-path rust/Cargo.toml
+```
+
+After compilation, the binary is available at:
+
+```bash
+rust/target/release/immich-geodata-migration
+```
+
+You can also run the CLI directly through `cargo run`:
+
+```bash
+cargo run --release --manifest-path rust/Cargo.toml -- help
 ```
 
 ### 2. Extract Raw Geographic Data (Optional)
 
-If you need to process new countries or update existing geographic data sources, you can use the `extract` command to extract data from Shapefiles. This step is optional and only needed when updating data sources.
+If you need to process new countries or update existing geographic data sources, you can use the `extract` command to extract data from Shapefiles or GeoJSON. This step is optional and only needed when updating data sources.
 
 #### Taiwan Data Extraction
 
@@ -266,7 +289,7 @@ Data source: [National Land Surveying and Mapping Center (NLSC)](https://whgis-n
 ```bash
 # 1. Download "Village Boundaries (TWD97 Latitude/Longitude)" data and extract
 # 2. Execute extraction command
-uv run python main.py extract --country TW \
+cargo run --release --manifest-path rust/Cargo.toml -- extract --country TW \
   --shapefile geoname_data/VILLAGE_NLSC_1140825/VILLAGE_NLSC_1140825.shp \
   --output meta_data/tw_geodata.csv
 ```
@@ -278,7 +301,7 @@ Data source: [国土数値情報](https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjT
 ```bash
 # 1. Download "行政区域データ（世界測地系）" and extract
 # 2. Execute extraction command
-uv run python main.py extract --country JP \
+cargo run --release --manifest-path rust/Cargo.toml -- extract --country JP \
   --shapefile geoname_data/N03-20250101_GML/N03-20250101.shp \
   --output meta_data/jp_geodata.csv
 ```
@@ -290,12 +313,13 @@ Data source: [admdongkor](https://github.com/vuski/admdongkor)
 ```bash
 # 1. Download official administrative boundary data from admdongkor project and extract
 # 2. Execute extraction command
-uv run python main.py extract --country KR \
-  --shapefile geoname_data/admdongkor/[filename].shp \
+cargo run --release --manifest-path rust/Cargo.toml -- extract --country KR \
+  --shapefile geoname_data/HangJeongDong_verYYYYMMDD.geojson \
   --output meta_data/kr_geodata.csv
 ```
 
-After extraction is complete, the data will be automatically integrated when executing `main.py release`.
+After extraction is complete, the data will be automatically integrated when executing the Rust
+`release` command.
 
 ### 3. Complete Data Processing Workflow
 
@@ -308,17 +332,23 @@ Register an account at [LocationIQ](https://locationiq.com/) and obtain an API K
 #### Execute Data Processing
 
 ```bash
-uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH"
+cargo run --release --manifest-path rust/Cargo.toml -- release \
+  --locationiq-api-key "YOUR_API_KEY" \
+  --country-code "KR" "TH"
 ```
 
 > [!NOTE]
-> - You can view more options through `uv run python main.py --help` or `uv run python main.py release --help`.
+> - You can view more options through `cargo run --manifest-path rust/Cargo.toml -- help`.
 > - The `--country-code` parameter can specify country codes to process, multiple codes separated by spaces. (Currently only tested with "KR" "TH")
 
 > [!WARNING]
 > - Since LocationIQ API has request limits (can be checked in the backend after login), please pay attention to the number of place names in the countries to be processed to avoid exceeding limits.
 > - This project allows LocationIQ reverse geocoding query progress recovery. If daily request limits are exceeded, you can continue execution after changing API keys or the next day.
->   - Need to add `--pass-cleanup` parameter to cancel folder reset function: `uv run python main.py release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH" --pass-cleanup`.
+>   - Add `--pass-cleanup` to skip resetting the output folder: `cargo run --release --manifest-path rust/Cargo.toml -- release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH" --pass-cleanup`.
+
+### Rust Production Status
+
+The release and nightly production workflows now run the Rust production path by default. The workflows keep a Rust fixture release smoke before the live build to validate archive layout and CLI contract without consuming LocationIQ quota.
 
 ## Acknowledgments  
   

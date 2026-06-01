@@ -73,7 +73,7 @@
   - 神奈川県, 横浜市, 中区 → admin_2=「横浜市」, admin_3=「中区」
 
 > [!NOTE]
-> 若需恢復「市＋區」顯示在 admin_2（例如「横浜市中区」），可在 `JapanGeoDataHandler` 類別中將 `SEIREI_SHI_CITY_NAME_ONLY` 常數設為 `False`。此時 admin_3 將為空。
+> Rust production handler 目前固定採用「admin_2 顯示市名、admin_3 保留區名」策略。若未來需要恢復「市＋區」顯示在 admin_2（例如「横浜市中区」），應在 `rust/src/pipeline/extract/handlers.rs` 調整日本 handler，並同步更新 parity fixture 與真實資料驗證。
 
 ### 4. 郡轄町村
 
@@ -109,7 +109,7 @@
 ### 資料清理與輸出
 
 - 自動過濾 `N03_003`、`N03_004`、`N03_005` 欄位中的空字串與 `None` 值確保判斷條件的一致性
-- 使用基類共用方法處理排序與標準化輸出
+- 使用 Rust 共用輸出流程處理排序與標準化欄位
 
 ## 資料處理流程
 
@@ -121,7 +121,7 @@
 # 下載「行政区域データ（世界測地系）」並解壓縮
 
 # 2. 提取原始資料
-uv run python main.py extract --country JP \
+cargo run --release --manifest-path rust/Cargo.toml -- extract --country JP \
   --shapefile geoname_data/N03-20250101_GML/N03-20250101.shp \
   --output meta_data/jp_geodata.csv
 ```

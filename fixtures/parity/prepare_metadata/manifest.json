@@ -1,0 +1,15 @@
+{
+  "base_geoname_id": 94000000,
+  "countries": [
+    "TW"
+  ],
+  "extra_files": [],
+  "locationiq_batch_size": 1,
+  "min_population": 0,
+  "modification_date": "2026-01-01",
+  "name": "prepare_metadata",
+  "stages": [
+    "prepare",
+    "locationiq"
+  ]
+}
