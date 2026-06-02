@@ -1,5 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
+pub const METADATA_OFFICIAL_EN: &str = "official_en";
+pub const METADATA_OFFICIAL_TH: &str = "official_th";
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AdminLevel {
     Admin1,

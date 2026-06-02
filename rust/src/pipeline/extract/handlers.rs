@@ -5,22 +5,24 @@ use std::path::Path;
 use serde_json::Value;
 
 use super::korea_wikidata::build_korea_wikidata_cache;
+use super::thailand_wikidata::build_thailand_wikidata_cache;
 use super::types::{
     Country, ExtractContext, ExtractRow, Feature, FeatureGeometry, KoreaTranslations,
-    korea_stub_source, korea_translation_cache_path,
+    ThailandTranslations, korea_stub_source, korea_translation_cache_path, thailand_stub_source,
+    thailand_translation_cache_path,
 };
 
 impl Country {
     pub(super) fn load_context(
         self,
         source_path: &Path,
-        korea_stub: Option<&Path>,
+        wikidata_stub: Option<&Path>,
         features: &[Feature],
     ) -> Result<ExtractContext, String> {
         match self {
             Self::Taiwan | Self::Japan => Ok(ExtractContext::default()),
             Self::Korea => {
-                let stub = korea_stub
+                let stub = wikidata_stub
                     .filter(|path| path.exists())
                     .map(Path::to_path_buf)
                     .or_else(|| korea_stub_source(source_path));
@@ -29,7 +31,25 @@ impl Country {
                 } else {
                     build_korea_wikidata_cache(features, &korea_translation_cache_path())?
                 };
-                Ok(ExtractContext { korea_translations })
+                Ok(ExtractContext {
+                    korea_translations,
+                    ..ExtractContext::default()
+                })
+            }
+            Self::Thailand => {
+                let stub = wikidata_stub
+                    .filter(|path| path.exists())
+                    .map(Path::to_path_buf)
+                    .or_else(|| thailand_stub_source(source_path));
+                let thailand_translations = if let Some(stub) = stub {
+                    read_thailand_stub(&stub)?
+                } else {
+                    build_thailand_wikidata_cache(features, &thailand_translation_cache_path())?
+                };
+                Ok(ExtractContext {
+                    thailand_translations,
+                    ..ExtractContext::default()
+                })
             }
         }
     }
@@ -46,6 +66,10 @@ impl Country {
                 .iter()
                 .map(|feature| korea_feature_row(feature, &context.korea_translations))
                 .collect(),
+            Self::Thailand => features
+                .iter()
+                .map(|feature| thailand_feature_row(feature, &context.thailand_translations))
+                .collect(),
         }
     }
 }
@@ -59,6 +83,24 @@ fn taiwan_feature_row(feature: &Feature) -> Result<ExtractRow, String> {
         attribute(feature, "COUNTYNAME").to_string(),
         attribute(feature, "TOWNNAME").to_string(),
         attribute_or(feature, "VILLNAME", "None").to_string(),
+        String::new(),
+    ))
+}
+
+fn thailand_feature_row(
+    feature: &Feature,
+    translations: &ThailandTranslations,
+) -> Result<ExtractRow, String> {
+    let (longitude, latitude) = point_geometry(&feature.geometry)?;
+    let admin1_name = attribute(feature, "adm1_name");
+    let admin2_name = attribute(feature, "adm2_name");
+    Ok(ExtractRow::from_point(
+        latitude,
+        longitude,
+        "泰國",
+        thailand_admin1(admin1_name, translations),
+        thailand_admin2(admin1_name, admin2_name, translations),
+        official_source_name(feature, "adm3_name", "adm3_name1"),
         String::new(),
     ))
 }
@@ -164,6 +206,36 @@ fn attribute<'a>(feature: &'a Feature, key: &str) -> &'a str {
 
 fn attribute_or<'a>(feature: &'a Feature, key: &str, default: &'a str) -> &'a str {
     feature.attributes.get(key).unwrap_or(default)
+}
+
+fn official_source_name(feature: &Feature, english_key: &str, thai_key: &str) -> String {
+    let english = attribute(feature, english_key);
+    if !english.is_empty() {
+        return english.to_string();
+    }
+    attribute(feature, thai_key).to_string()
+}
+
+fn thailand_admin1(name: &str, translations: &ThailandTranslations) -> String {
+    translations
+        .admin1_by_name
+        .get(name)
+        .cloned()
+        .unwrap_or_else(|| name.to_string())
+}
+
+fn thailand_admin2(
+    adm1_name: &str,
+    adm2_name: &str,
+    translations: &ThailandTranslations,
+) -> String {
+    translations
+        .admin2_by_parent
+        .get(adm1_name)
+        .and_then(|by_name| by_name.get(adm2_name))
+        .or_else(|| translations.fallback_by_name.get(adm2_name))
+        .cloned()
+        .unwrap_or_else(|| adm2_name.to_string())
 }
 
 fn clean_admin(value: &str) -> Option<&str> {
@@ -357,7 +429,7 @@ fn read_korea_stub(path: &Path) -> Result<KoreaTranslations, String> {
         })?;
     let mut translations = KoreaTranslations::default();
     for (key, value) in entries {
-        let Some(translated) = korea_translation_value(value) else {
+        let Some(translated) = wikidata_translation_value(value) else {
             continue;
         };
         if let Some(name) = key.strip_prefix("admin_1/KR/") {
@@ -388,7 +460,7 @@ fn read_korea_stub(path: &Path) -> Result<KoreaTranslations, String> {
     Ok(translations)
 }
 
-fn korea_translation_value(value: &Value) -> Option<String> {
+fn wikidata_translation_value(value: &Value) -> Option<String> {
     match value {
         Value::String(value) => Some(value.clone()),
         Value::Object(object) => object
@@ -397,4 +469,51 @@ fn korea_translation_value(value: &Value) -> Option<String> {
             .map(ToString::to_string),
         _ => None,
     }
+}
+
+fn read_thailand_stub(path: &Path) -> Result<ThailandTranslations, String> {
+    let content = fs::read_to_string(path)
+        .map_err(|error| format!("無法讀取 TH Wikidata stub {}：{error}", path.display()))?;
+    let root: Value = serde_json::from_str(&content)
+        .map_err(|error| format!("TH Wikidata JSON 解析失敗 {}：{error}", path.display()))?;
+    let entries = root
+        .get("translations")
+        .and_then(Value::as_object)
+        .ok_or_else(|| {
+            format!(
+                "TH Wikidata stub/cache 缺少 translations：{}",
+                path.display()
+            )
+        })?;
+    let mut translations = ThailandTranslations::default();
+    for (key, value) in entries {
+        let Some(translated) = wikidata_translation_value(value) else {
+            continue;
+        };
+        if let Some(name) = key.strip_prefix("admin_1/TH/") {
+            translations
+                .admin1_by_name
+                .insert(name.to_string(), translated);
+        } else if let Some(rest) = key.strip_prefix("admin_2/TH/") {
+            let mut parts = rest.splitn(2, '/');
+            if let (Some(parent), Some(name)) = (parts.next(), parts.next()) {
+                translations
+                    .admin2_by_parent
+                    .entry(parent.to_string())
+                    .or_default()
+                    .insert(name.to_string(), translated.clone());
+                translations
+                    .fallback_by_name
+                    .insert(name.to_string(), translated);
+            }
+        } else {
+            translations
+                .fallback_by_name
+                .insert(key.to_string(), translated.clone());
+            translations
+                .admin1_by_name
+                .insert(key.to_string(), translated);
+        }
+    }
+    Ok(translations)
 }

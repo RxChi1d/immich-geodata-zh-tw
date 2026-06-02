@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 use super::{
-    AdminLevel, BatchTranslateOptions, TranslationDataset, TranslationItem, TranslationResult,
-    WikidataApi, WikidataCandidateMetadata, WikidataClientOptions, WikidataTranslator,
+    AdminLevel, BatchTranslateOptions, METADATA_OFFICIAL_EN, METADATA_OFFICIAL_TH,
+    TranslationDataset, TranslationItem, TranslationResult, WikidataApi, WikidataCandidateMetadata,
+    WikidataClientOptions, WikidataTranslator,
 };
 
 #[test]
@@ -97,6 +98,66 @@ fn batch_translate_returns_cached_results_without_network_calls() {
     assert_eq!(results.get(&item.id), Some(&cached));
 }
 
+#[test]
+fn batch_translate_uses_official_metadata_when_search_has_no_match() {
+    let item = thailand_item("Bangkok", "Bangkok", "กรุงเทพมหานคร");
+    let dataset =
+        TranslationDataset::new(vec![item.clone()], AdminLevel::Admin1, "en", "zh-tw", true)
+            .unwrap();
+    let mut translator =
+        WikidataTranslator::with_client(thailand_options(), EmptySearchApi, None, false).unwrap();
+
+    let results = translator
+        .batch_translate(&dataset, BatchTranslateOptions::default())
+        .unwrap();
+
+    let result = results.get(&item.id).unwrap();
+    assert_eq!(result.translated, "Bangkok");
+    assert_eq!(result.source, "metadata");
+    assert_eq!(result.used_lang, "official_en");
+}
+
+#[test]
+fn batch_translate_ignores_wikidata_english_label_for_thailand_fallback_order() {
+    let item = thailand_item("Bangkok", "Bangkok", "กรุงเทพมหานคร");
+    let dataset =
+        TranslationDataset::new(vec![item.clone()], AdminLevel::Admin1, "en", "zh-tw", true)
+            .unwrap();
+    let mut translator =
+        WikidataTranslator::with_client(thailand_options(), EnglishOnlyApi, None, false).unwrap();
+
+    let results = translator
+        .batch_translate(&dataset, BatchTranslateOptions::default())
+        .unwrap();
+
+    let result = results.get(&item.id).unwrap();
+    assert_eq!(result.translated, "Bangkok");
+    assert_eq!(result.qid.as_deref(), Some("Q1861"));
+    assert_eq!(result.source, "metadata");
+    assert_eq!(result.used_lang, "official_en");
+}
+
+fn thailand_item(original_name: &str, official_en: &str, official_th: &str) -> TranslationItem {
+    TranslationItem::from_values(
+        AdminLevel::Admin1,
+        original_name,
+        "en",
+        "zh-tw",
+        vec!["TH".to_string()],
+        HashMap::from([
+            (METADATA_OFFICIAL_EN.to_string(), official_en.to_string()),
+            (METADATA_OFFICIAL_TH.to_string(), official_th.to_string()),
+        ]),
+    )
+    .unwrap()
+}
+
+fn thailand_options() -> WikidataClientOptions {
+    let mut options = WikidataClientOptions::new("en", "zh-tw");
+    options.fallback_langs = vec!["zh-hant".to_string(), "zh".to_string()];
+    options
+}
+
 fn test_translator() -> WikidataTranslator<MockApi> {
     WikidataTranslator::with_client(
         WikidataClientOptions::new("ko", "zh-tw"),
@@ -137,6 +198,49 @@ impl WikidataApi for MockApi {
 
     fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
         Ok(r#"{"query":{"pages":{"1":{"title":"中區"}}}}"#.to_string())
+    }
+}
+
+struct EmptySearchApi;
+
+impl WikidataApi for EmptySearchApi {
+    fn search_entities_json(&self, _: &str, _: usize) -> Result<String, String> {
+        Ok(r#"{"search":[]}"#.to_string())
+    }
+
+    fn get_entities_json(&self, _: &[String], _: &str, _: &str) -> Result<String, String> {
+        Ok(r#"{"entities":{}}"#.to_string())
+    }
+
+    fn ask_p131_json(&self, _: &str, _: &str) -> Result<String, String> {
+        Ok(r#"{"boolean":false}"#.to_string())
+    }
+
+    fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
+        Ok(r#"{"query":{"pages":{"1":{"title":""}}}}"#.to_string())
+    }
+}
+
+struct EnglishOnlyApi;
+
+impl WikidataApi for EnglishOnlyApi {
+    fn search_entities_json(&self, _: &str, _: usize) -> Result<String, String> {
+        Ok(r#"{"search":[{"id":"Q1861"}]}"#.to_string())
+    }
+
+    fn get_entities_json(&self, _: &[String], props: &str, _: &str) -> Result<String, String> {
+        if props == "claims" {
+            return Ok(r#"{"entities":{"Q1861":{"claims":{"P31":[]}}}}"#.to_string());
+        }
+        Ok(r#"{"entities":{"Q1861":{"labels":{"en":{"value":"Bangkok"}}}}}"#.to_string())
+    }
+
+    fn ask_p131_json(&self, _: &str, _: &str) -> Result<String, String> {
+        Ok(r#"{"boolean":false}"#.to_string())
+    }
+
+    fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
+        Ok(r#"{"query":{"pages":{"1":{"title":""}}}}"#.to_string())
     }
 }
 

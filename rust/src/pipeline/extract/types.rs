@@ -5,6 +5,7 @@ pub(super) const WGS84_EPSG: i32 = 4326;
 pub(super) const TAIWAN_TWD97_EPSG: i32 = 3826;
 pub(super) const JAPAN_ALBERS_PROJ4: &str = "+proj=aea +lat_1=30 +lat_2=45 +lat_0=37.5 +lon_0=138 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs";
 pub(super) const KOREA_ALBERS_PROJ4: &str = "+proj=aea +lat_1=33 +lat_2=43 +lat_0=37 +lon_0=127.5 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs";
+pub(super) const THAILAND_ALBERS_PROJ4: &str = "+proj=aea +lat_1=5 +lat_2=21 +lat_0=13 +lon_0=101 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs";
 
 pub(super) type Coordinate = (f64, f64);
 pub(super) type LinearRing = Vec<Coordinate>;
@@ -73,6 +74,14 @@ pub(super) enum FeatureAttributes {
         sggnm: Option<String>,
         adm_nm: Option<String>,
     },
+    Thailand {
+        adm1_name: Option<String>,
+        adm1_name1: Option<String>,
+        adm2_name: Option<String>,
+        adm2_name1: Option<String>,
+        adm3_name: Option<String>,
+        adm3_name1: Option<String>,
+    },
 }
 
 impl FeatureAttributes {
@@ -93,6 +102,14 @@ impl FeatureAttributes {
                 sidonm: None,
                 sggnm: None,
                 adm_nm: None,
+            },
+            Country::Thailand => Self::Thailand {
+                adm1_name: None,
+                adm1_name1: None,
+                adm2_name: None,
+                adm2_name1: None,
+                adm3_name: None,
+                adm3_name1: None,
             },
         }
     }
@@ -129,6 +146,22 @@ impl FeatureAttributes {
                 "sidonm" => *sidonm = Some(value),
                 "sggnm" => *sggnm = Some(value),
                 "adm_nm" => *adm_nm = Some(value),
+                _ => {}
+            },
+            Self::Thailand {
+                adm1_name,
+                adm1_name1,
+                adm2_name,
+                adm2_name1,
+                adm3_name,
+                adm3_name1,
+            } => match key {
+                "adm1_name" => *adm1_name = Some(value),
+                "adm1_name1" => *adm1_name1 = Some(value),
+                "adm2_name" => *adm2_name = Some(value),
+                "adm2_name1" => *adm2_name1 = Some(value),
+                "adm3_name" => *adm3_name = Some(value),
+                "adm3_name1" => *adm3_name1 = Some(value),
                 _ => {}
             },
         }
@@ -168,6 +201,22 @@ impl FeatureAttributes {
                 "adm_nm" => adm_nm.as_deref(),
                 _ => None,
             },
+            Self::Thailand {
+                adm1_name,
+                adm1_name1,
+                adm2_name,
+                adm2_name1,
+                adm3_name,
+                adm3_name1,
+            } => match key {
+                "adm1_name" => adm1_name.as_deref(),
+                "adm1_name1" => adm1_name1.as_deref(),
+                "adm2_name" => adm2_name.as_deref(),
+                "adm2_name1" => adm2_name1.as_deref(),
+                "adm3_name" => adm3_name.as_deref(),
+                "adm3_name1" => adm3_name1.as_deref(),
+                _ => None,
+            },
         }
     }
 }
@@ -180,13 +229,22 @@ pub(super) struct KoreaTranslations {
 }
 
 #[derive(Clone, Debug, Default)]
+pub(super) struct ThailandTranslations {
+    pub(super) admin1_by_name: HashMap<String, String>,
+    pub(super) admin2_by_parent: HashMap<String, HashMap<String, String>>,
+    pub(super) fallback_by_name: HashMap<String, String>,
+}
+
+#[derive(Clone, Debug, Default)]
 pub(super) struct ExtractContext {
     pub(super) korea_translations: KoreaTranslations,
+    pub(super) thailand_translations: ThailandTranslations,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum CentroidPipeline {
     ProjectedEpsg(i32),
+    ProjectedProj4(&'static str),
     DynamicUtm(&'static str),
 }
 
@@ -202,6 +260,7 @@ pub(super) enum Country {
     Taiwan,
     Japan,
     Korea,
+    Thailand,
 }
 
 impl Country {
@@ -210,6 +269,7 @@ impl Country {
             "TW" => Ok(Self::Taiwan),
             "JP" => Ok(Self::Japan),
             "KR" => Ok(Self::Korea),
+            "TH" => Ok(Self::Thailand),
             other => Err(format!("extract 尚未支援國家：{other}")),
         }
     }
@@ -219,6 +279,7 @@ impl Country {
             Self::Taiwan => "TW",
             Self::Japan => "JP",
             Self::Korea => "KR",
+            Self::Thailand => "TH",
         }
     }
 
@@ -227,6 +288,10 @@ impl Country {
             Self::Taiwan => CentroidPipeline::ProjectedEpsg(TAIWAN_TWD97_EPSG),
             Self::Japan => CentroidPipeline::DynamicUtm(JAPAN_ALBERS_PROJ4),
             Self::Korea => CentroidPipeline::DynamicUtm(KOREA_ALBERS_PROJ4),
+            // Reason: COD-AB TH 的官方 center_lat/center_lon 是代表點，
+            //         但 Immich 以最近單點查詢行政區；實測 polygon centroid
+            //         命中率較高，且 dynamic UTM 對泰國沒有實質改善。
+            Self::Thailand => CentroidPipeline::ProjectedProj4(THAILAND_ALBERS_PROJ4),
         }
     }
 
@@ -235,6 +300,14 @@ impl Country {
             Self::Taiwan => &["COUNTYNAME", "TOWNNAME", "VILLNAME"],
             Self::Japan => &["N03_001", "N03_003", "N03_004", "N03_005"],
             Self::Korea => &["sidonm", "sggnm", "adm_nm"],
+            Self::Thailand => &[
+                "adm1_name",
+                "adm1_name1",
+                "adm2_name",
+                "adm2_name1",
+                "adm3_name",
+                "adm3_name1",
+            ],
         }
     }
 }
@@ -248,4 +321,15 @@ pub(super) fn korea_stub_source(source_path: &std::path::Path) -> Option<PathBuf
 
 pub(super) fn korea_translation_cache_path() -> PathBuf {
     std::path::Path::new("geoname_data").join("KR_wikidata_cache.json")
+}
+
+pub(super) fn thailand_stub_source(source_path: &std::path::Path) -> Option<PathBuf> {
+    source_path
+        .parent()
+        .map(|parent| parent.join("TH_wikidata_stub.json"))
+        .filter(|path| path.exists())
+}
+
+pub(super) fn thailand_translation_cache_path() -> PathBuf {
+    std::path::Path::new("geoname_data").join("TH_wikidata_cache.json")
 }

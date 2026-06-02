@@ -12,6 +12,7 @@ mod geometry;
 mod handlers;
 mod korea_wikidata;
 mod sources;
+mod thailand_wikidata;
 mod types;
 
 use geometry::apply_country_centroids;
@@ -313,15 +314,15 @@ fn read_geospatial_rows(fixture: &Fixture, country: Country) -> Result<Vec<Extra
         .and_then(|value| value.to_str())
         .unwrap_or_default()
         .to_ascii_lowercase();
-    let korea_stub = fixture
+    let wikidata_stub = fixture
         .root
         .join("extract_sources")
-        .join("KR_wikidata_stub.json");
+        .join(format!("{}_wikidata_stub.json", country.code()));
     match suffix.as_str() {
         "geojson" | "json" => {
-            read_geospatial_rows_from_path(country, &source_path, Some(&korea_stub))
+            read_geospatial_rows_from_path(country, &source_path, Some(&wikidata_stub))
         }
-        "shp" => read_shapefile_rows_from_path(country, &source_path, Some(&korea_stub)),
+        "shp" => read_shapefile_rows_from_path(country, &source_path, Some(&wikidata_stub)),
         other => Err(format!(
             "不支援的 fixture extract 輸入格式：.{other}，請提供 .shp 或 .geojson"
         )),
@@ -331,16 +332,16 @@ fn read_geospatial_rows(fixture: &Fixture, country: Country) -> Result<Vec<Extra
 fn read_geospatial_rows_from_path(
     country: Country,
     source_path: &Path,
-    korea_stub: Option<&Path>,
+    wikidata_stub: Option<&Path>,
 ) -> Result<Vec<ExtractRow>, String> {
     let mut profile = ExtractProfile::new(false);
-    read_geospatial_rows_from_path_profiled(country, source_path, korea_stub, &mut profile)
+    read_geospatial_rows_from_path_profiled(country, source_path, wikidata_stub, &mut profile)
 }
 
 fn read_geospatial_rows_from_path_profiled(
     country: Country,
     source_path: &Path,
-    korea_stub: Option<&Path>,
+    wikidata_stub: Option<&Path>,
     profile: &mut ExtractProfile,
 ) -> Result<Vec<ExtractRow>, String> {
     let content = profile.time("read_geojson_file", || {
@@ -351,7 +352,7 @@ fn read_geospatial_rows_from_path_profiled(
         read_geojson_features_from_content(country, &content, source_path)
     })?;
     let context = profile.time("load_context", || {
-        country.load_context(source_path, korea_stub, &features)
+        country.load_context(source_path, wikidata_stub, &features)
     })?;
     let source_crs = features.first().and_then(|feature| feature.crs.clone());
     profile.time("centroid", || {
@@ -365,21 +366,21 @@ fn read_geospatial_rows_from_path_profiled(
 fn read_shapefile_rows_from_path(
     country: Country,
     source_path: &Path,
-    korea_stub: Option<&Path>,
+    wikidata_stub: Option<&Path>,
 ) -> Result<Vec<ExtractRow>, String> {
     let mut profile = ExtractProfile::new(false);
-    read_shapefile_rows_from_path_profiled(country, source_path, korea_stub, &mut profile)
+    read_shapefile_rows_from_path_profiled(country, source_path, wikidata_stub, &mut profile)
 }
 
 fn read_shapefile_rows_from_path_profiled(
     country: Country,
     source_path: &Path,
-    korea_stub: Option<&Path>,
+    wikidata_stub: Option<&Path>,
     profile: &mut ExtractProfile,
 ) -> Result<Vec<ExtractRow>, String> {
     let mut features = profile.time("read_shapefile", || read_shapefile(country, source_path))?;
     let context = profile.time("load_context", || {
-        country.load_context(source_path, korea_stub, &features)
+        country.load_context(source_path, wikidata_stub, &features)
     })?;
     let source_crs = features.first().and_then(|feature| feature.crs.clone());
     profile.time("centroid", || {

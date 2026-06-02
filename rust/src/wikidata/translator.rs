@@ -7,7 +7,10 @@ use serde_json::Value;
 
 use super::cache::TranslationCacheStore;
 use super::client::{WikidataApi, WikidataClientOptions, WikidataHttpClient};
-use super::types::{TranslationDataset, TranslationItem, TranslationResult};
+use super::types::{
+    METADATA_OFFICIAL_EN, METADATA_OFFICIAL_TH, TranslationDataset, TranslationItem,
+    TranslationResult,
+};
 
 const SEARCH_LIMIT: usize = 7;
 const ENTITY_BATCH_SIZE: usize = 50;
@@ -149,7 +152,7 @@ impl<C: WikidataApi> WikidataTranslator<C> {
                 .or_else(|| options.parent_qids.get(&data.item.original_name))
                 .map(String::as_str);
             let Some(selected_qid) = self.select_qid(&data.qids, parent_qid)? else {
-                let result = TranslationResult::original(&data.item.original_name);
+                let result = self.source_fallback_result(&data.item);
                 self.cache_store
                     .set_translation(&data.item, &result, parent_qid)?;
                 fallback_count += 1;
@@ -157,8 +160,7 @@ impl<C: WikidataApi> WikidataTranslator<C> {
                 continue;
             };
 
-            let mut result =
-                self.select_best_label(all_labels.get(&selected_qid), &data.item.original_name);
+            let mut result = self.select_best_label(all_labels.get(&selected_qid), &data.item);
             result.qid = Some(selected_qid.clone());
             if let Some(parent_qid) = parent_qid {
                 result.parent_verified = self.verify_p131(&selected_qid, parent_qid)?;
@@ -315,10 +317,10 @@ impl<C: WikidataApi> WikidataTranslator<C> {
     fn select_best_label(
         &self,
         labels: Option<&HashMap<String, String>>,
-        original_name: &str,
+        item: &TranslationItem,
     ) -> TranslationResult {
         let Some(labels) = labels else {
-            return TranslationResult::original(original_name);
+            return self.source_fallback_result(item);
         };
         if let Some(label) = labels.get(&self.options.target_lang) {
             return wikidata_result(label, "wikidata", &self.options.target_lang);
@@ -342,7 +344,22 @@ impl<C: WikidataApi> WikidataTranslator<C> {
             }
             return wikidata_result(title, "zhwiki", "zhwiki");
         }
-        TranslationResult::original(original_name)
+        self.source_fallback_result(item)
+    }
+
+    fn source_fallback_result(&self, item: &TranslationItem) -> TranslationResult {
+        for (key, used_lang) in [
+            (METADATA_OFFICIAL_EN, "official_en"),
+            (METADATA_OFFICIAL_TH, "official_th"),
+        ] {
+            if let Some(value) = item.metadata.get(key) {
+                let value = value.trim();
+                if !value.is_empty() {
+                    return wikidata_result(value, "metadata", used_lang);
+                }
+            }
+        }
+        TranslationResult::original(&item.original_name)
     }
 }
 

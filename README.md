@@ -8,7 +8,7 @@
 
 本專案為 Immich 提供專為臺灣使用者設計的反向地理編碼優化，根據使用者習慣提供自然且準確的地理資訊顯示。
 
-目前支援：🇹🇼 **臺灣** | 🇯🇵 **日本** | 🇰🇷 **南韓** | 🌏 **其他地區中文化**
+目前支援：🇹🇼 **臺灣** | 🇯🇵 **日本** | 🇰🇷 **南韓** | 🇹🇭 **泰國** | 🌏 **其他地區中文化**
 
 ## 設計理念
 
@@ -17,6 +17,7 @@
 - **臺灣地區**：使用 NLSC 圖資，解決國家與行政區名稱顯示問題
 - **日本地區**：使用国土数値情報ダウンロードサイト資料，保留日文原名（漢字+假名），符合臺灣使用者閱讀習慣
 - **南韓地區**：使用 admdongkor 專案資料，提供繁體中文翻譯，符合臺灣使用者閱讀習慣
+- **泰國地區**：使用 COD-AB 官方邊界資料，提供 Admin1/Admin2 繁中翻譯，並以官方英文與泰文作為 fallback
 - **其他地區**：提供繁體中文翻譯，確保資訊可讀性（無對照譯名則回退至英文）
 
 ### 使用前後對比
@@ -38,6 +39,7 @@
     - [🇹🇼 臺灣地區優化](#-臺灣地區優化)
     - [🇯🇵 日本地區優化](#-日本地區優化)
     - [🇰🇷 南韓地區優化](#-南韓地區優化)
+    - [🇹🇭 泰國地區優化](#-泰國地區優化)
   - [更新地理資料](#更新地理資料)
     - [整合式部署](#整合式部署)
     - [手動部署](#手動部署-1)
@@ -49,6 +51,7 @@
       - [臺灣資料提取](#臺灣資料提取)
       - [日本資料提取](#日本資料提取)
       - [南韓資料提取](#南韓資料提取)
+      - [泰國資料提取](#泰國資料提取)
     - [3. 完整資料處理流程](#3-完整資料處理流程)
       - [註冊 LocationIQ API](#註冊-locationiq-api)
       - [執行資料處理](#執行資料處理)
@@ -65,6 +68,7 @@
 | 🇹🇼 臺灣 | 繁體中文（官方名稱） | NLSC 國土測繪中心 | 優化地理資料；解決國家與行政區顯示名稱錯誤的問題 |
 | 🇯🇵 日本 | 日文原名（漢字+假名） | 国土数値情報ダウンロードサイト | 優化地理資料；以日文原名顯示 |
 | 🇰🇷 南韓 | 繁體中文翻譯 | admdongkor（官方行政區邊界） | 優化地理資料；提供繁體中文翻譯 |
+| 🇹🇭 泰國 | 繁體中文翻譯（官方英文 / 泰文 fallback） | COD-AB Thailand | 優化地理資料；以官方行政區邊界計算行政區中心點 |
 | 🌏 其他 | 繁體中文翻譯 | 自訂翻譯 → GeoNames 翻譯 → GeoNames 英文 | 優先使用臺灣慣用譯名，若無則使用 GeoNames 資料 |
 
 > **為什麼日本保留日文？**
@@ -96,7 +100,12 @@
     - **資料集**: 南韓官方行政區邊界資料（GeoJSON 格式）
     - **授權**: MIT License
     - **用途**: 作為南韓地區行政區邊界與名稱的主要數據源
-6.  **其他參考資料**
+6.  **Thailand COD-AB**
+    - **來源**: [HDX Thailand Subnational Administrative Boundaries](https://data.humdata.org/dataset/cod-ab-tha)
+    - **資料集**: Thailand administrative level 0-3 boundaries (COD-AB)
+    - **授權**: Creative Commons Attribution for Intergovernmental Organisations (CC BY-IGO)
+    - **用途**: 作為泰國地區行政區邊界與名稱的主要數據源
+7.  **其他參考資料**
     - **中華民國經濟部國際貿易署 & 中華民國外交部**: 作為部分國家/地區中文譯名的參考來源
 
 > [!NOTE]
@@ -227,6 +236,15 @@
 - **特殊行政區處理**：濟州道與濟州市區分、世宗市採用業界通用譯名
 - **行政層級處理**：自動拆分「市＋區/郡」結構，支援特殊行政結構
 
+### 🇹🇭 泰國地區優化
+
+- **官方邊界資料**：使用 COD-AB `tha_admin3` sub-district / tambon 邊界資料
+- **繁體中文翻譯**：Admin1/Admin2 使用 Wikidata translator，缺少中文結果時回退 COD-AB 官方英文與官方泰文
+- **最近距離最佳化**：使用 Thailand Albers 投影計算幾何中心點，提升 Immich 最近點反向地理解析命中率
+- **座標策略驗證**：不使用 COD-AB 內建 `center_lat` / `center_lon` 作為預設，因其較接近官方代表點而非最近點模型下的最佳單點
+
+> 📖 詳細的泰國行政區處理邏輯請參閱 [泰國行政區處理文檔](docs/zh-tw/thailand-admin-processing.md)
+
 ## 更新地理資料
 
 ### 整合式部署
@@ -312,6 +330,20 @@ cargo run --release --manifest-path rust/Cargo.toml -- extract --country KR \
   --shapefile geoname_data/HangJeongDong_verYYYYMMDD.geojson \
   --output meta_data/kr_geodata.csv
 ```
+
+#### 泰國資料提取
+
+資料來源：[Thailand COD-AB](https://data.humdata.org/dataset/cod-ab-tha)
+
+```bash
+# 1. 下載 tha_admin_boundaries.shp.zip 並解壓縮
+# 2. 使用 tha_admin3.shp 提取 Admin 3 / Tambon 邊界資料
+cargo run --release --manifest-path rust/Cargo.toml -- extract --country TH \
+  --shapefile geoname_data/tha_admin_boundaries/tha_admin3.shp \
+  --output meta_data/th_geodata.csv
+```
+
+泰國提取會讀取或建立 `geoname_data/TH_wikidata_cache.json`，用於 Admin1/Admin2 繁中翻譯；Admin3 目前保留 COD-AB 官方英文。
 
 提取完成後，執行 Rust `release` 時會自動整合這些資料。
 

@@ -548,7 +548,12 @@ fn calculate_global_max_geoname_id(options: &ProductionOptions) -> Result<i64, S
 }
 
 fn handler_countries() -> Vec<String> {
-    vec!["JP".to_string(), "KR".to_string(), "TW".to_string()]
+    vec![
+        "JP".to_string(),
+        "KR".to_string(),
+        "TH".to_string(),
+        "TW".to_string(),
+    ]
 }
 
 fn is_handler_country(country: &str) -> bool {
@@ -779,14 +784,14 @@ mod tests {
         let mut options = parse_production_options(&[
             "--country-code".to_string(),
             "KR".to_string(),
-            "TH".to_string(),
+            "US".to_string(),
             "tw".to_string(),
         ])
         .unwrap();
 
         filter_country_codes_without_handler("release", &mut options);
 
-        assert_eq!(options.country_codes, vec!["TH"]);
+        assert_eq!(options.country_codes, vec!["US"]);
     }
 
     #[test]
