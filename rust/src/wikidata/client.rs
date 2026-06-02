@@ -31,6 +31,18 @@ impl WikidataClientOptions {
     }
 }
 
+pub trait WikidataApi {
+    fn search_entities_json(&self, name: &str, limit: usize) -> Result<String, String>;
+    fn get_entities_json(
+        &self,
+        qids: &[String],
+        props: &str,
+        languages: &str,
+    ) -> Result<String, String>;
+    fn ask_p131_json(&self, candidate_qid: &str, parent_qid: &str) -> Result<String, String>;
+    fn zhwiki_convert_title_json(&self, title: &str) -> Result<String, String>;
+}
+
 #[derive(Debug, Clone)]
 pub struct WikidataHttpClient {
     options: WikidataClientOptions,
@@ -43,6 +55,7 @@ impl WikidataHttpClient {
             user_agent: "immich-geodata-zh-tw/1.0 (Rust Wikidata Translation Tool)".to_string(),
             timeout: Duration::from_secs(30),
             max_retries: 5,
+            throttle_after_success: Duration::from_millis(200),
             ..HttpRequestPolicy::default()
         };
         Ok(Self {
@@ -50,18 +63,30 @@ impl WikidataHttpClient {
             http: HttpClient::new(policy)?,
         })
     }
+}
 
-    pub fn search_entities_json(&self, name: &str, limit: usize) -> Result<String, String> {
+impl WikidataApi for WikidataHttpClient {
+    fn search_entities_json(&self, name: &str, limit: usize) -> Result<String, String> {
         self.http
             .get_text(search_entities_url(name, &self.options.source_lang, limit)?.as_str())
     }
 
-    pub fn ask_p131_json(&self, candidate_qid: &str, parent_qid: &str) -> Result<String, String> {
+    fn get_entities_json(
+        &self,
+        qids: &[String],
+        props: &str,
+        languages: &str,
+    ) -> Result<String, String> {
+        self.http
+            .get_text(get_entities_url(qids, props, languages)?.as_str())
+    }
+
+    fn ask_p131_json(&self, candidate_qid: &str, parent_qid: &str) -> Result<String, String> {
         let query = format!("ASK {{ wd:{candidate_qid} (wdt:P131)+ wd:{parent_qid} . }}");
         self.http.get_text(wdqs_url(&query)?.as_str())
     }
 
-    pub fn zhwiki_convert_title_json(&self, title: &str) -> Result<String, String> {
+    fn zhwiki_convert_title_json(&self, title: &str) -> Result<String, String> {
         self.http
             .get_text(zhwiki_convert_title_url(title)?.as_str())
     }
@@ -78,6 +103,18 @@ pub fn search_entities_url(name: &str, source_lang: &str, limit: usize) -> Resul
         .append_pair("uselang", source_lang)
         .append_pair("type", "item")
         .append_pair("limit", &limit.to_string());
+    Ok(url)
+}
+
+pub fn get_entities_url(qids: &[String], props: &str, languages: &str) -> Result<Url, String> {
+    let mut url =
+        Url::parse(WDACT_URL).map_err(|error| format!("Wikidata API URL 錯誤：{error}"))?;
+    url.query_pairs_mut()
+        .append_pair("format", "json")
+        .append_pair("action", "wbgetentities")
+        .append_pair("ids", &qids.join("|"))
+        .append_pair("props", props)
+        .append_pair("languages", languages);
     Ok(url)
 }
 
@@ -114,6 +151,22 @@ mod tests {
         assert!(params.contains(&("uselang".into(), "ko".into())));
         assert!(params.contains(&("type".into(), "item".into())));
         assert!(params.contains(&("limit".into(), "7".into())));
+    }
+
+    #[test]
+    fn get_entities_url_uses_batch_contract() {
+        let url = get_entities_url(
+            &["Q1".to_string(), "Q2".to_string()],
+            "labels|sitelinks",
+            "zh-tw|zh",
+        )
+        .unwrap();
+        let params: Vec<_> = url.query_pairs().collect();
+
+        assert!(params.contains(&("action".into(), "wbgetentities".into())));
+        assert!(params.contains(&("ids".into(), "Q1|Q2".into())));
+        assert!(params.contains(&("props".into(), "labels|sitelinks".into())));
+        assert!(params.contains(&("languages".into(), "zh-tw|zh".into())));
     }
 
     #[test]

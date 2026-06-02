@@ -4,9 +4,10 @@ use std::path::Path;
 
 use serde_json::Value;
 
+use super::korea_wikidata::build_korea_wikidata_cache;
 use super::types::{
     Country, ExtractContext, ExtractRow, Feature, FeatureGeometry, KoreaTranslations,
-    korea_translation_source,
+    korea_stub_source, korea_translation_cache_path,
 };
 
 impl Country {
@@ -14,6 +15,7 @@ impl Country {
         self,
         source_path: &Path,
         korea_stub: Option<&Path>,
+        features: &[Feature],
     ) -> Result<ExtractContext, String> {
         match self {
             Self::Taiwan | Self::Japan => Ok(ExtractContext::default()),
@@ -21,14 +23,13 @@ impl Country {
                 let stub = korea_stub
                     .filter(|path| path.exists())
                     .map(Path::to_path_buf)
-                    .or_else(|| korea_translation_source(source_path))
-                    .ok_or_else(|| {
-                        "KR extract 需要 Wikidata stub/cache，避免 production gate 呼叫即時網路"
-                            .to_string()
-                    })?;
-                Ok(ExtractContext {
-                    korea_translations: read_korea_stub(&stub)?,
-                })
+                    .or_else(|| korea_stub_source(source_path));
+                let korea_translations = if let Some(stub) = stub {
+                    read_korea_stub(&stub)?
+                } else {
+                    build_korea_wikidata_cache(features, &korea_translation_cache_path())?
+                };
+                Ok(ExtractContext { korea_translations })
             }
         }
     }
@@ -178,17 +179,44 @@ fn korea_feature_row(
     translations: &KoreaTranslations,
 ) -> Result<ExtractRow, String> {
     let (longitude, latitude) = point_geometry(&feature.geometry)?;
-    let sidonm = attribute(feature, "sidonm");
+    let components = korea_admin_components(feature);
+
+    let mut admin2 = korea_admin2(&components.sidonm, &components.sggnm, translations);
+    if components.sidonm == "광주광역시" {
+        admin2 = strip_trailing_parenthetical(&admin2);
+    }
+
+    Ok(ExtractRow::from_point(
+        latitude,
+        longitude,
+        "南韓",
+        korea_admin1(&components.sidonm, translations),
+        admin2,
+        components.admin3,
+        components.admin4,
+    ))
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct KoreaAdminComponents {
+    pub(super) sidonm: String,
+    pub(super) sggnm: String,
+    pub(super) admin3: String,
+    pub(super) admin4: String,
+}
+
+pub(super) fn korea_admin_components(feature: &Feature) -> KoreaAdminComponents {
+    let sidonm = attribute(feature, "sidonm").to_string();
     let mut sggnm = attribute(feature, "sggnm").to_string();
     let adm_nm = attribute(feature, "adm_nm");
     let mut admin3 = adm_nm
-        .replace(sidonm, "")
+        .replace(&sidonm, "")
         .replace(&sggnm, "")
         .trim()
         .to_string();
     let mut admin4 = String::new();
 
-    if is_sejong_admin2_normalization_target(sidonm, &sggnm) {
+    if is_sejong_admin2_normalization_target(&sidonm, &sggnm) {
         sggnm = admin3;
         admin3 = String::new();
     }
@@ -199,20 +227,12 @@ fn korea_feature_row(
         admin3 = district;
     }
 
-    let mut admin2 = korea_admin2(sidonm, &sggnm, translations);
-    if sidonm == "광주광역시" {
-        admin2 = strip_trailing_parenthetical(&admin2);
-    }
-
-    Ok(ExtractRow::from_point(
-        latitude,
-        longitude,
-        "南韓",
-        korea_admin1(sidonm, translations),
-        admin2,
+    KoreaAdminComponents {
+        sidonm,
+        sggnm,
         admin3,
         admin4,
-    ))
+    }
 }
 
 fn korea_admin1(name: &str, translations: &KoreaTranslations) -> String {
@@ -253,7 +273,8 @@ fn korea_admin2(sidonm: &str, sggnm: &str, translations: &KoreaTranslations) -> 
     }
     translations
         .admin2_by_parent
-        .get(&(sidonm.to_string(), sggnm.to_string()))
+        .get(sidonm)
+        .and_then(|by_name| by_name.get(sggnm))
         .or_else(|| translations.fallback_by_name.get(sggnm))
         .cloned()
         .unwrap_or_else(|| sggnm.to_string())
@@ -348,7 +369,9 @@ fn read_korea_stub(path: &Path) -> Result<KoreaTranslations, String> {
             if let (Some(parent), Some(name)) = (parts.next(), parts.next()) {
                 translations
                     .admin2_by_parent
-                    .insert((parent.to_string(), name.to_string()), translated.clone());
+                    .entry(parent.to_string())
+                    .or_default()
+                    .insert(name.to_string(), translated.clone());
                 translations
                     .fallback_by_name
                     .insert(name.to_string(), translated);
