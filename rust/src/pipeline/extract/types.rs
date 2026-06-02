@@ -175,7 +175,7 @@ impl FeatureAttributes {
 #[derive(Clone, Debug, Default)]
 pub(super) struct KoreaTranslations {
     pub(super) admin1_by_name: HashMap<String, String>,
-    pub(super) admin2_by_parent: HashMap<(String, String), String>,
+    pub(super) admin2_by_parent: HashMap<String, HashMap<String, String>>,
     pub(super) fallback_by_name: HashMap<String, String>,
 }
 

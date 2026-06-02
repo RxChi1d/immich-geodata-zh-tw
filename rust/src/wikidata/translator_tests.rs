@@ -114,12 +114,7 @@ impl WikidataApi for MockApi {
         Ok(r#"{"search":[{"id":"Q1"},{"id":"Q2"}]}"#.to_string())
     }
 
-    fn get_entities_json(
-        &self,
-        qids: &[String],
-        props: &str,
-        _: &[String],
-    ) -> Result<String, String> {
+    fn get_entities_json(&self, qids: &[String], props: &str, _: &str) -> Result<String, String> {
         if props == "claims" {
             return Ok(format!(
                 r#"{{"entities":{{{}}}}}"#,
@@ -152,7 +147,7 @@ impl WikidataApi for PanicApi {
         panic!("全 cache hit 不應呼叫 search")
     }
 
-    fn get_entities_json(&self, _: &[String], _: &str, _: &[String]) -> Result<String, String> {
+    fn get_entities_json(&self, _: &[String], _: &str, _: &str) -> Result<String, String> {
         panic!("全 cache hit 不應呼叫 get_entities")
     }
 

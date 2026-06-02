@@ -11,6 +11,7 @@ use super::types::{TranslationDataset, TranslationItem, TranslationResult};
 
 const SEARCH_LIMIT: usize = 7;
 const ENTITY_BATCH_SIZE: usize = 50;
+const CLAIM_LANGUAGES: &str = "en";
 
 pub struct BatchTranslateOptions<'a> {
     pub batch_size: usize,
@@ -18,7 +19,7 @@ pub struct BatchTranslateOptions<'a> {
     pub candidate_filter: Option<&'a CandidateFilter>,
 }
 
-pub type CandidateFilter = dyn Fn(&str, &WikidataCandidateMetadata) -> bool;
+pub type CandidateFilter = dyn for<'a> Fn(&str, &WikidataCandidateMetadata<'a>) -> bool;
 
 impl Default for BatchTranslateOptions<'_> {
     fn default() -> Self {
@@ -30,17 +31,16 @@ impl Default for BatchTranslateOptions<'_> {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WikidataCandidateMetadata {
-    pub qid: String,
-    pub labels: HashMap<String, String>,
-    pub instance_of: Vec<String>,
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WikidataCandidateMetadata<'a> {
+    pub qid: &'a str,
+    pub labels: &'a HashMap<String, String>,
+    pub instance_of: &'a [String],
 }
 
 pub struct WikidataTranslator<C: WikidataApi> {
     options: WikidataClientOptions,
-    label_languages: Vec<String>,
-    claim_languages: Vec<String>,
+    label_languages: String,
     client: C,
     pub cache_store: TranslationCacheStore,
     opencc: Option<Converter>,
@@ -68,7 +68,8 @@ impl<C: WikidataApi> WikidataTranslator<C> {
             [options.target_lang.clone()]
                 .into_iter()
                 .chain(options.fallback_langs.iter().cloned()),
-        );
+        )
+        .join("|");
         let opencc = if use_opencc {
             Some(
                 opencc_rust::presets::cn2t::converter("cn", "t")
@@ -85,7 +86,6 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         Ok(Self {
             options,
             label_languages,
-            claim_languages: vec!["en".to_string()],
             client,
             cache_store,
             opencc,
@@ -102,7 +102,7 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         }
         let batch_size = options.batch_size.max(1);
         let mut results = HashMap::with_capacity(dataset.len());
-        let mut pending = Vec::<SearchData>::new();
+        let mut pending = Vec::<SearchData>::with_capacity(dataset.len());
         let mut cache_hits = 0_usize;
 
         for batch in dataset.items().chunks(batch_size) {
@@ -127,12 +127,19 @@ impl<C: WikidataApi> WikidataTranslator<C> {
             cache_hits
         );
 
-        if let Some(candidate_filter) = options.candidate_filter {
-            self.apply_candidate_filter(&mut pending, candidate_filter)?;
-        }
+        let prefetched_labels = if let Some(candidate_filter) = options.candidate_filter {
+            Some(self.apply_candidate_filter(&mut pending, candidate_filter)?)
+        } else {
+            None
+        };
 
-        let all_qids = dedupe_keep_order(pending.iter().flat_map(|data| data.qids.iter().cloned()));
-        let all_labels = self.batch_get_labels(&all_qids)?;
+        let all_labels = if let Some(labels) = prefetched_labels {
+            labels
+        } else {
+            let all_qids =
+                dedupe_keep_order(pending.iter().flat_map(|data| data.qids.iter().cloned()));
+            self.batch_get_labels(&all_qids)?
+        };
         let mut fallback_count = 0_usize;
 
         for data in pending {
@@ -189,8 +196,8 @@ impl<C: WikidataApi> WikidataTranslator<C> {
     fn apply_candidate_filter(
         &mut self,
         search_results: &mut [SearchData],
-        candidate_filter: &dyn Fn(&str, &WikidataCandidateMetadata) -> bool,
-    ) -> Result<(), String> {
+        candidate_filter: &CandidateFilter,
+    ) -> Result<HashMap<String, HashMap<String, String>>, String> {
         let qids = dedupe_keep_order(
             search_results
                 .iter()
@@ -199,16 +206,21 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         let labels = self.batch_get_labels(&qids)?;
         let instance_of = self.batch_get_instance_of(&qids)?;
         for data in search_results {
+            let empty_labels = HashMap::new();
+            let empty_instance_of = Vec::new();
             data.qids.retain(|qid| {
                 let metadata = WikidataCandidateMetadata {
-                    qid: qid.clone(),
-                    labels: labels.get(qid).cloned().unwrap_or_default(),
-                    instance_of: instance_of.get(qid).cloned().unwrap_or_default(),
+                    qid,
+                    labels: labels.get(qid).unwrap_or(&empty_labels),
+                    instance_of: instance_of
+                        .get(qid)
+                        .map(Vec::as_slice)
+                        .unwrap_or(empty_instance_of.as_slice()),
                 };
                 candidate_filter(&data.item.original_name, &metadata)
             });
         }
-        Ok(())
+        Ok(labels)
     }
 
     fn batch_get_labels(
@@ -216,7 +228,7 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         qids: &[String],
     ) -> Result<HashMap<String, HashMap<String, String>>, String> {
         let unique_qids = dedupe_keep_order(qids.iter().cloned());
-        let mut results = HashMap::new();
+        let mut results = HashMap::with_capacity(unique_qids.len());
         let mut uncached = Vec::new();
         for qid in &unique_qids {
             if let Some(labels) = self.cache_store.get_labels(qid) {
@@ -245,7 +257,7 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         qids: &[String],
     ) -> Result<HashMap<String, Vec<String>>, String> {
         let unique_qids = dedupe_keep_order(qids.iter().cloned());
-        let mut results = HashMap::new();
+        let mut results = HashMap::with_capacity(unique_qids.len());
         let mut uncached = Vec::new();
         for qid in &unique_qids {
             if let Some(values) = self.cache_store.get_instance_of(qid) {
@@ -257,7 +269,7 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         for batch in uncached.chunks(ENTITY_BATCH_SIZE) {
             let Ok(body) = self
                 .client
-                .get_entities_json(batch, "claims", &self.claim_languages)
+                .get_entities_json(batch, "claims", CLAIM_LANGUAGES)
             else {
                 continue;
             };
@@ -334,7 +346,7 @@ impl<C: WikidataApi> WikidataTranslator<C> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct SearchData {
     item: TranslationItem,
     qids: Vec<String>,

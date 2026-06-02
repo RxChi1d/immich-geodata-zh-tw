@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::fs;
+use std::fs::{self, File};
+use std::io::BufWriter;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -43,9 +44,9 @@ impl TranslationCacheStore {
             ));
         }
 
-        let content = fs::read_to_string(path)
+        let content = fs::read(path)
             .map_err(|error| format!("無法讀取 Wikidata cache {}：{error}", path.display()))?;
-        let root: Value = serde_json::from_str(&content)
+        let root: Value = serde_json::from_slice(&content)
             .map_err(|error| format!("Wikidata cache JSON 解析失敗 {}：{error}", path.display()))?;
         if let Some(version) = root
             .get("metadata")
@@ -225,14 +226,14 @@ impl TranslationCacheStore {
                 .and_then(|value| value.to_str())
                 .unwrap_or("json")
         ));
-        let content = serde_json::to_string_pretty(&root)
-            .map_err(|error| format!("無法序列化 Wikidata cache：{error}"))?;
-        fs::write(&tmp_path, content).map_err(|error| {
+        let file = File::create(&tmp_path).map_err(|error| {
             format!(
                 "無法寫入 Wikidata cache 暫存檔 {}：{error}",
                 tmp_path.display()
             )
         })?;
+        serde_json::to_writer_pretty(BufWriter::new(file), &root)
+            .map_err(|error| format!("無法序列化 Wikidata cache：{error}"))?;
         fs::rename(&tmp_path, path)
             .map_err(|error| format!("無法更新 Wikidata cache {}：{error}", path.display()))?;
         Ok(())

@@ -273,7 +273,8 @@ fn korea_admin2(sidonm: &str, sggnm: &str, translations: &KoreaTranslations) -> 
     }
     translations
         .admin2_by_parent
-        .get(&(sidonm.to_string(), sggnm.to_string()))
+        .get(sidonm)
+        .and_then(|by_name| by_name.get(sggnm))
         .or_else(|| translations.fallback_by_name.get(sggnm))
         .cloned()
         .unwrap_or_else(|| sggnm.to_string())
@@ -368,7 +369,9 @@ fn read_korea_stub(path: &Path) -> Result<KoreaTranslations, String> {
             if let (Some(parent), Some(name)) = (parts.next(), parts.next()) {
                 translations
                     .admin2_by_parent
-                    .insert((parent.to_string(), name.to_string()), translated.clone());
+                    .entry(parent.to_string())
+                    .or_default()
+                    .insert(name.to_string(), translated.clone());
                 translations
                     .fallback_by_name
                     .insert(name.to_string(), translated);

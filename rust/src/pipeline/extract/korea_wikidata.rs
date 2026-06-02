@@ -87,8 +87,10 @@ fn admin2_parent_qids(
         .collect::<HashMap<_, _>>();
     let mut parent_qids = HashMap::new();
     for item in admin2_dataset.items() {
-        let parent_name = item.parent_chain.last().cloned().unwrap_or_default();
-        let Some(parent_qid) = admin1_qids.get(parent_name.as_str()) else {
+        let Some(parent_name) = item.parent_chain.get(1).map(String::as_str) else {
+            continue;
+        };
+        let Some(parent_qid) = admin1_qids.get(parent_name) else {
             continue;
         };
         parent_qids.insert(item.id.clone(), parent_qid.clone());
@@ -116,7 +118,9 @@ fn korea_translations_from_results(
             let parent = item.parent_chain.last().cloned().unwrap_or_default();
             translations
                 .admin2_by_parent
-                .insert((parent, item.original_name.clone()), translated.clone());
+                .entry(parent)
+                .or_default()
+                .insert(item.original_name.clone(), translated.clone());
             translations
                 .fallback_by_name
                 .insert(item.original_name.clone(), translated);
@@ -133,7 +137,7 @@ fn korea_result_text(item: &TranslationItem, result: &TranslationResult) -> Stri
     }
 }
 
-fn korea_candidate_allowed(metadata: &WikidataCandidateMetadata) -> bool {
+fn korea_candidate_allowed(metadata: &WikidataCandidateMetadata<'_>) -> bool {
     metadata.labels.values().all(|label| {
         let lower = label.to_ascii_lowercase();
         !EXCLUDED_KEYWORDS
