@@ -137,6 +137,99 @@ fn batch_translate_ignores_wikidata_english_label_for_thailand_fallback_order() 
     assert_eq!(result.used_lang, "official_en");
 }
 
+#[test]
+fn batch_translate_rejects_candidates_when_parent_verification_fails() {
+    let item = TranslationItem::from_values(
+        AdminLevel::Admin2,
+        "Fang",
+        "en",
+        "zh-tw",
+        vec!["TH".to_string(), "Chiang Mai".to_string()],
+        HashMap::from([
+            (METADATA_OFFICIAL_EN.to_string(), "Fang".to_string()),
+            (METADATA_OFFICIAL_TH.to_string(), "ฝาง".to_string()),
+        ]),
+    )
+    .unwrap();
+    let dataset =
+        TranslationDataset::new(vec![item.clone()], AdminLevel::Admin2, "en", "zh-tw", true)
+            .unwrap();
+    let mut translator =
+        WikidataTranslator::with_client(thailand_options(), UnverifiedParentApi, None, false)
+            .unwrap();
+
+    let results = translator
+        .batch_translate(
+            &dataset,
+            BatchTranslateOptions {
+                parent_qids: HashMap::from([(item.id.clone(), "Q233588".to_string())]),
+                ..BatchTranslateOptions::default()
+            },
+        )
+        .unwrap();
+
+    let result = results.get(&item.id).unwrap();
+    assert_eq!(result.translated, "Fang");
+    assert_eq!(result.qid, None);
+    assert_eq!(result.source, "metadata");
+    assert_eq!(result.used_lang, "official_en");
+    assert!(!result.parent_verified);
+}
+
+#[test]
+fn batch_translate_ignores_unverified_cached_translation_when_parent_is_required() {
+    let item = TranslationItem::from_values(
+        AdminLevel::Admin2,
+        "Fang",
+        "en",
+        "zh-tw",
+        vec!["TH".to_string(), "Chiang Mai".to_string()],
+        HashMap::from([
+            (METADATA_OFFICIAL_EN.to_string(), "Fang".to_string()),
+            (METADATA_OFFICIAL_TH.to_string(), "ฝาง".to_string()),
+        ]),
+    )
+    .unwrap();
+    let dataset =
+        TranslationDataset::new(vec![item.clone()], AdminLevel::Admin2, "en", "zh-tw", true)
+            .unwrap();
+    let mut translator =
+        WikidataTranslator::with_client(thailand_options(), UnverifiedParentApi, None, false)
+            .unwrap();
+    translator
+        .cache_store
+        .set_translation(
+            &item,
+            &TranslationResult {
+                translated: "方".to_string(),
+                qid: Some("Q18419656".to_string()),
+                source: "wikidata".to_string(),
+                used_lang: "zh-hant".to_string(),
+                parent_verified: false,
+            },
+            Some("Q233588"),
+        )
+        .unwrap();
+
+    let results = translator
+        .batch_translate(
+            &dataset,
+            BatchTranslateOptions {
+                parent_qids: HashMap::from([(item.id.clone(), "Q233588".to_string())]),
+                ..BatchTranslateOptions::default()
+            },
+        )
+        .unwrap();
+
+    let result = results.get(&item.id).unwrap();
+    assert_eq!(result.translated, "Fang");
+    assert_eq!(result.qid, None);
+    assert_eq!(
+        translator.cache_store.get_translation(&item),
+        Some(result.clone())
+    );
+}
+
 fn thailand_item(original_name: &str, official_en: &str, official_th: &str) -> TranslationItem {
     TranslationItem::from_values(
         AdminLevel::Admin1,
@@ -241,6 +334,29 @@ impl WikidataApi for EnglishOnlyApi {
 
     fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
         Ok(r#"{"query":{"pages":{"1":{"title":""}}}}"#.to_string())
+    }
+}
+
+struct UnverifiedParentApi;
+
+impl WikidataApi for UnverifiedParentApi {
+    fn search_entities_json(&self, _: &str, _: usize) -> Result<String, String> {
+        Ok(r#"{"search":[{"id":"Q18419656"}]}"#.to_string())
+    }
+
+    fn get_entities_json(&self, _: &[String], props: &str, _: &str) -> Result<String, String> {
+        if props == "claims" {
+            return Ok(r#"{"entities":{"Q18419656":{"claims":{"P31":[]}}}}"#.to_string());
+        }
+        Ok(r#"{"entities":{"Q18419656":{"labels":{"zh-hant":{"value":"方"}}}}}"#.to_string())
+    }
+
+    fn ask_p131_json(&self, _: &str, _: &str) -> Result<String, String> {
+        Ok(r#"{"boolean":false}"#.to_string())
+    }
+
+    fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
+        Ok(r#"{"query":{"pages":{"1":{"title":"方"}}}}"#.to_string())
     }
 }
 

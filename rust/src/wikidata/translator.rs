@@ -111,9 +111,15 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         for batch in dataset.items().chunks(batch_size) {
             for item in batch {
                 if let Some(result) = self.cache_store.get_translation(item) {
-                    cache_hits += 1;
-                    results.insert(item.id.clone(), result);
-                    continue;
+                    let parent_qid = options
+                        .parent_qids
+                        .get(&item.id)
+                        .or_else(|| options.parent_qids.get(&item.original_name));
+                    if parent_qid.is_none() || result.qid.is_none() || result.parent_verified {
+                        cache_hits += 1;
+                        results.insert(item.id.clone(), result);
+                        continue;
+                    }
                 }
                 let qids = self.search_wikidata(item);
                 pending.push(SearchData {
@@ -296,7 +302,7 @@ impl<C: WikidataApi> WikidataTranslator<C> {
                 return Ok(Some(qid.clone()));
             }
         }
-        Ok(qids.first().cloned())
+        Ok(None)
     }
 
     fn verify_p131(&mut self, candidate_qid: &str, parent_qid: &str) -> Result<bool, String> {
