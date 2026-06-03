@@ -1,5 +1,7 @@
 # 泰國 COD-AB 圖資 handler 評估
 
+> **文件定位**：本文件為泰國 handler 實作**前**的研究與決策紀錄（snapshot），記錄當時的評估數據與設計選項，內容反映成文時的狀態，不隨後續實作同步更新。**現行處理邏輯請以 [`docs/zh-tw/thailand-admin-processing.md`](../zh-tw/thailand-admin-processing.md) 為準**（例如 Admin 2 的 P131 行政隸屬驗證為實作後新增，本文件未涵蓋）。
+
 ## 資料來源
 
 - 資料集：Thailand - Subnational Administrative Boundaries (`cod-ab-tha`)
