@@ -9,8 +9,31 @@ fn repo_path(relative: &str) -> PathBuf {
         .join(relative)
 }
 
+/// 確認 Wikidata 國家的 fixture stub 存在。
+///
+/// Reason: load_context 的離線保證僅靠 stub 檔案存在——stub 缺失時會
+/// 靜默改打真實 Wikidata API，把離線測試變成不穩定的網路測試。
+/// 在這裡前置斷言，讓缺檔成為明確的測試失敗而非隱性網路依賴。
+fn assert_wikidata_stub_exists(country_code: &str) {
+    let stub = repo_path("fixtures/parity/geospatial_extract/extract_sources")
+        .join(format!("{country_code}_wikidata_stub.json"));
+    assert!(
+        stub.exists(),
+        "fixture 缺少 {country_code} 的 Wikidata stub（{}），缺檔會使測試改打真實 Wikidata API",
+        stub.display()
+    );
+}
+
+#[test]
+fn wikidata_countries_have_fixture_stubs() {
+    for country_code in ["KR", "TH"] {
+        assert_wikidata_stub_exists(country_code);
+    }
+}
+
 #[test]
 fn thailand_geospatial_fixture_extracts_admin3_rows() {
+    assert_wikidata_stub_exists("TH");
     let output_dir =
         std::env::temp_dir().join(format!("immich-geodata-th-extract-{}", std::process::id()));
     let _ = fs::remove_dir_all(&output_dir);
