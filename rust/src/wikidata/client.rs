@@ -32,7 +32,12 @@ impl WikidataClientOptions {
 }
 
 pub trait WikidataApi {
-    fn search_entities_json(&self, name: &str, limit: usize) -> Result<String, String>;
+    fn search_entities_json(
+        &self,
+        name: &str,
+        language: &str,
+        limit: usize,
+    ) -> Result<String, String>;
     fn get_entities_json(
         &self,
         qids: &[String],
@@ -43,32 +48,59 @@ pub trait WikidataApi {
     fn zhwiki_convert_title_json(&self, title: &str) -> Result<String, String>;
 }
 
+/// Wikidata API 與中文維基 API 的每請求節流間隔。
+const WDACT_THROTTLE: Duration = Duration::from_millis(200);
+/// WDQS（SPARQL）端點的每請求節流間隔。
+/// Reason: WDQS 是 Wikimedia 各端點中速率限制最嚴格的，節流過短會頻繁
+/// 觸發 429 與 Retry-After 等待，整體反而更慢；比照 Python 版設定 0.8 秒。
+const WDQS_THROTTLE: Duration = Duration::from_millis(800);
+
+/// Wikidata API（wbsearchentities / wbgetentities）與中文維基 API 的請求 policy。
+pub fn wdact_request_policy() -> HttpRequestPolicy {
+    HttpRequestPolicy {
+        user_agent: "immich-geodata-zh-tw/1.0 (Rust Wikidata Translation Tool)".to_string(),
+        timeout: Duration::from_secs(30),
+        max_retries: 5,
+        throttle_after_success: WDACT_THROTTLE,
+        adaptive_throttle: true,
+        ..HttpRequestPolicy::default()
+    }
+}
+
+/// WDQS（SPARQL，P131 驗證）端點的請求 policy。
+pub fn wdqs_request_policy() -> HttpRequestPolicy {
+    HttpRequestPolicy {
+        throttle_after_success: WDQS_THROTTLE,
+        ..wdact_request_policy()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct WikidataHttpClient {
-    options: WikidataClientOptions,
     http: HttpClient,
+    wdqs_http: HttpClient,
 }
 
 impl WikidataHttpClient {
-    pub fn new(options: WikidataClientOptions) -> Result<Self, String> {
-        let policy = HttpRequestPolicy {
-            user_agent: "immich-geodata-zh-tw/1.0 (Rust Wikidata Translation Tool)".to_string(),
-            timeout: Duration::from_secs(30),
-            max_retries: 5,
-            throttle_after_success: Duration::from_millis(200),
-            ..HttpRequestPolicy::default()
-        };
+    // Reason: 搜尋語言改由呼叫端逐次指定（支援同一 translator 以多語言
+    // 搜尋），client 本身不再保存語言設定。
+    pub fn new(_options: WikidataClientOptions) -> Result<Self, String> {
         Ok(Self {
-            options,
-            http: HttpClient::new(policy)?,
+            http: HttpClient::new(wdact_request_policy())?,
+            wdqs_http: HttpClient::new(wdqs_request_policy())?,
         })
     }
 }
 
 impl WikidataApi for WikidataHttpClient {
-    fn search_entities_json(&self, name: &str, limit: usize) -> Result<String, String> {
+    fn search_entities_json(
+        &self,
+        name: &str,
+        language: &str,
+        limit: usize,
+    ) -> Result<String, String> {
         self.http
-            .get_text(search_entities_url(name, &self.options.source_lang, limit)?.as_str())
+            .get_text(search_entities_url(name, language, limit)?.as_str())
     }
 
     fn get_entities_json(
@@ -83,7 +115,7 @@ impl WikidataApi for WikidataHttpClient {
 
     fn ask_p131_json(&self, candidate_qid: &str, parent_qid: &str) -> Result<String, String> {
         let query = format!("ASK {{ wd:{candidate_qid} (wdt:P131)+ wd:{parent_qid} . }}");
-        self.http.get_text(wdqs_url(&query)?.as_str())
+        self.wdqs_http.get_text(wdqs_url(&query)?.as_str())
     }
 
     fn zhwiki_convert_title_json(&self, title: &str) -> Result<String, String> {
@@ -139,6 +171,24 @@ pub fn zhwiki_convert_title_url(title: &str) -> Result<Url, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wdqs_policy_throttles_more_aggressively_than_wdact_policy() {
+        let wdact = wdact_request_policy();
+        let wdqs = wdqs_request_policy();
+
+        assert_eq!(wdact.throttle_after_success, Duration::from_millis(200));
+        assert_eq!(wdqs.throttle_after_success, Duration::from_millis(800));
+        // Wikimedia 端點啟用 AIMD 自適應節流；其他 HttpClient 使用者
+        //（如 LocationIQ）維持預設關閉的固定節流。
+        assert!(wdact.adaptive_throttle);
+        assert!(wdqs.adaptive_throttle);
+        assert!(!HttpRequestPolicy::default().adaptive_throttle);
+        // 其餘設定（user agent、timeout、重試）兩者必須一致。
+        assert_eq!(wdqs.user_agent, wdact.user_agent);
+        assert_eq!(wdqs.timeout, wdact.timeout);
+        assert_eq!(wdqs.max_retries, wdact.max_retries);
+    }
 
     #[test]
     fn search_entities_url_matches_reference_request_contract() {

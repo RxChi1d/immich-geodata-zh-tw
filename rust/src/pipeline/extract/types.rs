@@ -5,6 +5,7 @@ pub(super) const WGS84_EPSG: i32 = 4326;
 pub(super) const TAIWAN_TWD97_EPSG: i32 = 3826;
 pub(super) const JAPAN_ALBERS_PROJ4: &str = "+proj=aea +lat_1=30 +lat_2=45 +lat_0=37.5 +lon_0=138 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs";
 pub(super) const KOREA_ALBERS_PROJ4: &str = "+proj=aea +lat_1=33 +lat_2=43 +lat_0=37 +lon_0=127.5 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs";
+pub(super) const THAILAND_ALBERS_PROJ4: &str = "+proj=aea +lat_1=5 +lat_2=21 +lat_0=13 +lon_0=101 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs";
 
 pub(super) type Coordinate = (f64, f64);
 pub(super) type LinearRing = Vec<Coordinate>;
@@ -73,6 +74,14 @@ pub(super) enum FeatureAttributes {
         sggnm: Option<String>,
         adm_nm: Option<String>,
     },
+    Thailand {
+        adm1_name: Option<String>,
+        adm1_name1: Option<String>,
+        adm2_name: Option<String>,
+        adm2_name1: Option<String>,
+        adm3_name: Option<String>,
+        adm3_name1: Option<String>,
+    },
 }
 
 impl FeatureAttributes {
@@ -93,6 +102,14 @@ impl FeatureAttributes {
                 sidonm: None,
                 sggnm: None,
                 adm_nm: None,
+            },
+            Country::Thailand => Self::Thailand {
+                adm1_name: None,
+                adm1_name1: None,
+                adm2_name: None,
+                adm2_name1: None,
+                adm3_name: None,
+                adm3_name1: None,
             },
         }
     }
@@ -129,6 +146,22 @@ impl FeatureAttributes {
                 "sidonm" => *sidonm = Some(value),
                 "sggnm" => *sggnm = Some(value),
                 "adm_nm" => *adm_nm = Some(value),
+                _ => {}
+            },
+            Self::Thailand {
+                adm1_name,
+                adm1_name1,
+                adm2_name,
+                adm2_name1,
+                adm3_name,
+                adm3_name1,
+            } => match key {
+                "adm1_name" => *adm1_name = Some(value),
+                "adm1_name1" => *adm1_name1 = Some(value),
+                "adm2_name" => *adm2_name = Some(value),
+                "adm2_name1" => *adm2_name1 = Some(value),
+                "adm3_name" => *adm3_name = Some(value),
+                "adm3_name1" => *adm3_name1 = Some(value),
                 _ => {}
             },
         }
@@ -168,12 +201,32 @@ impl FeatureAttributes {
                 "adm_nm" => adm_nm.as_deref(),
                 _ => None,
             },
+            Self::Thailand {
+                adm1_name,
+                adm1_name1,
+                adm2_name,
+                adm2_name1,
+                adm3_name,
+                adm3_name1,
+            } => match key {
+                "adm1_name" => adm1_name.as_deref(),
+                "adm1_name1" => adm1_name1.as_deref(),
+                "adm2_name" => adm2_name.as_deref(),
+                "adm2_name1" => adm2_name1.as_deref(),
+                "adm3_name" => adm3_name.as_deref(),
+                "adm3_name1" => adm3_name1.as_deref(),
+                _ => None,
+            },
         }
     }
 }
 
+/// 各國共用的 Wikidata 翻譯查詢表。
+///
+/// `fallback_by_name` 僅保留「全國無歧義」的名稱（同名不同譯的項目會被
+/// 剔除），避免跨上層行政區的同名單位拿到錯誤翻譯。
 #[derive(Clone, Debug, Default)]
-pub(super) struct KoreaTranslations {
+pub(super) struct WikidataTranslations {
     pub(super) admin1_by_name: HashMap<String, String>,
     pub(super) admin2_by_parent: HashMap<String, HashMap<String, String>>,
     pub(super) fallback_by_name: HashMap<String, String>,
@@ -181,12 +234,14 @@ pub(super) struct KoreaTranslations {
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct ExtractContext {
-    pub(super) korea_translations: KoreaTranslations,
+    pub(super) korea_translations: WikidataTranslations,
+    pub(super) thailand_translations: WikidataTranslations,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum CentroidPipeline {
     ProjectedEpsg(i32),
+    ProjectedProj4(&'static str),
     DynamicUtm(&'static str),
 }
 
@@ -202,14 +257,27 @@ pub(super) enum Country {
     Taiwan,
     Japan,
     Korea,
+    Thailand,
 }
 
 impl Country {
+    /// 所有擁有 extract handler 的國家（依代碼字母序）。
+    ///
+    /// Reason: 這是「哪些國家有 handler」的單一事實來源；CLI 的
+    /// handler 國家清單由此導出，新增國家時不需（也不能）另行同步。
+    pub(super) const ALL: [Country; 4] = [
+        Country::Japan,
+        Country::Korea,
+        Country::Thailand,
+        Country::Taiwan,
+    ];
+
     pub(super) fn parse(code: &str) -> Result<Self, String> {
         match code {
             "TW" => Ok(Self::Taiwan),
             "JP" => Ok(Self::Japan),
             "KR" => Ok(Self::Korea),
+            "TH" => Ok(Self::Thailand),
             other => Err(format!("extract 尚未支援國家：{other}")),
         }
     }
@@ -219,6 +287,7 @@ impl Country {
             Self::Taiwan => "TW",
             Self::Japan => "JP",
             Self::Korea => "KR",
+            Self::Thailand => "TH",
         }
     }
 
@@ -227,6 +296,10 @@ impl Country {
             Self::Taiwan => CentroidPipeline::ProjectedEpsg(TAIWAN_TWD97_EPSG),
             Self::Japan => CentroidPipeline::DynamicUtm(JAPAN_ALBERS_PROJ4),
             Self::Korea => CentroidPipeline::DynamicUtm(KOREA_ALBERS_PROJ4),
+            // Reason: COD-AB TH 的官方 center_lat/center_lon 是代表點，
+            //         但 Immich 以最近單點查詢行政區；實測 polygon centroid
+            //         命中率較高，且 dynamic UTM 對泰國沒有實質改善。
+            Self::Thailand => CentroidPipeline::ProjectedProj4(THAILAND_ALBERS_PROJ4),
         }
     }
 
@@ -235,17 +308,30 @@ impl Country {
             Self::Taiwan => &["COUNTYNAME", "TOWNNAME", "VILLNAME"],
             Self::Japan => &["N03_001", "N03_003", "N03_004", "N03_005"],
             Self::Korea => &["sidonm", "sggnm", "adm_nm"],
+            Self::Thailand => &[
+                "adm1_name",
+                "adm1_name1",
+                "adm2_name",
+                "adm2_name1",
+                "adm3_name",
+                "adm3_name1",
+            ],
         }
     }
 }
 
-pub(super) fn korea_stub_source(source_path: &std::path::Path) -> Option<PathBuf> {
+/// 尋找與來源檔同目錄的 `{CC}_wikidata_stub.json`（fixture/離線測試用）。
+pub(super) fn wikidata_stub_source(
+    source_path: &std::path::Path,
+    country_code: &str,
+) -> Option<PathBuf> {
     source_path
         .parent()
-        .map(|parent| parent.join("KR_wikidata_stub.json"))
+        .map(|parent| parent.join(format!("{country_code}_wikidata_stub.json")))
         .filter(|path| path.exists())
 }
 
-pub(super) fn korea_translation_cache_path() -> PathBuf {
-    std::path::Path::new("geoname_data").join("KR_wikidata_cache.json")
+/// 該國 Wikidata 翻譯快取的標準路徑。
+pub(super) fn wikidata_cache_path(country_code: &str) -> PathBuf {
+    std::path::Path::new("geoname_data").join(format!("{country_code}_wikidata_cache.json"))
 }

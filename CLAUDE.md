@@ -234,8 +234,17 @@ cargo run --release --manifest-path rust/Cargo.toml -- release \
    - `geoname_id` 從 `92_000_000` 起算。
    - 填寫正確時區與 `country_code`。
    - 輸出需符合 `CITIES_SCHEMA`。
-3. 補上 Rust fixture、單元測試與真實資料驗證。
-4. 執行 Rust gates：
+3. 若該國使用 Wikidata 翻譯，遵循 P131 parent 驗證標準：
+   - 人工查證該國的 Wikidata QID（以即時查詢確認 label），寫入 handler
+     常數並附中文名註解；QID 為 Wikidata 永久識別碼，不做執行期查詢。
+   - 建構 `TranslationDataset` 時必填 `country_qid`——admin2 對 admin1
+     的 QID 驗證、admin1 對國家 QID 驗證，逐級裁決同名歧義。
+   - 推行前以 WDQS 驗證該國全部 admin1 可通過 `(wdt:P131)+ <國家QID>`，
+     避免標準規則使既有正確翻譯回退。
+   - 搜尋語言依該層級在 Wikidata 上的鑑別度選擇（參考：KR 用韓文原文、
+     TH 用英文為主＋泰文後備），以實際抽樣搜尋驗證後決定。
+4. 補上 Rust fixture、單元測試與真實資料驗證。
+5. 執行 Rust gates：
    `cargo fmt --check`、`cargo clippy -- -D warnings`、`cargo test`。
 
 Rust 版本目前採用明確註冊/dispatch，新增國家時需同步更新 CLI country parsing 與

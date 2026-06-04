@@ -160,6 +160,10 @@ pub fn country_profile(country_code: &str) -> Result<CountryProfile, String> {
             country_name: "南韓",
             timezone: "Asia/Seoul",
         }),
+        "TH" => Ok(CountryProfile {
+            country_name: "泰國",
+            timezone: "Asia/Bangkok",
+        }),
         other => Err(format!("transform_cities_schema 尚未支援國家：{other}")),
     }
 }

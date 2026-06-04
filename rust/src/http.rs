@@ -1,3 +1,4 @@
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -13,6 +14,61 @@ pub struct HttpRequestPolicy {
     pub base_backoff: Duration,
     pub throttle_after_success: Duration,
     pub sleep_between_retries: bool,
+    /// 啟用 AIMD 自適應節流（429 倍增、連續成功回落）。
+    ///
+    /// Reason: AIMD 參數是針對 Wikimedia 的滾動視窗配額調校的；
+    /// LocationIQ 等以 qps 精確計費的端點應維持固定節流，
+    /// 避免一次 429 讓吞吐長期低於付費方案額度。
+    pub adaptive_throttle: bool,
+}
+
+/// 自適應節流上限，避免 429 連發時節流無限增長。
+const ADAPTIVE_THROTTLE_MAX: Duration = Duration::from_secs(8);
+/// 連續成功達此次數後，節流向基準值回落一半。
+const ADAPTIVE_DECAY_SUCCESSES: u32 = 25;
+
+/// 自適應節流狀態：429 時倍增節流、連續成功後緩慢回落。
+///
+/// Reason: Wikimedia API 的速率限制是以 IP 計的滾動視窗配額，固定
+/// delay 無法保證不觸頂；改為 AIMD（加性回落、乘性增長）讓請求
+/// 間隔自動收斂到伺服器實際允許的速率。
+#[derive(Debug)]
+struct AdaptiveThrottle {
+    base: Duration,
+    current: Duration,
+    consecutive_successes: u32,
+}
+
+impl AdaptiveThrottle {
+    fn new(base: Duration) -> Self {
+        Self {
+            base,
+            current: base,
+            consecutive_successes: 0,
+        }
+    }
+
+    /// 成功後回傳本次應等待的節流時間，並在連續成功後逐步回落。
+    fn on_success(&mut self) -> Duration {
+        let delay = self.current;
+        self.consecutive_successes += 1;
+        if self.consecutive_successes >= ADAPTIVE_DECAY_SUCCESSES && self.current > self.base {
+            self.current = self.base.max(self.current / 2);
+            self.consecutive_successes = 0;
+        }
+        delay
+    }
+
+    /// 收到 429 時倍增節流（至少 1 秒，最多 ADAPTIVE_THROTTLE_MAX）。
+    fn on_rate_limited(&mut self) {
+        self.consecutive_successes = 0;
+        let doubled = self.current.saturating_mul(2).max(Duration::from_secs(1));
+        self.current = doubled.min(ADAPTIVE_THROTTLE_MAX);
+    }
+
+    fn current(&self) -> Duration {
+        self.current
+    }
 }
 
 impl Default for HttpRequestPolicy {
@@ -24,6 +80,7 @@ impl Default for HttpRequestPolicy {
             base_backoff: Duration::from_secs(2),
             throttle_after_success: Duration::ZERO,
             sleep_between_retries: true,
+            adaptive_throttle: false,
         }
     }
 }
@@ -32,6 +89,9 @@ impl Default for HttpRequestPolicy {
 pub struct HttpClient {
     client: Client,
     policy: HttpRequestPolicy,
+    // Reason: 以 Arc 共享，clone 出去的 client 仍回報到同一份節流狀態，
+    // 避免多份節流各自為政、合計超過伺服器允許的速率。
+    throttle: Arc<Mutex<AdaptiveThrottle>>,
 }
 
 impl HttpClient {
@@ -41,7 +101,14 @@ impl HttpClient {
             .timeout(policy.timeout)
             .build()
             .map_err(|error| format!("無法建立 HTTP client：{error}"))?;
-        Ok(Self { client, policy })
+        let throttle = Arc::new(Mutex::new(AdaptiveThrottle::new(
+            policy.throttle_after_success,
+        )));
+        Ok(Self {
+            client,
+            policy,
+            throttle,
+        })
     }
 
     pub fn with_default_policy() -> Result<Self, String> {
@@ -74,8 +141,16 @@ impl HttpClient {
                 .send()
             {
                 Ok(response) if response.status().is_success() => {
-                    if !self.policy.throttle_after_success.is_zero() {
-                        thread::sleep(self.policy.throttle_after_success);
+                    let delay = if self.policy.adaptive_throttle {
+                        self.throttle
+                            .lock()
+                            .map(|mut throttle| throttle.on_success())
+                            .unwrap_or(self.policy.throttle_after_success)
+                    } else {
+                        self.policy.throttle_after_success
+                    };
+                    if !delay.is_zero() {
+                        thread::sleep(delay);
                     }
                     return Ok(response);
                 }
@@ -90,6 +165,21 @@ impl HttpClient {
                         .and_then(|value| value.to_str().ok())
                         .and_then(|value| value.parse::<u64>().ok())
                         .map(Duration::from_secs);
+                    if self.policy.adaptive_throttle
+                        && status == StatusCode::TOO_MANY_REQUESTS
+                        && let Ok(mut throttle) = self.throttle.lock()
+                    {
+                        throttle.on_rate_limited();
+                        // Reason: 只記錄狀態與等待時間，不含 URL，避免洩漏 query string 中的 API key。
+                        eprintln!(
+                            "http_retry status={status} attempt={attempt} retry_after={retry_after:?} throttle={:?}",
+                            throttle.current()
+                        );
+                    } else {
+                        eprintln!(
+                            "http_retry status={status} attempt={attempt} retry_after={retry_after:?}"
+                        );
+                    }
                     last_error = Some(format!("HTTP 請求暫時失敗 status={status} url={url}"));
                     self.sleep_before_retry(attempt, retry_after);
                 }
@@ -136,6 +226,52 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn adaptive_throttle_doubles_on_429_and_caps_at_max() {
+        let mut throttle = AdaptiveThrottle::new(Duration::from_millis(200));
+
+        throttle.on_rate_limited();
+        // 第一次 429：倍增後低於 1 秒，提升至下限 1 秒。
+        assert_eq!(throttle.current(), Duration::from_secs(1));
+        for _ in 0..10 {
+            throttle.on_rate_limited();
+        }
+        // 連續 429 後收斂在上限。
+        assert_eq!(throttle.current(), ADAPTIVE_THROTTLE_MAX);
+    }
+
+    #[test]
+    fn adaptive_throttle_decays_back_to_base_after_consecutive_successes() {
+        let mut throttle = AdaptiveThrottle::new(Duration::from_millis(200));
+        throttle.on_rate_limited();
+        assert_eq!(throttle.current(), Duration::from_secs(1));
+
+        for _ in 0..ADAPTIVE_DECAY_SUCCESSES {
+            throttle.on_success();
+        }
+        assert_eq!(throttle.current(), Duration::from_millis(500));
+
+        // 再持續成功，最終回落到基準值且不低於基準。
+        for _ in 0..(ADAPTIVE_DECAY_SUCCESSES * 3) {
+            throttle.on_success();
+        }
+        assert_eq!(throttle.current(), Duration::from_millis(200));
+    }
+
+    #[test]
+    fn adaptive_throttle_resets_success_streak_on_429() {
+        let mut throttle = AdaptiveThrottle::new(Duration::from_millis(200));
+        throttle.on_rate_limited();
+        for _ in 0..(ADAPTIVE_DECAY_SUCCESSES - 1) {
+            throttle.on_success();
+        }
+        // 一次 429 重置成功計數並再倍增。
+        throttle.on_rate_limited();
+        assert_eq!(throttle.current(), Duration::from_secs(2));
+        throttle.on_success();
+        assert_eq!(throttle.current(), Duration::from_secs(2));
+    }
 
     #[test]
     fn retries_429_then_returns_body() {

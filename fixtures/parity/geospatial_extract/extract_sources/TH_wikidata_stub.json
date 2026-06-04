@@ -1,0 +1,22 @@
+{
+  "translations": {
+    "admin_1/TH/Bangkok": {
+      "translated": "曼谷"
+    },
+    "admin_1/TH/Chiang Mai": {
+      "translated": "清邁"
+    },
+    "admin_1/TH/Satun": {
+      "translated": "沙敦"
+    },
+    "admin_2/TH/Bangkok/Phra Nakhon": {
+      "translated": "帕那空"
+    },
+    "admin_2/TH/Chiang Mai/Fang": {
+      "translated": "芳縣"
+    },
+    "admin_2/TH/Satun/Mueang Satun": {
+      "translated": "沙敦府治縣"
+    }
+  }
+}

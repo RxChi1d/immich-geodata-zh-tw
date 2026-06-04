@@ -18,6 +18,9 @@ pub(super) fn apply_country_centroids(
         CentroidPipeline::ProjectedEpsg(epsg) => {
             calculate_centroids_projected(features, source_crs, &epsg_crs(epsg))?
         }
+        CentroidPipeline::ProjectedProj4(proj4) => {
+            calculate_centroids_projected(features, source_crs, proj4)?
+        }
         CentroidPipeline::DynamicUtm(albers_proj4) => {
             calculate_centroids_utm(features, source_crs, albers_proj4)?
         }

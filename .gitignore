@@ -25,6 +25,9 @@ geoname_data/
 notes/
 .spec-workflow/
 
+# Agentic tooling artifacts（如 superpowers 產生的施工計畫，屬一次性腳手架）
+docs/superpowers/
+
 # Large data files
 *.zip
 *.txt.gz
