@@ -33,6 +33,7 @@
 ### Changed
 - **資料處理引擎全面遷移至 Rust**：正式發布流程改由 Rust pipeline 產生，提升處理效能與發布可重現性；Python 實作正式退場。
 - **南韓地理資料更新**：同步 admdongkor 最新行政區界資料。
+- **Release 資產檔名變更**：Rust binary 由 `immich-geodata-migration` 更名為 `immich-geodata`，Release 下載資產檔名同步更新為 `immich-geodata-x86_64-unknown-linux-gnu`。
 
 ### Fixed
 - **地名翻譯正確性強化**：所有 Wikidata 翻譯逐級驗證行政隸屬關係（二級對一級、一級對國家），杜絕同名地名錯配（例如泰國難府不再被無關的同拼寫條目干擾）；跨行政區同名單位不會再取得錯誤翻譯，無法確認時保守顯示官方名稱。
