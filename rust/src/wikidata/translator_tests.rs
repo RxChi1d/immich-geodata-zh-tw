@@ -244,6 +244,90 @@ fn batch_translate_rejects_candidates_when_parent_verification_fails() {
 }
 
 #[test]
+fn verify_p131_transient_error_is_not_cached() {
+    let item = TranslationItem::from_values(
+        AdminLevel::Admin2,
+        "Ban Luang",
+        "en",
+        "zh-tw",
+        vec!["TH".to_string(), "Nan".to_string()],
+        HashMap::from([
+            (METADATA_OFFICIAL_EN.to_string(), "Ban Luang".to_string()),
+            (METADATA_OFFICIAL_TH.to_string(), "บ้านหลวง".to_string()),
+        ]),
+    )
+    .unwrap();
+    let dataset = TranslationDataset::new(
+        vec![item.clone()],
+        AdminLevel::Admin2,
+        "Q869",
+        "en",
+        "zh-tw",
+        true,
+    )
+    .unwrap();
+    let mut translator =
+        WikidataTranslator::with_client(thailand_options(), ErroringP131Api, None, false).unwrap();
+
+    let results = translator
+        .batch_translate(
+            &dataset,
+            BatchTranslateOptions {
+                parent_qids: HashMap::from([(item.id.clone(), "Q244698".to_string())]),
+                ..BatchTranslateOptions::default()
+            },
+        )
+        .unwrap();
+
+    // 本次判斷保守回退⋯⋯
+    let result = results.get(&item.id).unwrap();
+    assert_eq!(result.qid, None);
+    assert!(!result.parent_verified);
+    // ⋯⋯但暫時性錯誤不可寫入 p131 快取，下次執行必須重查。
+    assert_eq!(translator.cache_store.get_p131("Q475124", "Q244698"), None);
+}
+
+#[test]
+fn batch_translate_falls_back_to_original_name_without_metadata() {
+    // KR 形態：item 不帶 official metadata；P131 驗證失敗時
+    // 保守輸出來源原文（韓文），不盲選候選。
+    let item = TranslationItem::from_values(
+        AdminLevel::Admin1,
+        "세종특별자치시",
+        "ko",
+        "zh-tw",
+        vec!["KR".to_string()],
+        HashMap::new(),
+    )
+    .unwrap();
+    let dataset = TranslationDataset::new(
+        vec![item.clone()],
+        AdminLevel::Admin1,
+        "Q884",
+        "ko",
+        "zh-tw",
+        true,
+    )
+    .unwrap();
+    let mut translator = WikidataTranslator::with_client(
+        WikidataClientOptions::new("ko", "zh-tw"),
+        UnverifiedParentApi,
+        None,
+        false,
+    )
+    .unwrap();
+
+    let results = translator
+        .batch_translate(&dataset, BatchTranslateOptions::default())
+        .unwrap();
+
+    let result = results.get(&item.id).unwrap();
+    assert_eq!(result.translated, "세종특별자치시");
+    assert_eq!(result.qid, None);
+    assert!(!result.parent_verified);
+}
+
+#[test]
 fn batch_translate_ignores_unverified_cached_translation_when_parent_is_required() {
     let item = TranslationItem::from_values(
         AdminLevel::Admin2,
@@ -621,6 +705,30 @@ impl WikidataApi for AssertThaiSearchApi {
 
     fn ask_p131_json(&self, _: &str, _: &str) -> Result<String, String> {
         Ok(r#"{"boolean":false}"#.to_string())
+    }
+
+    fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
+        Ok(r#"{"query":{"pages":{"1":{"title":""}}}}"#.to_string())
+    }
+}
+
+struct ErroringP131Api;
+
+impl WikidataApi for ErroringP131Api {
+    fn search_entities_json(&self, _: &str, _: &str, _: usize) -> Result<String, String> {
+        Ok(r#"{"search":[{"id":"Q475124"}]}"#.to_string())
+    }
+
+    fn get_entities_json(&self, _: &[String], props: &str, _: &str) -> Result<String, String> {
+        if props == "claims" {
+            return Ok(r#"{"entities":{"Q475124":{"claims":{"P31":[]}}}}"#.to_string());
+        }
+        Ok(r#"{"entities":{"Q475124":{"labels":{"zh-hant":{"value":"班鑾縣"}}}}}"#.to_string())
+    }
+
+    fn ask_p131_json(&self, _: &str, _: &str) -> Result<String, String> {
+        // 模擬 WDQS 暫時性失敗（逾時／重試耗盡）。
+        Err("HTTP 請求失敗 status=504".to_string())
     }
 
     fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {

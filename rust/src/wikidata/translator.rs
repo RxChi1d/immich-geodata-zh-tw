@@ -309,12 +309,17 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         if let Some(value) = self.cache_store.get_p131(candidate_qid, parent_qid) {
             return Ok(value);
         }
-        let value = self
+        // Reason: 暫時性失敗（請求錯誤、回應解析失敗）只影響本次判斷，
+        // 不可寫入快取——否則一次 WDQS 逾時會讓「false」黏著在快取中，
+        // 之後每次執行都直接讀到錯誤結論，永不重查。
+        let Some(value) = self
             .client
             .ask_p131_json(candidate_qid, parent_qid)
             .ok()
             .and_then(|json| parse_p131_answer(&json).ok())
-            .unwrap_or(false);
+        else {
+            return Ok(false);
+        };
         self.cache_store
             .set_p131(candidate_qid, parent_qid, value)?;
         Ok(value)
