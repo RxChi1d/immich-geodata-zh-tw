@@ -2,11 +2,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use immich_geodata_migration::pipeline::polars_table::{
+use immich_geodata::pipeline::polars_table::{
     ADMIN1_COLUMNS, read_cities_dataframe, read_cities_rows, read_string_rows, write_cities_rows,
     write_geodata_rows_with_header, write_string_rows,
 };
-use immich_geodata_migration::pipeline::table::{
+use immich_geodata::pipeline::table::{
     CITIES_COLUMNS, GEODATA_COLUMNS, read_delimited, write_delimited,
 };
 use polars::prelude::DataType;

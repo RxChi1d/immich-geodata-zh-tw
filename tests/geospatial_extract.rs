@@ -1,5 +1,5 @@
-use immich_geodata_migration::cli::RunOptions;
-use immich_geodata_migration::pipeline::extract;
+use immich_geodata::cli::RunOptions;
+use immich_geodata::pipeline::extract;
 use std::fs;
 use std::path::PathBuf;
 

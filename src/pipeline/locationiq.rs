@@ -67,7 +67,7 @@ impl LocationiqHttpClient {
     pub fn new(api_key: String, qps: u32) -> Result<Self, String> {
         let delay_ms = 1020_u64 / u64::from(qps.max(1));
         let policy = HttpRequestPolicy {
-            user_agent: "immich-geodata-zh-tw-rust/0.1 LocationIQ".to_string(),
+            user_agent: "immich-geodata/0.1 LocationIQ".to_string(),
             throttle_after_success: Duration::from_millis(delay_ms),
             ..HttpRequestPolicy::default()
         };

@@ -1,5 +1,5 @@
 [package]
-name = "immich-geodata-migration"
+name = "immich-geodata"
 version = "0.1.0"
 edition = "2024"
 
@@ -20,9 +20,9 @@ tar = "0.4"
 zip = { version = "2.4", default-features = false, features = ["deflate"] }
 
 [lib]
-name = "immich_geodata_migration"
+name = "immich_geodata"
 path = "src/lib.rs"
 
 [[bin]]
-name = "immich-geodata-migration"
+name = "immich-geodata"
 path = "src/main.rs"

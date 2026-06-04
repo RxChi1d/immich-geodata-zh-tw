@@ -1,6 +1,6 @@
-use immich_geodata_migration::observability::{DependencyLogger, ProgressReporter};
-use immich_geodata_migration::pipeline::locationiq::{LocationiqHttpClient, build_locationiq_url};
-use immich_geodata_migration::unicode_han::{includes_han, is_han, is_han_name};
+use immich_geodata::observability::{DependencyLogger, ProgressReporter};
+use immich_geodata::pipeline::locationiq::{LocationiqHttpClient, build_locationiq_url};
+use immich_geodata::unicode_han::{includes_han, is_han, is_han_name};
 
 #[test]
 fn unicode_han_matches_regex_script_extensions_cases() {

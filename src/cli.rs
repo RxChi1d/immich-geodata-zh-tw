@@ -7,15 +7,15 @@ use crate::pipeline::{self, Stage};
 use crate::pipeline::{admin1_load, cities500_load, extract, locationiq, pack, translate};
 
 const HELP: &str = "\
-immich-geodata-migration
+immich-geodata
 
 USAGE:
-  immich-geodata-migration help
-  immich-geodata-migration list-stages
-  immich-geodata-migration run-stage --stage <stage> [--fixture <name>] [--fixtures-dir <path>] [--output-dir <path>]
-  immich-geodata-migration full-pipeline [--fixture <name>] [--fixtures-dir <path>] [--output-dir <path>]
-  immich-geodata-migration prepare [--country-code <cc...>] [--data-folder <path>] [--update]
-  immich-geodata-migration <cleanup|prepare|extract|enhance|locationiq|translate|pack|release> [--dry-run|--fixture-mode|--profile] [options]
+  immich-geodata help
+  immich-geodata list-stages
+  immich-geodata run-stage --stage <stage> [--fixture <name>] [--fixtures-dir <path>] [--output-dir <path>]
+  immich-geodata full-pipeline [--fixture <name>] [--fixtures-dir <path>] [--output-dir <path>]
+  immich-geodata prepare [--country-code <cc...>] [--data-folder <path>] [--update]
+  immich-geodata <cleanup|prepare|extract|enhance|locationiq|translate|pack|release> [--dry-run|--fixture-mode|--profile] [options]
 ";
 
 #[derive(Debug, Clone, PartialEq, Eq)]

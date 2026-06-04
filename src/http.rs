@@ -74,7 +74,7 @@ impl AdaptiveThrottle {
 impl Default for HttpRequestPolicy {
     fn default() -> Self {
         Self {
-            user_agent: "immich-geodata-zh-tw-rust/0.1".to_string(),
+            user_agent: "immich-geodata/0.1".to_string(),
             timeout: Duration::from_secs(30),
             max_retries: 5,
             base_backoff: Duration::from_secs(2),
