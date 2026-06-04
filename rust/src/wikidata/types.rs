@@ -100,6 +100,12 @@ impl TranslationResult {
 pub struct TranslationDataset {
     items: Vec<TranslationItem>,
     pub level: AdminLevel,
+    /// 國家的 Wikidata QID。
+    ///
+    /// Reason: P131 parent 驗證是 translator 的標準規則——admin2 對
+    /// admin1 驗證、admin1（或缺少明確 parent 的 item）至少對國家
+    /// 驗證。country_qid 為必填，確保未來新增國家時無法略過驗證。
+    pub country_qid: String,
     pub source_lang: String,
     pub target_lang: String,
     pub deduplicated: bool,
@@ -109,6 +115,7 @@ impl TranslationDataset {
     pub fn new(
         items: Vec<TranslationItem>,
         level: AdminLevel,
+        country_qid: impl Into<String>,
         source_lang: impl Into<String>,
         target_lang: impl Into<String>,
         deduplicated: bool,
@@ -116,9 +123,14 @@ impl TranslationDataset {
         if items.iter().any(|item| item.level != level) {
             return Err("所有 TranslationItem 必須擁有相同的 level".to_string());
         }
+        let country_qid = country_qid.into();
+        if country_qid.is_empty() {
+            return Err("country_qid 不可為空（P131 parent 驗證為標準規則）".to_string());
+        }
         Ok(Self {
             items,
             level,
+            country_qid,
             source_lang: source_lang.into(),
             target_lang: target_lang.into(),
             deduplicated,
@@ -141,6 +153,7 @@ impl TranslationDataset {
 #[derive(Clone, Debug)]
 pub struct TranslationDatasetBuilder {
     country_code: String,
+    country_qid: String,
     source_lang: String,
     target_lang: String,
 }
@@ -148,6 +161,7 @@ pub struct TranslationDatasetBuilder {
 impl TranslationDatasetBuilder {
     pub fn new(
         country_code: impl AsRef<str>,
+        country_qid: impl Into<String>,
         source_lang: impl Into<String>,
         target_lang: impl Into<String>,
     ) -> Result<Self, String> {
@@ -155,8 +169,13 @@ impl TranslationDatasetBuilder {
         if country_code.is_empty() {
             return Err("country_code 不可為空".to_string());
         }
+        let country_qid = country_qid.into();
+        if country_qid.is_empty() {
+            return Err("country_qid 不可為空（P131 parent 驗證為標準規則）".to_string());
+        }
         Ok(Self {
             country_code,
+            country_qid,
             source_lang: source_lang.into(),
             target_lang: target_lang.into(),
         })
@@ -188,6 +207,7 @@ impl TranslationDatasetBuilder {
         TranslationDataset::new(
             items,
             AdminLevel::Admin1,
+            self.country_qid.clone(),
             self.source_lang.clone(),
             self.target_lang.clone(),
             true,
@@ -227,6 +247,7 @@ impl TranslationDatasetBuilder {
         TranslationDataset::new(
             items,
             AdminLevel::Admin2,
+            self.country_qid.clone(),
             self.source_lang.clone(),
             self.target_lang.clone(),
             deduplicate,
@@ -259,7 +280,7 @@ mod tests {
 
     #[test]
     fn builder_deduplicates_admin2_by_parent_context() {
-        let builder = TranslationDatasetBuilder::new("KR", "ko", "zh-tw").unwrap();
+        let builder = TranslationDatasetBuilder::new("KR", "Q884", "ko", "zh-tw").unwrap();
         let dataset = builder
             .build_admin2_pairs(
                 [

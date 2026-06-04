@@ -17,9 +17,15 @@ fn batch_translate_filters_candidates_verifies_parent_and_writes_cache() {
         HashMap::new(),
     )
     .unwrap();
-    let dataset =
-        TranslationDataset::new(vec![item.clone()], AdminLevel::Admin2, "ko", "zh-tw", true)
-            .unwrap();
+    let dataset = TranslationDataset::new(
+        vec![item.clone()],
+        AdminLevel::Admin2,
+        "Q884",
+        "ko",
+        "zh-tw",
+        true,
+    )
+    .unwrap();
     let mut translator = test_translator();
     let filter = |_: &str, metadata: &WikidataCandidateMetadata| {
         !metadata
@@ -49,6 +55,41 @@ fn batch_translate_filters_candidates_verifies_parent_and_writes_cache() {
 }
 
 #[test]
+fn batch_translate_verifies_admin1_against_country_qid_by_default() {
+    // 標準規則：admin1 未指定明確 parent 時，以 dataset.country_qid 做
+    // P131 驗證，不存在「盲取第一個搜尋結果」的路徑。
+    let item = TranslationItem::from_values(
+        AdminLevel::Admin1,
+        "중구",
+        "ko",
+        "zh-tw",
+        vec!["KR".to_string()],
+        HashMap::new(),
+    )
+    .unwrap();
+    let dataset = TranslationDataset::new(
+        vec![item.clone()],
+        AdminLevel::Admin1,
+        "Q884",
+        "ko",
+        "zh-tw",
+        true,
+    )
+    .unwrap();
+    let mut translator = test_translator();
+
+    let results = translator
+        .batch_translate(&dataset, BatchTranslateOptions::default())
+        .unwrap();
+
+    // MockApi 搜尋回傳 [Q1, Q2]，僅 Q2 通過 P131——必須選 Q2 而非第一名。
+    let result = results.get(&item.id).unwrap();
+    assert_eq!(result.qid.as_deref(), Some("Q2"));
+    assert_eq!(result.translated, "中區");
+    assert!(result.parent_verified);
+}
+
+#[test]
 fn parse_zhwiki_converted_title_prefers_converted_value() {
     let body = r#"{"query":{"converted":[{"from":"重庆市","to":"重慶市"}]}}"#;
 
@@ -69,9 +110,15 @@ fn batch_translate_returns_cached_results_without_network_calls() {
         HashMap::new(),
     )
     .unwrap();
-    let dataset =
-        TranslationDataset::new(vec![item.clone()], AdminLevel::Admin1, "ko", "zh-tw", true)
-            .unwrap();
+    let dataset = TranslationDataset::new(
+        vec![item.clone()],
+        AdminLevel::Admin1,
+        "Q884",
+        "ko",
+        "zh-tw",
+        true,
+    )
+    .unwrap();
     let mut translator = WikidataTranslator::with_client(
         WikidataClientOptions::new("ko", "zh-tw"),
         PanicApi,
@@ -79,16 +126,18 @@ fn batch_translate_returns_cached_results_without_network_calls() {
         false,
     )
     .unwrap();
+    // 標準規則下 admin1 的 parent 上下文是國家 QID；快取需為已驗證
+    // 且同上下文才會被信任。
     let cached = TranslationResult {
         translated: "首爾市".to_string(),
         qid: Some("Q8684".to_string()),
         source: "cache".to_string(),
         used_lang: "zh-tw".to_string(),
-        parent_verified: false,
+        parent_verified: true,
     };
     translator
         .cache_store
-        .set_translation(&item, &cached, None)
+        .set_translation(&item, &cached, Some("Q884"))
         .unwrap();
 
     let results = translator
@@ -101,9 +150,15 @@ fn batch_translate_returns_cached_results_without_network_calls() {
 #[test]
 fn batch_translate_uses_official_metadata_when_search_has_no_match() {
     let item = thailand_item("Bangkok", "Bangkok", "กรุงเทพมหานคร");
-    let dataset =
-        TranslationDataset::new(vec![item.clone()], AdminLevel::Admin1, "en", "zh-tw", true)
-            .unwrap();
+    let dataset = TranslationDataset::new(
+        vec![item.clone()],
+        AdminLevel::Admin1,
+        "Q869",
+        "en",
+        "zh-tw",
+        true,
+    )
+    .unwrap();
     let mut translator =
         WikidataTranslator::with_client(thailand_options(), EmptySearchApi, None, false).unwrap();
 
@@ -120,9 +175,15 @@ fn batch_translate_uses_official_metadata_when_search_has_no_match() {
 #[test]
 fn batch_translate_ignores_wikidata_english_label_for_thailand_fallback_order() {
     let item = thailand_item("Bangkok", "Bangkok", "กรุงเทพมหานคร");
-    let dataset =
-        TranslationDataset::new(vec![item.clone()], AdminLevel::Admin1, "en", "zh-tw", true)
-            .unwrap();
+    let dataset = TranslationDataset::new(
+        vec![item.clone()],
+        AdminLevel::Admin1,
+        "Q869",
+        "en",
+        "zh-tw",
+        true,
+    )
+    .unwrap();
     let mut translator =
         WikidataTranslator::with_client(thailand_options(), EnglishOnlyApi, None, false).unwrap();
 
@@ -151,9 +212,15 @@ fn batch_translate_rejects_candidates_when_parent_verification_fails() {
         ]),
     )
     .unwrap();
-    let dataset =
-        TranslationDataset::new(vec![item.clone()], AdminLevel::Admin2, "en", "zh-tw", true)
-            .unwrap();
+    let dataset = TranslationDataset::new(
+        vec![item.clone()],
+        AdminLevel::Admin2,
+        "Q869",
+        "en",
+        "zh-tw",
+        true,
+    )
+    .unwrap();
     let mut translator =
         WikidataTranslator::with_client(thailand_options(), UnverifiedParentApi, None, false)
             .unwrap();
@@ -190,9 +257,15 @@ fn batch_translate_ignores_unverified_cached_translation_when_parent_is_required
         ]),
     )
     .unwrap();
-    let dataset =
-        TranslationDataset::new(vec![item.clone()], AdminLevel::Admin2, "en", "zh-tw", true)
-            .unwrap();
+    let dataset = TranslationDataset::new(
+        vec![item.clone()],
+        AdminLevel::Admin2,
+        "Q869",
+        "en",
+        "zh-tw",
+        true,
+    )
+    .unwrap();
     let mut translator =
         WikidataTranslator::with_client(thailand_options(), UnverifiedParentApi, None, false)
             .unwrap();
@@ -244,9 +317,15 @@ fn batch_translate_requeries_cached_giveup_when_parent_context_changes() {
         ]),
     )
     .unwrap();
-    let dataset =
-        TranslationDataset::new(vec![item.clone()], AdminLevel::Admin2, "en", "zh-tw", true)
-            .unwrap();
+    let dataset = TranslationDataset::new(
+        vec![item.clone()],
+        AdminLevel::Admin2,
+        "Q869",
+        "en",
+        "zh-tw",
+        true,
+    )
+    .unwrap();
     let mut translator =
         WikidataTranslator::with_client(thailand_options(), VerifiedParentApi, None, false)
             .unwrap();
@@ -297,9 +376,15 @@ fn batch_translate_trusts_cached_giveup_when_parent_context_is_same() {
         ]),
     )
     .unwrap();
-    let dataset =
-        TranslationDataset::new(vec![item.clone()], AdminLevel::Admin2, "en", "zh-tw", true)
-            .unwrap();
+    let dataset = TranslationDataset::new(
+        vec![item.clone()],
+        AdminLevel::Admin2,
+        "Q869",
+        "en",
+        "zh-tw",
+        true,
+    )
+    .unwrap();
     let mut translator =
         WikidataTranslator::with_client(thailand_options(), PanicApi, None, false).unwrap();
     let cached = TranslationResult {
@@ -342,9 +427,15 @@ fn batch_translate_searches_with_item_source_lang() {
         ]),
     )
     .unwrap();
-    let dataset =
-        TranslationDataset::new(vec![item.clone()], AdminLevel::Admin1, "th", "zh-tw", true)
-            .unwrap();
+    let dataset = TranslationDataset::new(
+        vec![item.clone()],
+        AdminLevel::Admin1,
+        "Q869",
+        "th",
+        "zh-tw",
+        true,
+    )
+    .unwrap();
     // translator 全域 source_lang 是 en；搜尋語言必須以 item 的 th 為準。
     let mut translator =
         WikidataTranslator::with_client(thailand_options(), AssertThaiSearchApi, None, false)
@@ -455,8 +546,9 @@ impl WikidataApi for EnglishOnlyApi {
         Ok(r#"{"entities":{"Q1861":{"labels":{"en":{"value":"Bangkok"}}}}}"#.to_string())
     }
 
-    fn ask_p131_json(&self, _: &str, _: &str) -> Result<String, String> {
-        Ok(r#"{"boolean":false}"#.to_string())
+    fn ask_p131_json(&self, candidate_qid: &str, _: &str) -> Result<String, String> {
+        // 實體可通過 parent 驗證，但只有英文 label——測試聚焦 fallback 順序。
+        Ok(format!(r#"{{"boolean":{}}}"#, candidate_qid == "Q1861"))
     }
 
     fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {

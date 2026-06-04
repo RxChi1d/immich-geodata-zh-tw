@@ -9,6 +9,9 @@ use crate::wikidata::{
 use super::handlers::korea_admin_components;
 use super::types::{Feature, KoreaTranslations};
 
+/// 南韓（大韓民國）的 Wikidata QID，作為 admin1 的 P131 驗證 parent。
+const SOUTH_KOREA_QID: &str = "Q884";
+
 const EXCLUDED_KEYWORDS: &[&str] = &[
     "의회",
     "議會",
@@ -29,7 +32,7 @@ pub(super) fn build_korea_wikidata_cache(
     features: &[Feature],
     cache_path: &Path,
 ) -> Result<KoreaTranslations, String> {
-    let builder = TranslationDatasetBuilder::new("KR", "ko", "zh-tw")?;
+    let builder = TranslationDatasetBuilder::new("KR", SOUTH_KOREA_QID, "ko", "zh-tw")?;
     let components = features
         .iter()
         .map(korea_admin_components)

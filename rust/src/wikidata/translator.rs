@@ -111,10 +111,7 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         for batch in dataset.items().chunks(batch_size) {
             for item in batch {
                 if let Some(result) = self.cache_store.get_translation(item) {
-                    let parent_qid = options
-                        .parent_qids
-                        .get(&item.id)
-                        .or_else(|| options.parent_qids.get(&item.original_name));
+                    let parent_qid = resolve_parent_qid(&options, dataset, item);
                     // Reason: 快取記錄的 parent QID 與本次不同，代表驗證上下文
                     // 已變更（例如修正了上層行政區的 QID），舊結論（包含先前
                     // 放棄的 qid=None 結果）都必須重新查詢；上下文一致時，
@@ -122,13 +119,9 @@ impl<C: WikidataApi> WikidataTranslator<C> {
                     let same_parent_context = self
                         .cache_store
                         .get_translation_parent_qid(item)
-                        .is_some_and(|cached| cached.as_deref() == parent_qid.map(String::as_str));
-                    let trusted = match parent_qid {
-                        None => true,
-                        Some(_) => {
-                            same_parent_context && (result.qid.is_none() || result.parent_verified)
-                        }
-                    };
+                        .is_some_and(|cached| cached.as_deref() == Some(parent_qid));
+                    let trusted =
+                        same_parent_context && (result.qid.is_none() || result.parent_verified);
                     if trusted {
                         cache_hits += 1;
                         results.insert(item.id.clone(), result);
@@ -166,15 +159,11 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         let mut fallback_count = 0_usize;
 
         for data in pending {
-            let parent_qid = options
-                .parent_qids
-                .get(&data.item.id)
-                .or_else(|| options.parent_qids.get(&data.item.original_name))
-                .map(String::as_str);
-            let Some(selected_qid) = self.select_qid(&data.qids, parent_qid)? else {
+            let parent_qid = resolve_parent_qid(&options, dataset, &data.item).to_string();
+            let Some(selected_qid) = self.select_qid(&data.qids, &parent_qid)? else {
                 let result = self.source_fallback_result(&data.item);
                 self.cache_store
-                    .set_translation(&data.item, &result, parent_qid)?;
+                    .set_translation(&data.item, &result, Some(&parent_qid))?;
                 fallback_count += 1;
                 results.insert(data.item.id, result);
                 continue;
@@ -182,11 +171,9 @@ impl<C: WikidataApi> WikidataTranslator<C> {
 
             let mut result = self.select_best_label(all_labels.get(&selected_qid), &data.item);
             result.qid = Some(selected_qid.clone());
-            if let Some(parent_qid) = parent_qid {
-                result.parent_verified = self.verify_p131(&selected_qid, parent_qid)?;
-            }
+            result.parent_verified = self.verify_p131(&selected_qid, &parent_qid)?;
             self.cache_store
-                .set_translation(&data.item, &result, parent_qid)?;
+                .set_translation(&data.item, &result, Some(&parent_qid))?;
             results.insert(data.item.id, result);
         }
 
@@ -305,14 +292,11 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         Ok(results)
     }
 
-    fn select_qid(
-        &mut self,
-        qids: &[String],
-        parent_qid: Option<&str>,
-    ) -> Result<Option<String>, String> {
-        let Some(parent_qid) = parent_qid else {
-            return Ok(qids.first().cloned());
-        };
+    /// 依序對候選做 P131 鏈驗證，回傳第一個通過者；全數失敗回傳 None。
+    ///
+    /// Reason: parent 驗證是標準規則，不存在「無 parent 直接取第一名」
+    /// 的路徑——同名歧義（如 Nan vs 南特）必須由行政隸屬關係裁決。
+    fn select_qid(&mut self, qids: &[String], parent_qid: &str) -> Result<Option<String>, String> {
         for qid in qids {
             if self.verify_p131(qid, parent_qid)? {
                 return Ok(Some(qid.clone()));
@@ -389,6 +373,24 @@ impl<C: WikidataApi> WikidataTranslator<C> {
 struct SearchData {
     item: TranslationItem,
     qids: Vec<String>,
+}
+
+/// 解析 item 的 P131 驗證 parent：明確指定的 parent QID（admin2 對
+/// admin1）優先，否則回退到 dataset 的國家 QID（admin1 對國家）。
+///
+/// Reason: 這是 translator 的標準規則——每個 item 至少對「已知最特定
+/// 的上層」驗證行政隸屬，新增國家時無需（也無法）另行選擇。
+fn resolve_parent_qid<'a>(
+    options: &'a BatchTranslateOptions<'_>,
+    dataset: &'a TranslationDataset,
+    item: &TranslationItem,
+) -> &'a str {
+    options
+        .parent_qids
+        .get(&item.id)
+        .or_else(|| options.parent_qids.get(&item.original_name))
+        .map(String::as_str)
+        .unwrap_or(dataset.country_qid.as_str())
 }
 
 pub fn dedupe_keep_order(values: impl IntoIterator<Item = String>) -> Vec<String> {

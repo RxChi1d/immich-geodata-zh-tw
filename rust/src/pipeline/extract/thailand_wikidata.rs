@@ -30,13 +30,12 @@ pub(super) fn build_thailand_wikidata_cache(
     options.fallback_langs = vec!["zh-hant".to_string(), "zh".to_string()];
     let mut translator = WikidataTranslator::new(options, Some(cache_path.to_path_buf()), true)?;
 
-    // Reason: admin1 一律以 P131 鏈驗證隸屬泰國，避免英文同名歧義
-    //（如 Nan vs 南特）盲選第一個搜尋結果。
+    // admin1 依 translator 標準規則以 dataset country_qid（泰國 Q869）
+    // 做 P131 鏈驗證，避免英文同名歧義（如 Nan vs 南特）。
     let admin1_results = translator.batch_translate(
         &admin1_dataset,
         BatchTranslateOptions {
             batch_size: 32,
-            parent_qids: uniform_parent_qids(&admin1_dataset, THAILAND_QID),
             ..BatchTranslateOptions::default()
         },
     )?;
@@ -44,7 +43,7 @@ pub(super) fn build_thailand_wikidata_cache(
         &mut translator,
         &admin1_dataset,
         admin1_results,
-        |item| HashMap::from([(item.id.clone(), THAILAND_QID.to_string())]),
+        |_| HashMap::new(),
         &[THAILAND_PROVINCE_CLASS],
     )?;
 
@@ -75,15 +74,6 @@ pub(super) fn build_thailand_wikidata_cache(
         &admin2_dataset,
         &admin2_results,
     ))
-}
-
-/// 為 dataset 中所有 item 指定同一個 parent QID。
-fn uniform_parent_qids(dataset: &TranslationDataset, parent_qid: &str) -> HashMap<String, String> {
-    dataset
-        .items()
-        .iter()
-        .map(|item| (item.id.clone(), parent_qid.to_string()))
-        .collect()
 }
 
 /// 對第一輪（英文搜尋）P131 驗證失敗的 item，以 COD-AB 官方泰文名稱
@@ -152,6 +142,7 @@ fn retranslate_failures_with_thai_names<C: WikidataApi>(
             .map(|(_, thai_item)| thai_item.clone())
             .collect(),
         dataset.level,
+        dataset.country_qid.clone(),
         "th",
         "zh-tw",
         true,
@@ -199,7 +190,7 @@ fn thailand_admin1_dataset(features: &[Feature]) -> Result<TranslationDataset, S
             attribute(feature, "adm1_name1"),
         )?);
     }
-    TranslationDataset::new(items, AdminLevel::Admin1, "en", "zh-tw", true)
+    TranslationDataset::new(items, AdminLevel::Admin1, THAILAND_QID, "en", "zh-tw", true)
 }
 
 fn thailand_admin2_dataset(features: &[Feature]) -> Result<TranslationDataset, String> {
@@ -223,7 +214,7 @@ fn thailand_admin2_dataset(features: &[Feature]) -> Result<TranslationDataset, S
             attribute(feature, "adm2_name1"),
         )?);
     }
-    TranslationDataset::new(items, AdminLevel::Admin2, "en", "zh-tw", true)
+    TranslationDataset::new(items, AdminLevel::Admin2, THAILAND_QID, "en", "zh-tw", true)
 }
 
 fn thailand_item(
