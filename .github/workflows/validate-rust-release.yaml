@@ -14,10 +14,10 @@ on:
         type: boolean
         default: true
       country_codes:
-        description: 'GeoNames extra data 國家代碼；有 handler 的國家不需要列入'
+        description: 'GeoNames extra data 國家代碼；有 handler 的國家（TW/JP/KR/TH）不需要列入'
         required: false
         type: string
-        default: 'TH'
+        default: ''
   push:
     branches:
       - migration/python-to-rust
@@ -46,7 +46,7 @@ jobs:
       contents: read
     runs-on: ubuntu-24.04
     env:
-      COUNTRY_CODES: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.country_codes || 'TH' }}
+      COUNTRY_CODES: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.country_codes || '' }}
       SKIP_LOCATIONIQ: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_locationiq || 'true' }}
       SKIP_PREPARE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_prepare || 'false' }}
     steps:
@@ -106,12 +106,12 @@ jobs:
             args+=(--pass-locationiq)
           fi
 
+          # handler 國家（TW/JP/KR/TH）由 meta_data/*_geodata.csv 自動帶入，
+          # 只有 non-handler 國家需要透過 --country-code 指定。
           read -r -a countries <<< "${COUNTRY_CODES}"
-          if [[ "${#countries[@]}" -eq 0 ]]; then
-            echo "至少需要一個 country code"
-            exit 1
+          if [[ "${#countries[@]}" -gt 0 ]]; then
+            args+=(--country-code "${countries[@]}")
           fi
-          args+=(--country-code "${countries[@]}")
 
           "${binary}" "${args[@]}" | tee /tmp/rust-release-validation.log
 

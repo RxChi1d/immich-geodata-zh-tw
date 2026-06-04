@@ -85,15 +85,30 @@ jobs:
             --fixture-mode \
             --pass-locationiq \
             --output-folder /tmp/rust-release-smoke
+      - name: Verify handler geodata exists
+        if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
+        run: |
+          # handler 國家的納入依賴 meta_data/*_geodata.csv 存在；
+          # 缺檔會讓該國「靜默」消失於 release，因此先硬性驗證。
+          missing=0
+          for country in tw jp kr th; do
+            if [[ ! -s "meta_data/${country}_geodata.csv" ]]; then
+              echo "::error::meta_data/${country}_geodata.csv 缺失或為空，該國將從 release 消失"
+              missing=1
+            fi
+          done
+          exit "${missing}"
       - name: Set current date as env variable
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         run: echo "TODAY=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
       - name: Build with Rust
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         run: |
+          # TH 已改由 handler 處理（消耗 meta_data/th_geodata.csv），
+          # 不需再以 --country-code 走 LocationIQ 流程；
+          # 無 non-handler 國家時 locationiq 階段會自動 skip。
           ".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}" release \
-            --locationiq-api-key "${{ secrets.LOCATIONIQ_API_KEY }}" \
-            --country-code "TH"
+            --locationiq-api-key "${{ secrets.LOCATIONIQ_API_KEY }}"
       - name: Create Release
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         uses: ncipollo/release-action@v1
