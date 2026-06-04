@@ -45,6 +45,7 @@ We focus on the Taiwan user experience and apply the most suitable language stra
     - [🇹🇼 Taiwan](#-taiwan)
     - [🇯🇵 Japan](#-japan)
     - [🇰🇷 South Korea](#-south-korea)
+    - [🇹🇭 Thailand](#-thailand)
   - [Update Geographic Data](#update-geographic-data)
     - [Integrated Deployment](#integrated-deployment)
     - [Manual Deployment](#manual-deployment-1)
@@ -56,9 +57,11 @@ We focus on the Taiwan user experience and apply the most suitable language stra
       - [Taiwan Data Extraction](#taiwan-data-extraction)
       - [Japan Data Extraction](#japan-data-extraction)
       - [South Korea Data Extraction](#south-korea-data-extraction)
+      - [Thailand Data Extraction](#thailand-data-extraction)
     - [3. Complete Data Processing Workflow](#3-complete-data-processing-workflow)
       - [Register LocationIQ API](#register-locationiq-api)
       - [Execute Data Processing](#execute-data-processing)
+    - [4. Rust Verification](#4-rust-verification)
   - [Acknowledgments](#acknowledgments)
   - [License](#license)
 
@@ -71,6 +74,7 @@ The project applies region-specific language handling to reflect the expectation
 | 🇹🇼 Taiwan | Official Traditional Chinese names | NLSC (National Land Surveying and Mapping Center) | Fixes incorrect country labels and missing municipality names |
 | 🇯🇵 Japan | Native Japanese (漢字 + かな) | 国土数値情報ダウンロードサービス | Displays official Japanese names without translating them |
 | 🇰🇷 South Korea | Traditional Chinese translations | admdongkor (Official administrative boundaries) | Provides Traditional Chinese translations |
+| 🇹🇭 Thailand | Traditional Chinese translations (official English / Thai fallback) | COD-AB Thailand | Computes administrative center points from official boundaries |
 | 🌏 Others | Traditional Chinese translations | Custom glossary → GeoNames translations → GeoNames English | Prioritizes Taiwan-style translations; falls back when unavailable |
 
 > **Why keep Japanese in Japanese?**
@@ -102,7 +106,12 @@ The geographic data used in this project mainly comes from the following sources
     - **Dataset**: South Korean official administrative boundary data (GeoJSON format)
     - **License**: MIT License
     - **Purpose**: As the primary data source for South Korea administrative boundaries and names
-6.  **Other References**
+6.  **Thailand COD-AB**
+    - **Source**: [HDX Thailand Subnational Administrative Boundaries](https://data.humdata.org/dataset/cod-ab-tha)
+    - **Dataset**: Thailand administrative level 0-3 boundaries (COD-AB)
+    - **License**: Creative Commons Attribution for Intergovernmental Organisations (CC BY-IGO)
+    - **Purpose**: As the primary data source for Thailand administrative boundaries and names
+7.  **Other References**
     - **Ministry of Economic Affairs International Trade Administration & Ministry of Foreign Affairs of Taiwan**: As reference sources for Chinese translations of some countries/regions
 
 > [!NOTE]
@@ -231,6 +240,15 @@ Please go to this project's [Releases page](https://github.com/RxChi1d/immich-ge
 - **Special administrative divisions**: Jeju Province distinguished from Jeju City, Sejong City uses industry-standard translations
 - **Administrative hierarchy handling**: Auto-splits "City + District/County" structure, supports special administrative structures
 
+### 🇹🇭 Thailand
+
+- **Official boundary data**: Uses COD-AB `tha_admin3` sub-district / tambon boundary data
+- **Traditional Chinese translations**: Admin1/Admin2 use the Wikidata translator, falling back to COD-AB official English and official Thai when no Chinese result exists
+- **Nearest-distance optimization**: Computes geometric center points with a Thailand Albers projection to improve Immich's nearest-point reverse geocoding hit rate
+- **Coordinate strategy validation**: Does not use the COD-AB built-in `center_lat` / `center_lon` by default, as they are closer to official representative points than to the optimal single point under the nearest-point model
+
+> 📖 See [Thailand Administrative Processing (zh-TW)](docs/zh-tw/thailand-admin-processing.md) • [Thailand Administrative Processing (English)](docs/en/thailand-admin-processing.md)
+
 ## Update Geographic Data
 
 ### Integrated Deployment
@@ -318,6 +336,21 @@ cargo run --release -- extract --country KR \
   --output meta_data/kr_geodata.csv
 ```
 
+#### Thailand Data Extraction
+
+Data source: [Thailand COD-AB](https://data.humdata.org/dataset/cod-ab-tha)
+
+```bash
+# 1. Download tha_admin_boundaries.shp.zip and extract it
+# 2. Use tha_admin3.shp to extract Admin 3 / Tambon boundary data
+cargo run --release -- extract --country TH \
+  --shapefile geoname_data/tha_admin_boundaries/tha_admin3.shp \
+  --output meta_data/th_geodata.csv
+```
+
+Thailand extraction reads or creates `geoname_data/TH_wikidata_cache.json` for Admin1/Admin2
+Traditional Chinese translations; Admin3 currently keeps the COD-AB official English names.
+
 After extraction is complete, the data will be automatically integrated when executing the Rust
 `release` command.
 
@@ -346,7 +379,29 @@ cargo run --release -- release \
 > - This project allows LocationIQ reverse geocoding query progress recovery. If daily request limits are exceeded, you can continue execution after changing API keys or the next day.
 >   - Add `--pass-cleanup` to skip resetting the output folder: `cargo run --release -- release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH" --pass-cleanup`.
 
-### Rust Production Status
+### 4. Rust Verification
+
+The Rust CLI provides a dry-run contract that validates the release orchestration without
+calling external APIs or downloading data:
+
+```bash
+cargo run -- release \
+  --dry-run \
+  --locationiq-api-key "fixture" \
+  --country-code "KR" "TH" \
+  --batch-size 100 \
+  --locationiq-qps 2
+```
+
+To verify the release archive and the directory layout required by `update_data.sh`, use
+fixture mode to produce a local smoke artifact:
+
+```bash
+cargo run -- release \
+  --fixture-mode \
+  --pass-locationiq \
+  --output-folder /tmp/rust-release-smoke
+```
 
 The release and nightly production workflows now run the Rust production path by default. The workflows keep a Rust fixture release smoke before the live build to validate archive layout and CLI contract without consuming LocationIQ quota.
 
