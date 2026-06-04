@@ -18,15 +18,6 @@ on:
         required: false
         type: string
         default: ''
-  push:
-    branches:
-      - migration/python-to-rust
-    paths:
-      - '.github/workflows/validate-rust-release.yaml'
-      - '.github/workflows/build-rust-binary.yaml'
-      - '.github/scripts/compute-rust-source-hash.sh'
-      - 'rust/**'
-      - 'meta_data/**'
 
 defaults:
   run:

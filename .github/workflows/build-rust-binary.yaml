@@ -43,10 +43,10 @@ jobs:
       source_hash: ${{ steps.source-hash.outputs.source_hash }}
       target: ${{ env.RUST_BINARY_TARGET }}
     env:
-      BINARY_NAME: immich-geodata-migration
+      BINARY_NAME: immich-geodata
       BINARY_PACKAGE_VERSION: v2
       RUST_BINARY_TARGET: x86_64-unknown-linux-gnu
-      BINARY_FILENAME: immich-geodata-migration-x86_64-unknown-linux-gnu
+      BINARY_FILENAME: immich-geodata-x86_64-unknown-linux-gnu
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -86,22 +86,22 @@ jobs:
         if: steps.binary-cache.outputs.cache-hit != 'true'
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: rust -> target
+          workspaces: . -> target
 
       - name: Install system dependencies
         if: steps.binary-cache.outputs.cache-hit != 'true'
         run: sudo apt-get update && sudo apt-get install -y libproj-dev pkg-config
 
-      - name: Build Rust migration binary
+      - name: Build Rust binary
         if: steps.binary-cache.outputs.cache-hit != 'true'
-        run: cargo build --release --manifest-path rust/Cargo.toml
+        run: cargo build --release
 
       - name: Package freshly built binary
         if: steps.binary-cache.outputs.cache-hit != 'true'
         run: |
           cache_dir="${{ steps.package.outputs.cache_dir }}"
           mkdir -p "${cache_dir}"
-          cp "rust/target/release/${BINARY_NAME}" "${cache_dir}/${BINARY_FILENAME}"
+          cp "target/release/${BINARY_NAME}" "${cache_dir}/${BINARY_FILENAME}"
           strip "${cache_dir}/${BINARY_FILENAME}"
           chmod +x "${cache_dir}/${BINARY_FILENAME}"
           ldd "${cache_dir}/${BINARY_FILENAME}" > "${cache_dir}/${BINARY_FILENAME}.ldd.txt"
