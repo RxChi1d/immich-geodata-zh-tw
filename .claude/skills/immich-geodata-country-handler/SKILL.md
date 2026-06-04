@@ -16,7 +16,7 @@ license: MIT
 - `CLAUDE.md` 擴充新國家章節：handler 結構、geoname_id、schema 與 gates。
 - `docs/zh-tw/{taiwan,japan,south-korea,thailand}-admin-processing.md`：
   各國欄位語意、名稱與座標策略的完整先例。
-- `rust/src/pipeline/extract/handlers.rs`、`korea_wikidata.rs`、
+- `src/pipeline/extract/handlers.rs`、`korea_wikidata.rs`、
   `thailand_wikidata.rs`、`types.rs`：既有實作參考。
 
 ## 階段一：來源與 schema 研究

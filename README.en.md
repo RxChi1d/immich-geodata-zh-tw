@@ -8,7 +8,7 @@
 
 This project delivers reverse geocoding enhancements tailored for users in Taiwan, providing natural and accurate location display that reflects local reading habits.
 
-Currently supports: 🇹🇼 **Taiwan** | 🇯🇵 **Japan** | 🇰🇷 **South Korea** | 🌏 **Traditional Chinese localization for other regions**
+Currently supports: 🇹🇼 **Taiwan** | 🇯🇵 **Japan** | 🇰🇷 **South Korea** | 🇹🇭 **Thailand** | 🌏 **Traditional Chinese localization for other regions**
 
 ## Design Philosophy
 
@@ -263,19 +263,19 @@ To run data processing on non-Linux systems or customized Linux environments, in
 toolchain and the PROJ development library, then run:
 
 ```bash
-cargo build --release --manifest-path rust/Cargo.toml
+cargo build --release
 ```
 
 After compilation, the binary is available at:
 
 ```bash
-rust/target/release/immich-geodata-migration
+target/release/immich-geodata
 ```
 
 You can also run the CLI directly through `cargo run`:
 
 ```bash
-cargo run --release --manifest-path rust/Cargo.toml -- help
+cargo run --release -- help
 ```
 
 ### 2. Extract Raw Geographic Data (Optional)
@@ -289,7 +289,7 @@ Data source: [National Land Surveying and Mapping Center (NLSC)](https://whgis-n
 ```bash
 # 1. Download "Village Boundaries (TWD97 Latitude/Longitude)" data and extract
 # 2. Execute extraction command
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country TW \
+cargo run --release -- extract --country TW \
   --shapefile geoname_data/VILLAGE_NLSC_1140825/VILLAGE_NLSC_1140825.shp \
   --output meta_data/tw_geodata.csv
 ```
@@ -301,7 +301,7 @@ Data source: [国土数値情報](https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjT
 ```bash
 # 1. Download "行政区域データ（世界測地系）" and extract
 # 2. Execute extraction command
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country JP \
+cargo run --release -- extract --country JP \
   --shapefile geoname_data/N03-20250101_GML/N03-20250101.shp \
   --output meta_data/jp_geodata.csv
 ```
@@ -313,7 +313,7 @@ Data source: [admdongkor](https://github.com/vuski/admdongkor)
 ```bash
 # 1. Download official administrative boundary data from admdongkor project and extract
 # 2. Execute extraction command
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country KR \
+cargo run --release -- extract --country KR \
   --shapefile geoname_data/HangJeongDong_verYYYYMMDD.geojson \
   --output meta_data/kr_geodata.csv
 ```
@@ -332,19 +332,19 @@ Register an account at [LocationIQ](https://locationiq.com/) and obtain an API K
 #### Execute Data Processing
 
 ```bash
-cargo run --release --manifest-path rust/Cargo.toml -- release \
+cargo run --release -- release \
   --locationiq-api-key "YOUR_API_KEY" \
   --country-code "KR" "TH"
 ```
 
 > [!NOTE]
-> - You can view more options through `cargo run --manifest-path rust/Cargo.toml -- help`.
+> - You can view more options through `cargo run -- help`.
 > - The `--country-code` parameter can specify country codes to process, multiple codes separated by spaces. (Currently only tested with "KR" "TH")
 
 > [!WARNING]
 > - Since LocationIQ API has request limits (can be checked in the backend after login), please pay attention to the number of place names in the countries to be processed to avoid exceeding limits.
 > - This project allows LocationIQ reverse geocoding query progress recovery. If daily request limits are exceeded, you can continue execution after changing API keys or the next day.
->   - Add `--pass-cleanup` to skip resetting the output folder: `cargo run --release --manifest-path rust/Cargo.toml -- release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH" --pass-cleanup`.
+>   - Add `--pass-cleanup` to skip resetting the output folder: `cargo run --release -- release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH" --pass-cleanup`.
 
 ### Rust Production Status
 

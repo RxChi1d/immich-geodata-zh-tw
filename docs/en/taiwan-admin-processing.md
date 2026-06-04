@@ -70,7 +70,7 @@ The end-to-end workflow looks like this:
 #    and download the "Village boundaries (TWD97 latitude & longitude)" package.
 
 # 2. Run the extraction script
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country TW \
+cargo run --release -- extract --country TW \
   --shapefile geoname_data/VILLAGE_NLSC_XXXXXX/VILLAGE_NLSC_XXXXXX.shp \
   --output meta_data/tw_geodata.csv
 ```

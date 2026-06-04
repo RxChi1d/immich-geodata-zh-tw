@@ -156,7 +156,7 @@
 行政區優化：解決臺灣直轄市與省轄縣市僅顯示地區名稱的問題。
 提升臺灣資料準確性：利用中華民國國土測繪中心 (NLSC) 的官方圖資處理臺灣地區的地理名稱與邊界資料，確保數據來源的權威性。
 
-- **正式資料處理工具鏈**：Rust CLI（`rust/`）
+- **正式資料處理工具鏈**：Rust CLI（專案根目錄 crate）
 - **Rust 主要檢查**：`cargo fmt`、`cargo clippy`、`cargo test`
 
 ## 版本管理
@@ -176,7 +176,7 @@
 production path 已遷移至 Rust：
 
 ```
-rust/src/pipeline/
+src/pipeline/
 ├── extract.rs              # TW/JP/KR 圖資讀取、座標轉換與 normalized CSV 輸出
 ├── extract/handlers.rs     # 各國 extract handler 與行政區欄位規則
 ├── prepare.rs              # GeoNames、Natural Earth 等來源下載與前處理
@@ -191,7 +191,7 @@ rust/src/pipeline/
 資料列實作，而不是 Python registry。
 
 #### 1. Extract（提取）
-- **入口**：`cargo run --release --manifest-path rust/Cargo.toml -- extract`
+- **入口**：`cargo run --release -- extract`
 - **功能**：從 Shapefile、GeoJSON 或已正規化 CSV 提取資料並轉換為標準化 CSV。
 - **輸入**：原始 Shapefile、GeoJSON 或 normalized geodata CSV
 - **輸出**：`meta_data/{country}_geodata.csv`
@@ -212,16 +212,16 @@ rust/src/pipeline/
 ### 常用指令
 
 ```bash
-cargo run --release --manifest-path rust/Cargo.toml -- extract \
+cargo run --release -- extract \
   --country TW \
   --shapefile <path_to_tw_shapefile> \
   --output meta_data/tw_geodata.csv
 
-cargo run --release --manifest-path rust/Cargo.toml -- release \
+cargo run --release -- release \
   --locationiq-api-key "<api_key>" \
   --country-code KR TH
 
-cargo run --release --manifest-path rust/Cargo.toml -- release \
+cargo run --release -- release \
   --fixture-mode \
   --pass-locationiq \
   --output-folder /tmp/rust-release-smoke
@@ -229,7 +229,7 @@ cargo run --release --manifest-path rust/Cargo.toml -- release \
 
 ### 擴充新國家
 
-1. 在 `rust/src/pipeline/extract/handlers.rs` 新增或拆分該國 handler。
+1. 在 `src/pipeline/extract/handlers.rs` 新增或拆分該國 handler。
 2. 實作該國資料來源讀取、座標轉換、行政區欄位對應與 normalized CSV 輸出：
    - `geoname_id` 從 `92_000_000` 起算。
    - 填寫正確時區與 `country_code`。
@@ -254,9 +254,9 @@ handler routing，避免 runtime magic 造成 release 行為不透明。
 
 開發過程中也可以使用以下命令做基本的檢查與測試：
 ```bash
-cargo fmt --manifest-path rust/Cargo.toml --check
-cargo clippy --manifest-path rust/Cargo.toml -- -D warnings
-cargo test --manifest-path rust/Cargo.toml
+cargo fmt --check
+cargo clippy -- -D warnings
+cargo test
 ```
 
 ## 開發注意事項
@@ -312,6 +312,6 @@ cargo test --manifest-path rust/Cargo.toml
 
 ## Rust Migration 完成狀態
 
-本專案 production pipeline 已完成 Rust 遷移。Python production implementation、
-parity runner 與 golden outputs 已退場；後續功能開發、修正與驗證以 Rust CLI、
-Rust tests、fixture release smoke 與真實資料 release gate 為準。
+本專案 production pipeline 已完成 Rust 遷移，Python 實作已退場。後續功能開發、
+修正與驗證以 Rust CLI、Rust tests、fixture release smoke 與真實資料 release
+gate 為準。遷移過程紀錄見 `docs/history/python-to-rust-migration.md`。

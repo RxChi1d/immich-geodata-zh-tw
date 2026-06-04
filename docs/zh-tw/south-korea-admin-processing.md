@@ -226,7 +226,7 @@ cache；fixture 或 parity 驗證若需要固定輸出，仍應使用對應的 s
 
 **處理邏輯**：
 
-Rust handler 在翻譯完成後，僅針對 `sidonm == "광주광역시"` 的 Admin 2 記錄移除結尾的消歧義括號。實作位於 `rust/src/pipeline/extract/handlers.rs`，由 `strip_trailing_parenthetical` 控制此規則。
+Rust handler 在翻譯完成後，僅針對 `sidonm == "광주광역시"` 的 Admin 2 記錄移除結尾的消歧義括號。實作位於 `src/pipeline/extract/handlers.rs`，由 `strip_trailing_parenthetical` 控制此規則。
 
 **效果**：
 
@@ -282,7 +282,7 @@ Rust handler 在翻譯完成後，僅針對 `sidonm == "광주광역시"` 的 Ad
 
 **問題**：世宗市於 2012 年成立，多數新設洞在 Wikidata 缺少中文標籤，導致翻譯回退至羅馬拼音（`Boram-dong`）甚至韓文原文。
 
-**解決方案**：Rust handler 內建涵蓋全部 24 個 Admin 2 地名的手動對照表（`rust/src/pipeline/extract/handlers.rs` 中的 `sejong_admin2`）。
+**解決方案**：Rust handler 內建涵蓋全部 24 個 Admin 2 地名的手動對照表（`src/pipeline/extract/handlers.rs` 中的 `sejong_admin2`）。
 
 **對照表範例**：
 

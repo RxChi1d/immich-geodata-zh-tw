@@ -276,19 +276,19 @@ GitHub Actions、Linux server 與 Immich container 類環境使用。macOS 與 W
 PROJ development library，再執行：
 
 ```bash
-cargo build --release --manifest-path rust/Cargo.toml
+cargo build --release
 ```
 
 編譯完成後，binary 會位於：
 
 ```bash
-rust/target/release/immich-geodata-migration
+target/release/immich-geodata
 ```
 
 也可以直接用 `cargo run` 執行：
 
 ```bash
-cargo run --release --manifest-path rust/Cargo.toml -- help
+cargo run --release -- help
 ```
 
 ### 2. 提取原始地理資料
@@ -302,7 +302,7 @@ cargo run --release --manifest-path rust/Cargo.toml -- help
 ```bash
 # 1. 下載「村(里)界（TWD97經緯度）」資料並解壓縮
 # 2. 執行提取命令
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country TW \
+cargo run --release -- extract --country TW \
   --shapefile geoname_data/VILLAGE_NLSC_1140825/VILLAGE_NLSC_1140825.shp \
   --output meta_data/tw_geodata.csv
 ```
@@ -314,7 +314,7 @@ cargo run --release --manifest-path rust/Cargo.toml -- extract --country TW \
 ```bash
 # 1. 下載「行政区域データ（世界測地系）」並解壓縮
 # 2. 執行提取命令
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country JP \
+cargo run --release -- extract --country JP \
   --shapefile geoname_data/N03-20250101_GML/N03-20250101.shp \
   --output meta_data/jp_geodata.csv
 ```
@@ -326,7 +326,7 @@ cargo run --release --manifest-path rust/Cargo.toml -- extract --country JP \
 ```bash
 # 1. 從 admdongkor 專案下載官方行政區邊界資料並解壓縮
 # 2. 執行提取命令
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country KR \
+cargo run --release -- extract --country KR \
   --shapefile geoname_data/HangJeongDong_verYYYYMMDD.geojson \
   --output meta_data/kr_geodata.csv
 ```
@@ -338,7 +338,7 @@ cargo run --release --manifest-path rust/Cargo.toml -- extract --country KR \
 ```bash
 # 1. 下載 tha_admin_boundaries.shp.zip 並解壓縮
 # 2. 使用 tha_admin3.shp 提取 Admin 3 / Tambon 邊界資料
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country TH \
+cargo run --release -- extract --country TH \
   --shapefile geoname_data/tha_admin_boundaries/tha_admin3.shp \
   --output meta_data/th_geodata.csv
 ```
@@ -358,19 +358,19 @@ cargo run --release --manifest-path rust/Cargo.toml -- extract --country TH \
 #### 執行資料處理
 
 ```bash
-cargo run --release --manifest-path rust/Cargo.toml -- release \
+cargo run --release -- release \
   --locationiq-api-key "YOUR_API_KEY" \
   --country-code "KR" "TH"
 ```
 
 > [!NOTE]
-> - 可以通過 `cargo run --manifest-path rust/Cargo.toml -- help` 查看更多選項。
+> - 可以通過 `cargo run -- help` 查看更多選項。
 > - `--country-code` 參數可指定需要處理的國家代碼，多個代碼之間使用空格分隔。(目前僅測試過 "KR" "TH")
 
 > [!WARNING]
 > - 由於 LocationIQ 的 API 有請求次數限制 (可登入後於後台查看)，因此請注意要處理的國家的地名數量，以免超出限制。
 > - 本專案允許 LocationIQ 反向地理編碼查詢的進度恢復，若超過當日請求限制，可於更換 api 金鑰或次日繼續執行。
->   - 需加上 `--pass-cleanup` 參數，以取消重設資料夾功能： `cargo run --release --manifest-path rust/Cargo.toml -- release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH" --pass-cleanup`。
+>   - 需加上 `--pass-cleanup` 參數，以取消重設資料夾功能： `cargo run --release -- release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH" --pass-cleanup`。
 
 ### 4. Rust 驗證
 
@@ -378,7 +378,7 @@ Rust CLI 提供 dry-run contract，可在不呼叫外部 API 或下載網路的�
 release orchestration：
 
 ```bash
-cargo run --manifest-path rust/Cargo.toml -- release \
+cargo run -- release \
   --dry-run \
   --locationiq-api-key "fixture" \
   --country-code "KR" "TH" \
@@ -390,7 +390,7 @@ cargo run --manifest-path rust/Cargo.toml -- release \
 產生本地 smoke artifact：
 
 ```bash
-cargo run --manifest-path rust/Cargo.toml -- release \
+cargo run -- release \
   --fixture-mode \
   --pass-locationiq \
   --output-folder /tmp/rust-release-smoke

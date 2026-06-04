@@ -84,7 +84,7 @@
 # 下載「村(里)界（TWD97經緯度）」資料並解壓縮
 
 # 2. 提取原始資料
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country TW \
+cargo run --release -- extract --country TW \
   --shapefile geoname_data/VILLAGE_NLSC_XXXXXX/VILLAGE_NLSC_XXXXXX.shp \
   --output meta_data/tw_geodata.csv
 ```
