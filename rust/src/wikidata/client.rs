@@ -32,7 +32,12 @@ impl WikidataClientOptions {
 }
 
 pub trait WikidataApi {
-    fn search_entities_json(&self, name: &str, limit: usize) -> Result<String, String>;
+    fn search_entities_json(
+        &self,
+        name: &str,
+        language: &str,
+        limit: usize,
+    ) -> Result<String, String>;
     fn get_entities_json(
         &self,
         qids: &[String],
@@ -72,15 +77,15 @@ pub fn wdqs_request_policy() -> HttpRequestPolicy {
 
 #[derive(Debug, Clone)]
 pub struct WikidataHttpClient {
-    options: WikidataClientOptions,
     http: HttpClient,
     wdqs_http: HttpClient,
 }
 
 impl WikidataHttpClient {
-    pub fn new(options: WikidataClientOptions) -> Result<Self, String> {
+    // Reason: 搜尋語言改由呼叫端逐次指定（支援同一 translator 以多語言
+    // 搜尋），client 本身不再保存語言設定。
+    pub fn new(_options: WikidataClientOptions) -> Result<Self, String> {
         Ok(Self {
-            options,
             http: HttpClient::new(wdact_request_policy())?,
             wdqs_http: HttpClient::new(wdqs_request_policy())?,
         })
@@ -88,9 +93,14 @@ impl WikidataHttpClient {
 }
 
 impl WikidataApi for WikidataHttpClient {
-    fn search_entities_json(&self, name: &str, limit: usize) -> Result<String, String> {
+    fn search_entities_json(
+        &self,
+        name: &str,
+        language: &str,
+        limit: usize,
+    ) -> Result<String, String> {
         self.http
-            .get_text(search_entities_url(name, &self.options.source_lang, limit)?.as_str())
+            .get_text(search_entities_url(name, language, limit)?.as_str())
     }
 
     fn get_entities_json(

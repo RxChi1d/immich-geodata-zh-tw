@@ -115,7 +115,21 @@ impl<C: WikidataApi> WikidataTranslator<C> {
                         .parent_qids
                         .get(&item.id)
                         .or_else(|| options.parent_qids.get(&item.original_name));
-                    if parent_qid.is_none() || result.qid.is_none() || result.parent_verified {
+                    // Reason: 快取記錄的 parent QID 與本次不同，代表驗證上下文
+                    // 已變更（例如修正了上層行政區的 QID），舊結論（包含先前
+                    // 放棄的 qid=None 結果）都必須重新查詢；上下文一致時，
+                    // 沿用「qid=None 或已驗證才信任」的規則。
+                    let same_parent_context = self
+                        .cache_store
+                        .get_translation_parent_qid(item)
+                        .is_some_and(|cached| cached.as_deref() == parent_qid.map(String::as_str));
+                    let trusted = match parent_qid {
+                        None => true,
+                        Some(_) => {
+                            same_parent_context && (result.qid.is_none() || result.parent_verified)
+                        }
+                    };
+                    if trusted {
                         cache_hits += 1;
                         results.insert(item.id.clone(), result);
                         continue;
@@ -191,9 +205,11 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         if let Some(qids) = self.cache_store.get_search_results(item) {
             return qids;
         }
+        // Reason: 搜尋語言以 item 為準（而非 translator 全域設定），
+        // 讓同一批翻譯可混用英文主搜尋與原文（如泰文）後備搜尋。
         let qids = self
             .client
-            .search_entities_json(&item.original_name, SEARCH_LIMIT)
+            .search_entities_json(&item.original_name, &item.source_lang, SEARCH_LIMIT)
             .ok()
             .and_then(|json| parse_search_qids(&json).ok())
             .unwrap_or_default();

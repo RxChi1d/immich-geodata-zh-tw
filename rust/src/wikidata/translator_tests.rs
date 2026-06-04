@@ -230,6 +230,133 @@ fn batch_translate_ignores_unverified_cached_translation_when_parent_is_required
     );
 }
 
+#[test]
+fn batch_translate_requeries_cached_giveup_when_parent_context_changes() {
+    let item = TranslationItem::from_values(
+        AdminLevel::Admin2,
+        "Ban Luang",
+        "en",
+        "zh-tw",
+        vec!["TH".to_string(), "Nan".to_string()],
+        HashMap::from([
+            (METADATA_OFFICIAL_EN.to_string(), "Ban Luang".to_string()),
+            (METADATA_OFFICIAL_TH.to_string(), "บ้านหลวง".to_string()),
+        ]),
+    )
+    .unwrap();
+    let dataset =
+        TranslationDataset::new(vec![item.clone()], AdminLevel::Admin2, "en", "zh-tw", true)
+            .unwrap();
+    let mut translator =
+        WikidataTranslator::with_client(thailand_options(), VerifiedParentApi, None, false)
+            .unwrap();
+    // 舊快取：對錯誤 parent 驗證失敗後放棄（qid=None）。
+    translator
+        .cache_store
+        .set_translation(
+            &item,
+            &TranslationResult {
+                translated: "Ban Luang".to_string(),
+                qid: None,
+                source: "metadata".to_string(),
+                used_lang: "official_en".to_string(),
+                parent_verified: false,
+            },
+            Some("Q_WRONG_PARENT"),
+        )
+        .unwrap();
+
+    let results = translator
+        .batch_translate(
+            &dataset,
+            BatchTranslateOptions {
+                parent_qids: HashMap::from([(item.id.clone(), "Q244698".to_string())]),
+                ..BatchTranslateOptions::default()
+            },
+        )
+        .unwrap();
+
+    // parent 上下文變更 → 放棄結論不再被信任，重查後取得正確翻譯。
+    let result = results.get(&item.id).unwrap();
+    assert_eq!(result.translated, "班鑾縣");
+    assert_eq!(result.qid.as_deref(), Some("Q475124"));
+    assert!(result.parent_verified);
+}
+
+#[test]
+fn batch_translate_trusts_cached_giveup_when_parent_context_is_same() {
+    let item = TranslationItem::from_values(
+        AdminLevel::Admin2,
+        "Fang",
+        "en",
+        "zh-tw",
+        vec!["TH".to_string(), "Chiang Mai".to_string()],
+        HashMap::from([
+            (METADATA_OFFICIAL_EN.to_string(), "Fang".to_string()),
+            (METADATA_OFFICIAL_TH.to_string(), "ฝาง".to_string()),
+        ]),
+    )
+    .unwrap();
+    let dataset =
+        TranslationDataset::new(vec![item.clone()], AdminLevel::Admin2, "en", "zh-tw", true)
+            .unwrap();
+    let mut translator =
+        WikidataTranslator::with_client(thailand_options(), PanicApi, None, false).unwrap();
+    let cached = TranslationResult {
+        translated: "Fang".to_string(),
+        qid: None,
+        source: "metadata".to_string(),
+        used_lang: "official_en".to_string(),
+        parent_verified: false,
+    };
+    translator
+        .cache_store
+        .set_translation(&item, &cached, Some("Q233588"))
+        .unwrap();
+
+    // 同一 parent 上下文 → 放棄結論沿用，不應觸發任何 API 呼叫（PanicApi）。
+    let results = translator
+        .batch_translate(
+            &dataset,
+            BatchTranslateOptions {
+                parent_qids: HashMap::from([(item.id.clone(), "Q233588".to_string())]),
+                ..BatchTranslateOptions::default()
+            },
+        )
+        .unwrap();
+
+    assert_eq!(results.get(&item.id), Some(&cached));
+}
+
+#[test]
+fn batch_translate_searches_with_item_source_lang() {
+    let item = TranslationItem::from_values(
+        AdminLevel::Admin1,
+        "น่าน",
+        "th",
+        "zh-tw",
+        vec!["TH".to_string()],
+        HashMap::from([
+            (METADATA_OFFICIAL_EN.to_string(), "Nan".to_string()),
+            (METADATA_OFFICIAL_TH.to_string(), "น่าน".to_string()),
+        ]),
+    )
+    .unwrap();
+    let dataset =
+        TranslationDataset::new(vec![item.clone()], AdminLevel::Admin1, "th", "zh-tw", true)
+            .unwrap();
+    // translator 全域 source_lang 是 en；搜尋語言必須以 item 的 th 為準。
+    let mut translator =
+        WikidataTranslator::with_client(thailand_options(), AssertThaiSearchApi, None, false)
+            .unwrap();
+
+    let results = translator
+        .batch_translate(&dataset, BatchTranslateOptions::default())
+        .unwrap();
+
+    assert!(results.contains_key(&item.id));
+}
+
 fn thailand_item(original_name: &str, official_en: &str, official_th: &str) -> TranslationItem {
     TranslationItem::from_values(
         AdminLevel::Admin1,
@@ -264,7 +391,7 @@ fn test_translator() -> WikidataTranslator<MockApi> {
 struct MockApi;
 
 impl WikidataApi for MockApi {
-    fn search_entities_json(&self, _: &str, _: usize) -> Result<String, String> {
+    fn search_entities_json(&self, _: &str, _: &str, _: usize) -> Result<String, String> {
         Ok(r#"{"search":[{"id":"Q1"},{"id":"Q2"}]}"#.to_string())
     }
 
@@ -297,7 +424,7 @@ impl WikidataApi for MockApi {
 struct EmptySearchApi;
 
 impl WikidataApi for EmptySearchApi {
-    fn search_entities_json(&self, _: &str, _: usize) -> Result<String, String> {
+    fn search_entities_json(&self, _: &str, _: &str, _: usize) -> Result<String, String> {
         Ok(r#"{"search":[]}"#.to_string())
     }
 
@@ -317,7 +444,7 @@ impl WikidataApi for EmptySearchApi {
 struct EnglishOnlyApi;
 
 impl WikidataApi for EnglishOnlyApi {
-    fn search_entities_json(&self, _: &str, _: usize) -> Result<String, String> {
+    fn search_entities_json(&self, _: &str, _: &str, _: usize) -> Result<String, String> {
         Ok(r#"{"search":[{"id":"Q1861"}]}"#.to_string())
     }
 
@@ -340,7 +467,7 @@ impl WikidataApi for EnglishOnlyApi {
 struct UnverifiedParentApi;
 
 impl WikidataApi for UnverifiedParentApi {
-    fn search_entities_json(&self, _: &str, _: usize) -> Result<String, String> {
+    fn search_entities_json(&self, _: &str, _: &str, _: usize) -> Result<String, String> {
         Ok(r#"{"search":[{"id":"Q18419656"}]}"#.to_string())
     }
 
@@ -360,10 +487,59 @@ impl WikidataApi for UnverifiedParentApi {
     }
 }
 
+struct VerifiedParentApi;
+
+impl WikidataApi for VerifiedParentApi {
+    fn search_entities_json(&self, _: &str, _: &str, _: usize) -> Result<String, String> {
+        Ok(r#"{"search":[{"id":"Q475124"}]}"#.to_string())
+    }
+
+    fn get_entities_json(&self, _: &[String], props: &str, _: &str) -> Result<String, String> {
+        if props == "claims" {
+            return Ok(r#"{"entities":{"Q475124":{"claims":{"P31":[]}}}}"#.to_string());
+        }
+        Ok(r#"{"entities":{"Q475124":{"labels":{"zh-hant":{"value":"班鑾縣"}}}}}"#.to_string())
+    }
+
+    fn ask_p131_json(&self, candidate_qid: &str, parent_qid: &str) -> Result<String, String> {
+        Ok(format!(
+            r#"{{"boolean":{}}}"#,
+            candidate_qid == "Q475124" && parent_qid == "Q244698"
+        ))
+    }
+
+    fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
+        Ok(r#"{"query":{"pages":{"1":{"title":"班鑾縣"}}}}"#.to_string())
+    }
+}
+
+struct AssertThaiSearchApi;
+
+impl WikidataApi for AssertThaiSearchApi {
+    fn search_entities_json(&self, name: &str, language: &str, _: usize) -> Result<String, String> {
+        // 搜尋語言必須跟著 item 的 source_lang（th），而非 translator 全域設定（en）。
+        assert_eq!(language, "th");
+        assert_eq!(name, "น่าน");
+        Ok(r#"{"search":[]}"#.to_string())
+    }
+
+    fn get_entities_json(&self, _: &[String], _: &str, _: &str) -> Result<String, String> {
+        Ok(r#"{"entities":{}}"#.to_string())
+    }
+
+    fn ask_p131_json(&self, _: &str, _: &str) -> Result<String, String> {
+        Ok(r#"{"boolean":false}"#.to_string())
+    }
+
+    fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
+        Ok(r#"{"query":{"pages":{"1":{"title":""}}}}"#.to_string())
+    }
+}
+
 struct PanicApi;
 
 impl WikidataApi for PanicApi {
-    fn search_entities_json(&self, _: &str, _: usize) -> Result<String, String> {
+    fn search_entities_json(&self, _: &str, _: &str, _: usize) -> Result<String, String> {
         panic!("全 cache hit 不應呼叫 search")
     }
 

@@ -98,6 +98,19 @@ impl TranslationCacheStore {
         })
     }
 
+    /// 讀取翻譯快取 entry 當時記錄的 parent QID。
+    ///
+    /// 外層 `None` 表示沒有該 item 的快取；內層 `None` 表示當時未帶 parent QID。
+    pub fn get_translation_parent_qid(&self, item: &TranslationItem) -> Option<Option<String>> {
+        let entry = self.translations.get(&item.id)?.as_object()?;
+        Some(
+            entry
+                .get("parent_qid")
+                .and_then(Value::as_str)
+                .map(ToString::to_string),
+        )
+    }
+
     pub fn set_translation(
         &mut self,
         item: &TranslationItem,
