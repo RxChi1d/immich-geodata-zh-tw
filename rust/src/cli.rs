@@ -548,12 +548,12 @@ fn calculate_global_max_geoname_id(options: &ProductionOptions) -> Result<i64, S
 }
 
 fn handler_countries() -> Vec<String> {
-    vec![
-        "JP".to_string(),
-        "KR".to_string(),
-        "TH".to_string(),
-        "TW".to_string(),
-    ]
+    // Reason: 由 extract 的 Country enum 單一事實來源導出，
+    // 新增國家時不會發生 CLI 清單與 handler 路由不同步。
+    extract::handler_country_codes()
+        .into_iter()
+        .map(ToString::to_string)
+        .collect()
 }
 
 fn is_handler_country(country: &str) -> bool {

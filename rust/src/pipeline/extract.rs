@@ -14,6 +14,15 @@ mod korea_wikidata;
 mod sources;
 mod thailand_wikidata;
 mod types;
+mod wikidata_common;
+
+/// 所有擁有 extract handler 的國家代碼，由 `Country` enum 導出。
+pub fn handler_country_codes() -> Vec<&'static str> {
+    types::Country::ALL
+        .iter()
+        .map(|country| country.code())
+        .collect()
+}
 
 use geometry::apply_country_centroids;
 use sources::{read_geojson_features_from_content, read_shapefile};
