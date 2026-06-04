@@ -4,9 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 
 fn repo_path(relative: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join(relative)
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(relative)
 }
 
 /// 確認 Wikidata 國家的 fixture stub 存在。

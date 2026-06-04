@@ -39,7 +39,7 @@ docs/superpowers/
 *.log
 
 # Rust build artifacts
-rust/target/
+target/
 
 # Local git worktrees
 .worktree/

@@ -223,9 +223,7 @@ fn assert_rows_equal(path: PathBuf, delimiter: u8, has_header: bool, columns: &[
 }
 
 fn repo_path(relative_path: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join(relative_path)
+    Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path)
 }
 
 fn write_temp_table(file_name: &str, content: &str) -> PathBuf {

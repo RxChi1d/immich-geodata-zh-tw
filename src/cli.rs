@@ -30,7 +30,7 @@ impl Default for RunOptions {
         Self {
             fixture: None,
             fixtures_dir: PathBuf::from("fixtures/parity"),
-            output_dir: PathBuf::from("rust/target/stage-output"),
+            output_dir: PathBuf::from("target/stage-output"),
         }
     }
 }
@@ -723,10 +723,7 @@ mod tests {
         let options = parse_options(&[]).unwrap();
 
         assert_eq!(options.fixtures_dir, PathBuf::from("fixtures/parity"));
-        assert_eq!(
-            options.output_dir,
-            PathBuf::from("rust/target/stage-output")
-        );
+        assert_eq!(options.output_dir, PathBuf::from("target/stage-output"));
         assert_eq!(options.fixture, None);
     }
 
