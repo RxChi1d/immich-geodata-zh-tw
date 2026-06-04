@@ -13,7 +13,7 @@ fn repo_path(relative: &str) -> PathBuf {
 /// 靜默改打真實 Wikidata API，把離線測試變成不穩定的網路測試。
 /// 在這裡前置斷言，讓缺檔成為明確的測試失敗而非隱性網路依賴。
 fn assert_wikidata_stub_exists(country_code: &str) {
-    let stub = repo_path("fixtures/parity/geospatial_extract/extract_sources")
+    let stub = repo_path("fixtures/extract_handlers/extract_sources")
         .join(format!("{country_code}_wikidata_stub.json"));
     assert!(
         stub.exists(),
@@ -37,15 +37,15 @@ fn thailand_geospatial_fixture_extracts_admin3_rows() {
     let _ = fs::remove_dir_all(&output_dir);
 
     let options = RunOptions {
-        fixture: Some("geospatial_extract".to_string()),
-        fixtures_dir: repo_path("fixtures/parity"),
+        fixture: Some("extract_handlers".to_string()),
+        fixtures_dir: repo_path("fixtures"),
         output_dir: output_dir.clone(),
     };
 
     extract::run(&options).unwrap();
 
     let output = output_dir
-        .join("geospatial_extract")
+        .join("extract_handlers")
         .join("extract")
         .join("TH.csv");
     let content = fs::read_to_string(&output).unwrap();

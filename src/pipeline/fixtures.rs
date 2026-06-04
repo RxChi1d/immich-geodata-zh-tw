@@ -168,7 +168,7 @@ mod tests {
 
     #[test]
     fn parse_manifest_fields() {
-        let fixture = load_fixtures(Path::new("fixtures/parity"), Some("tw_minimal"))
+        let fixture = load_fixtures(Path::new("fixtures"), Some("tw_minimal"))
             .unwrap()
             .remove(0);
 

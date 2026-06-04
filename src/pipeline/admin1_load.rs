@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn replace_taiwan_removes_old_rows_and_prepends_new_rows() {
-        let fixture = load_fixtures(std::path::Path::new("fixtures/parity"), Some("tw_minimal"))
+        let fixture = load_fixtures(std::path::Path::new("fixtures"), Some("tw_minimal"))
             .unwrap()
             .remove(0);
         let mut rows = vec![
@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn production_replacement_keeps_legacy_vstack_order() {
-        let fixture = load_fixtures(std::path::Path::new("fixtures/parity"), Some("tw_minimal"))
+        let fixture = load_fixtures(std::path::Path::new("fixtures"), Some("tw_minimal"))
             .unwrap()
             .remove(0);
         let mut rows = vec![

@@ -29,7 +29,7 @@ impl Default for RunOptions {
     fn default() -> Self {
         Self {
             fixture: None,
-            fixtures_dir: PathBuf::from("fixtures/parity"),
+            fixtures_dir: PathBuf::from("fixtures"),
             output_dir: PathBuf::from("target/stage-output"),
         }
     }
@@ -607,7 +607,7 @@ fn run_fixture_production(command: &str, options: &ProductionOptions) -> Result<
 
     let run_options = RunOptions {
         fixture: Some("release_archive".to_string()),
-        fixtures_dir: PathBuf::from("fixtures/parity"),
+        fixtures_dir: PathBuf::from("fixtures"),
         output_dir: options.output_folder.clone(),
     };
     pipeline::run_stage(Stage::Pack, &run_options)?;
@@ -722,7 +722,7 @@ mod tests {
     fn parse_default_options() {
         let options = parse_options(&[]).unwrap();
 
-        assert_eq!(options.fixtures_dir, PathBuf::from("fixtures/parity"));
+        assert_eq!(options.fixtures_dir, PathBuf::from("fixtures"));
         assert_eq!(options.output_dir, PathBuf::from("target/stage-output"));
         assert_eq!(options.fixture, None);
     }

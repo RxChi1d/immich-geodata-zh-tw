@@ -9,7 +9,7 @@
   "extra_files": [],
   "min_population": 0,
   "modification_date": "2026-01-01",
-  "name": "geospatial_extract",
+  "name": "extract_handlers",
   "stages": [
     "extract"
   ]

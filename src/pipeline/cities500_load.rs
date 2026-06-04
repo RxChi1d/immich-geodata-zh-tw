@@ -201,7 +201,7 @@ mod tests {
 
     #[test]
     fn replace_country_cities_keeps_legacy_vstack_order() {
-        let fixture = load_fixtures(std::path::Path::new("fixtures/parity"), Some("tw_minimal"))
+        let fixture = load_fixtures(std::path::Path::new("fixtures"), Some("tw_minimal"))
             .unwrap()
             .remove(0);
         let mut rows = vec![city_row_with_country("3039154", "El Tarter", "AD")];

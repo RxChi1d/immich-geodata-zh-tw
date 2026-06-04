@@ -14,7 +14,7 @@ use polars::prelude::DataType;
 #[test]
 fn reads_tw_minimal_cities_like_existing_parser() {
     assert_polars_matches_table(
-        "fixtures/parity/tw_minimal/geoname/cities500.txt",
+        "fixtures/tw_minimal/geoname/cities500.txt",
         b'\t',
         false,
         &CITIES_COLUMNS,
@@ -23,7 +23,7 @@ fn reads_tw_minimal_cities_like_existing_parser() {
 
 #[test]
 fn reads_cities_dataframe_with_legacy_typed_schema() {
-    let path = repo_path("fixtures/parity/tw_minimal/geoname/cities500.txt");
+    let path = repo_path("fixtures/tw_minimal/geoname/cities500.txt");
 
     let df = read_cities_dataframe(&path, b'\t').unwrap();
 
@@ -39,7 +39,7 @@ fn reads_cities_dataframe_with_legacy_typed_schema() {
 #[test]
 fn reads_tw_minimal_admin1_like_existing_parser() {
     assert_polars_matches_table(
-        "fixtures/parity/tw_minimal/geoname/admin1CodesASCII.txt",
+        "fixtures/tw_minimal/geoname/admin1CodesASCII.txt",
         b'\t',
         false,
         &ADMIN1_COLUMNS,
@@ -49,7 +49,7 @@ fn reads_tw_minimal_admin1_like_existing_parser() {
 #[test]
 fn reads_tw_minimal_extra_us_like_existing_parser() {
     assert_polars_matches_table(
-        "fixtures/parity/tw_minimal/extra_data/US.txt",
+        "fixtures/tw_minimal/extra_data/US.txt",
         b'\t',
         false,
         &CITIES_COLUMNS,
@@ -59,7 +59,7 @@ fn reads_tw_minimal_extra_us_like_existing_parser() {
 #[test]
 fn reads_tw_minimal_geodata_header_like_existing_parser() {
     assert_polars_matches_table(
-        "fixtures/parity/tw_minimal/geodata/tw_geodata.csv",
+        "fixtures/tw_minimal/geodata/tw_geodata.csv",
         b',',
         true,
         &GEODATA_COLUMNS,
@@ -69,7 +69,7 @@ fn reads_tw_minimal_geodata_header_like_existing_parser() {
 #[test]
 fn reads_tw_minimal_metadata_header_like_existing_parser() {
     assert_polars_matches_table(
-        "fixtures/parity/tw_minimal/meta_data/US.csv",
+        "fixtures/tw_minimal/meta_data/US.csv",
         b',',
         true,
         &GEODATA_COLUMNS,
@@ -79,7 +79,7 @@ fn reads_tw_minimal_metadata_header_like_existing_parser() {
 #[test]
 fn reads_alternate_chinese_name_csv_header_like_existing_parser() {
     assert_polars_matches_table(
-        "fixtures/parity/tw_minimal/alternate_chinese_name.csv",
+        "fixtures/tw_minimal/alternate_chinese_name.csv",
         b',',
         true,
         &["geoname_id", "name"],
