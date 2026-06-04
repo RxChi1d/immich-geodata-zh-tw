@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::time::Duration;
 
 use crate::wikidata::{
     AdminLevel, BatchTranslateOptions, METADATA_OFFICIAL_EN, METADATA_OFFICIAL_TH,
@@ -7,7 +8,8 @@ use crate::wikidata::{
     WikidataClientOptions, WikidataTranslator,
 };
 
-use super::types::{Feature, ThailandTranslations};
+use super::types::{Feature, WikidataTranslations};
+use super::wikidata_common::{admin2_parent_qids, translations_from_results};
 
 /// 泰國（Thailand）的 Wikidata QID，作為 admin1 的 P131 驗證 parent。
 const THAILAND_QID: &str = "Q869";
@@ -21,7 +23,7 @@ const BANGKOK_KHET_CLASS: &str = "Q15634531";
 pub(super) fn build_thailand_wikidata_cache(
     features: &[Feature],
     cache_path: &Path,
-) -> Result<ThailandTranslations, String> {
+) -> Result<WikidataTranslations, String> {
     let admin1_dataset = thailand_admin1_dataset(features)?;
     let admin2_dataset = thailand_admin2_dataset(features)?;
     let mut options = WikidataClientOptions::new("en", "zh-tw");
@@ -43,7 +45,8 @@ pub(super) fn build_thailand_wikidata_cache(
         &mut translator,
         &admin1_dataset,
         admin1_results,
-        |_| HashMap::new(),
+        // admin1 的 parent 是國家，由 dataset country_qid 樓地板提供。
+        |_| None,
         &[THAILAND_PROVINCE_CLASS],
     )?;
 
@@ -60,15 +63,10 @@ pub(super) fn build_thailand_wikidata_cache(
         &mut translator,
         &admin2_dataset,
         admin2_results,
-        |item| {
-            parent_qids
-                .get(&item.id)
-                .map(|qid| HashMap::from([(item.id.clone(), qid.clone())]))
-                .unwrap_or_default()
-        },
+        |item| parent_qids.get(&item.id).cloned(),
         &[THAILAND_AMPHOE_CLASS, BANGKOK_KHET_CLASS],
     )?;
-    Ok(thailand_translations_from_results(
+    Ok(translations_from_results(
         &admin1_dataset,
         &admin1_results,
         &admin2_dataset,
@@ -86,7 +84,7 @@ fn retranslate_failures_with_thai_names<C: WikidataApi>(
     translator: &mut WikidataTranslator<C>,
     dataset: &TranslationDataset,
     mut results: HashMap<String, TranslationResult>,
-    parent_qids_for: impl Fn(&TranslationItem) -> HashMap<String, String>,
+    parent_qid_for: impl Fn(&TranslationItem) -> Option<String>,
     allowed_classes: &[&str],
 ) -> Result<HashMap<String, TranslationResult>, String> {
     let mut fallback_pairs = Vec::new();
@@ -95,6 +93,12 @@ fn retranslate_failures_with_thai_names<C: WikidataApi>(
             .get(&item.id)
             .is_none_or(|result| !result.parent_verified);
         if !failed {
+            continue;
+        }
+        // Reason: admin2 必須對「已解析的 admin1 QID」驗證才有鑑別力；
+        // parent 未解析時改以國家樓地板回收會讓跨府同名縣有誤配風險，
+        // 寧可保守回退官方名稱也不回收。
+        if dataset.level == AdminLevel::Admin2 && parent_qid_for(item).is_none() {
             continue;
         }
         let Some(thai_name) = item
@@ -132,7 +136,7 @@ fn retranslate_failures_with_thai_names<C: WikidataApi>(
 
     let mut parent_qids = HashMap::new();
     for (en_item, thai_item) in &fallback_pairs {
-        for (_, qid) in parent_qids_for(en_item) {
+        if let Some(qid) = parent_qid_for(en_item) {
             parent_qids.insert(thai_item.id.clone(), qid);
         }
     }
@@ -161,10 +165,19 @@ fn retranslate_failures_with_thai_names<C: WikidataApi>(
         if let Some(thai_result) = thai_results.get(&thai_item.id)
             && thai_result.parent_verified
         {
+            // Reason: 回收結果也要寫回英文 item 的快取，否則 EN 快取永遠
+            // 停留在失敗狀態，每次執行都重複進入後備流程。
+            let parent_qid = parent_qid_for(en_item).unwrap_or_else(|| dataset.country_qid.clone());
+            translator
+                .cache_store
+                .set_translation(en_item, thai_result, Some(&parent_qid))?;
             results.insert(en_item.id.clone(), thai_result.clone());
             recovered += 1;
         }
     }
+    translator
+        .cache_store
+        .flush_if_needed(true, 0, Duration::from_secs(0))?;
     println!(
         "stage=wikidata phase=thai_fallback level={} attempted={} recovered={}",
         dataset.level.as_str(),
@@ -235,74 +248,6 @@ fn thailand_item(
             (METADATA_OFFICIAL_TH.to_string(), official_th.to_string()),
         ]),
     )
-}
-
-fn admin2_parent_qids(
-    admin1_dataset: &TranslationDataset,
-    admin1_results: &HashMap<String, TranslationResult>,
-    admin2_dataset: &TranslationDataset,
-) -> HashMap<String, String> {
-    let admin1_qids = admin1_dataset
-        .items()
-        .iter()
-        .filter_map(|item| {
-            admin1_results
-                .get(&item.id)
-                .and_then(|result| result.qid.clone())
-                .map(|qid| (item.original_name.as_str(), qid))
-        })
-        .collect::<HashMap<_, _>>();
-    let mut parent_qids = HashMap::new();
-    for item in admin2_dataset.items() {
-        let Some(parent_name) = item.parent_chain.get(1).map(String::as_str) else {
-            continue;
-        };
-        let Some(parent_qid) = admin1_qids.get(parent_name) else {
-            continue;
-        };
-        parent_qids.insert(item.id.clone(), parent_qid.clone());
-    }
-    parent_qids
-}
-
-fn thailand_translations_from_results(
-    admin1_dataset: &TranslationDataset,
-    admin1_results: &HashMap<String, TranslationResult>,
-    admin2_dataset: &TranslationDataset,
-    admin2_results: &HashMap<String, TranslationResult>,
-) -> ThailandTranslations {
-    let mut translations = ThailandTranslations::default();
-    for item in admin1_dataset.items() {
-        if let Some(result) = admin1_results.get(&item.id) {
-            translations.admin1_by_name.insert(
-                item.original_name.clone(),
-                thailand_result_text(item, result),
-            );
-        }
-    }
-    for item in admin2_dataset.items() {
-        if let Some(result) = admin2_results.get(&item.id) {
-            let translated = thailand_result_text(item, result);
-            let parent = item.parent_chain.last().cloned().unwrap_or_default();
-            translations
-                .admin2_by_parent
-                .entry(parent)
-                .or_default()
-                .insert(item.original_name.clone(), translated.clone());
-            translations
-                .fallback_by_name
-                .insert(item.original_name.clone(), translated);
-        }
-    }
-    translations
-}
-
-fn thailand_result_text(item: &TranslationItem, result: &TranslationResult) -> String {
-    if result.translated.is_empty() {
-        item.original_name.clone()
-    } else {
-        result.translated.clone()
-    }
 }
 
 fn attribute<'a>(feature: &'a Feature, key: &str) -> &'a str {

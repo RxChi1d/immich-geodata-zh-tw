@@ -1,16 +1,13 @@
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::Path;
-
-use serde_json::Value;
 
 use super::korea_wikidata::build_korea_wikidata_cache;
 use super::thailand_wikidata::build_thailand_wikidata_cache;
 use super::types::{
-    Country, ExtractContext, ExtractRow, Feature, FeatureGeometry, KoreaTranslations,
-    ThailandTranslations, korea_stub_source, korea_translation_cache_path, thailand_stub_source,
-    thailand_translation_cache_path,
+    Country, ExtractContext, ExtractRow, Feature, FeatureGeometry, WikidataTranslations,
+    wikidata_cache_path, wikidata_stub_source,
 };
+use super::wikidata_common::read_wikidata_stub;
 
 impl Country {
     pub(super) fn load_context(
@@ -25,11 +22,11 @@ impl Country {
                 let stub = wikidata_stub
                     .filter(|path| path.exists())
                     .map(Path::to_path_buf)
-                    .or_else(|| korea_stub_source(source_path));
+                    .or_else(|| wikidata_stub_source(source_path, "KR"));
                 let korea_translations = if let Some(stub) = stub {
-                    read_korea_stub(&stub)?
+                    read_wikidata_stub(&stub, "KR")?
                 } else {
-                    build_korea_wikidata_cache(features, &korea_translation_cache_path())?
+                    build_korea_wikidata_cache(features, &wikidata_cache_path("KR"))?
                 };
                 Ok(ExtractContext {
                     korea_translations,
@@ -40,11 +37,11 @@ impl Country {
                 let stub = wikidata_stub
                     .filter(|path| path.exists())
                     .map(Path::to_path_buf)
-                    .or_else(|| thailand_stub_source(source_path));
+                    .or_else(|| wikidata_stub_source(source_path, "TH"));
                 let thailand_translations = if let Some(stub) = stub {
-                    read_thailand_stub(&stub)?
+                    read_wikidata_stub(&stub, "TH")?
                 } else {
-                    build_thailand_wikidata_cache(features, &thailand_translation_cache_path())?
+                    build_thailand_wikidata_cache(features, &wikidata_cache_path("TH"))?
                 };
                 Ok(ExtractContext {
                     thailand_translations,
@@ -89,7 +86,7 @@ fn taiwan_feature_row(feature: &Feature) -> Result<ExtractRow, String> {
 
 fn thailand_feature_row(
     feature: &Feature,
-    translations: &ThailandTranslations,
+    translations: &WikidataTranslations,
 ) -> Result<ExtractRow, String> {
     let (longitude, latitude) = point_geometry(&feature.geometry)?;
     let admin1_name = attribute(feature, "adm1_name");
@@ -216,7 +213,7 @@ fn official_source_name(feature: &Feature, english_key: &str, thai_key: &str) ->
     attribute(feature, thai_key).to_string()
 }
 
-fn thailand_admin1(name: &str, translations: &ThailandTranslations) -> String {
+fn thailand_admin1(name: &str, translations: &WikidataTranslations) -> String {
     translations
         .admin1_by_name
         .get(name)
@@ -227,7 +224,7 @@ fn thailand_admin1(name: &str, translations: &ThailandTranslations) -> String {
 fn thailand_admin2(
     adm1_name: &str,
     adm2_name: &str,
-    translations: &ThailandTranslations,
+    translations: &WikidataTranslations,
 ) -> String {
     translations
         .admin2_by_parent
@@ -248,7 +245,7 @@ fn clean_admin(value: &str) -> Option<&str> {
 
 fn korea_feature_row(
     feature: &Feature,
-    translations: &KoreaTranslations,
+    translations: &WikidataTranslations,
 ) -> Result<ExtractRow, String> {
     let (longitude, latitude) = point_geometry(&feature.geometry)?;
     let components = korea_admin_components(feature);
@@ -307,7 +304,7 @@ pub(super) fn korea_admin_components(feature: &Feature) -> KoreaAdminComponents 
     }
 }
 
-fn korea_admin1(name: &str, translations: &KoreaTranslations) -> String {
+fn korea_admin1(name: &str, translations: &WikidataTranslations) -> String {
     let built_in = match name {
         "서울특별시" => "首爾市",
         "부산광역시" => "釜山市",
@@ -339,7 +336,7 @@ fn korea_admin1(name: &str, translations: &KoreaTranslations) -> String {
     }
 }
 
-fn korea_admin2(sidonm: &str, sggnm: &str, translations: &KoreaTranslations) -> String {
+fn korea_admin2(sidonm: &str, sggnm: &str, translations: &WikidataTranslations) -> String {
     if sidonm == "세종특별자치시" {
         return sejong_admin2(sggnm);
     }
@@ -411,109 +408,4 @@ fn strip_trailing_parenthetical(value: &str) -> String {
         return trimmed.to_string();
     };
     trimmed[..start].trim_end().to_string()
-}
-
-fn read_korea_stub(path: &Path) -> Result<KoreaTranslations, String> {
-    let content = fs::read_to_string(path)
-        .map_err(|error| format!("無法讀取 KR Wikidata stub {}：{error}", path.display()))?;
-    let root: Value = serde_json::from_str(&content)
-        .map_err(|error| format!("KR Wikidata JSON 解析失敗 {}：{error}", path.display()))?;
-    let entries = root
-        .get("translations")
-        .and_then(Value::as_object)
-        .ok_or_else(|| {
-            format!(
-                "KR Wikidata stub/cache 缺少 translations：{}",
-                path.display()
-            )
-        })?;
-    let mut translations = KoreaTranslations::default();
-    for (key, value) in entries {
-        let Some(translated) = wikidata_translation_value(value) else {
-            continue;
-        };
-        if let Some(name) = key.strip_prefix("admin_1/KR/") {
-            translations
-                .admin1_by_name
-                .insert(name.to_string(), translated);
-        } else if let Some(rest) = key.strip_prefix("admin_2/KR/") {
-            let mut parts = rest.splitn(2, '/');
-            if let (Some(parent), Some(name)) = (parts.next(), parts.next()) {
-                translations
-                    .admin2_by_parent
-                    .entry(parent.to_string())
-                    .or_default()
-                    .insert(name.to_string(), translated.clone());
-                translations
-                    .fallback_by_name
-                    .insert(name.to_string(), translated);
-            }
-        } else {
-            translations
-                .fallback_by_name
-                .insert(key.to_string(), translated.clone());
-            translations
-                .admin1_by_name
-                .insert(key.to_string(), translated);
-        }
-    }
-    Ok(translations)
-}
-
-fn wikidata_translation_value(value: &Value) -> Option<String> {
-    match value {
-        Value::String(value) => Some(value.clone()),
-        Value::Object(object) => object
-            .get("translated")
-            .and_then(Value::as_str)
-            .map(ToString::to_string),
-        _ => None,
-    }
-}
-
-fn read_thailand_stub(path: &Path) -> Result<ThailandTranslations, String> {
-    let content = fs::read_to_string(path)
-        .map_err(|error| format!("無法讀取 TH Wikidata stub {}：{error}", path.display()))?;
-    let root: Value = serde_json::from_str(&content)
-        .map_err(|error| format!("TH Wikidata JSON 解析失敗 {}：{error}", path.display()))?;
-    let entries = root
-        .get("translations")
-        .and_then(Value::as_object)
-        .ok_or_else(|| {
-            format!(
-                "TH Wikidata stub/cache 缺少 translations：{}",
-                path.display()
-            )
-        })?;
-    let mut translations = ThailandTranslations::default();
-    for (key, value) in entries {
-        let Some(translated) = wikidata_translation_value(value) else {
-            continue;
-        };
-        if let Some(name) = key.strip_prefix("admin_1/TH/") {
-            translations
-                .admin1_by_name
-                .insert(name.to_string(), translated);
-        } else if let Some(rest) = key.strip_prefix("admin_2/TH/") {
-            let mut parts = rest.splitn(2, '/');
-            if let (Some(parent), Some(name)) = (parts.next(), parts.next()) {
-                translations
-                    .admin2_by_parent
-                    .entry(parent.to_string())
-                    .or_default()
-                    .insert(name.to_string(), translated.clone());
-                translations
-                    .fallback_by_name
-                    .insert(name.to_string(), translated);
-            }
-        } else {
-            translations
-                .fallback_by_name
-                .insert(key.to_string(), translated.clone());
-            translations
-                .admin1_by_name
-                .insert(key.to_string(), translated);
-        }
-    }
-    Ok(translations)
 }

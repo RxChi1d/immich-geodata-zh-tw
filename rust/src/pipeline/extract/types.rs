@@ -221,15 +221,12 @@ impl FeatureAttributes {
     }
 }
 
+/// 各國共用的 Wikidata 翻譯查詢表。
+///
+/// `fallback_by_name` 僅保留「全國無歧義」的名稱（同名不同譯的項目會被
+/// 剔除），避免跨上層行政區的同名單位拿到錯誤翻譯。
 #[derive(Clone, Debug, Default)]
-pub(super) struct KoreaTranslations {
-    pub(super) admin1_by_name: HashMap<String, String>,
-    pub(super) admin2_by_parent: HashMap<String, HashMap<String, String>>,
-    pub(super) fallback_by_name: HashMap<String, String>,
-}
-
-#[derive(Clone, Debug, Default)]
-pub(super) struct ThailandTranslations {
+pub(super) struct WikidataTranslations {
     pub(super) admin1_by_name: HashMap<String, String>,
     pub(super) admin2_by_parent: HashMap<String, HashMap<String, String>>,
     pub(super) fallback_by_name: HashMap<String, String>,
@@ -237,8 +234,8 @@ pub(super) struct ThailandTranslations {
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct ExtractContext {
-    pub(super) korea_translations: KoreaTranslations,
-    pub(super) thailand_translations: ThailandTranslations,
+    pub(super) korea_translations: WikidataTranslations,
+    pub(super) thailand_translations: WikidataTranslations,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -264,6 +261,17 @@ pub(super) enum Country {
 }
 
 impl Country {
+    /// 所有擁有 extract handler 的國家（依代碼字母序）。
+    ///
+    /// Reason: 這是「哪些國家有 handler」的單一事實來源；CLI 的
+    /// handler 國家清單由此導出，新增國家時不需（也不能）另行同步。
+    pub(super) const ALL: [Country; 4] = [
+        Country::Japan,
+        Country::Korea,
+        Country::Thailand,
+        Country::Taiwan,
+    ];
+
     pub(super) fn parse(code: &str) -> Result<Self, String> {
         match code {
             "TW" => Ok(Self::Taiwan),
@@ -312,24 +320,18 @@ impl Country {
     }
 }
 
-pub(super) fn korea_stub_source(source_path: &std::path::Path) -> Option<PathBuf> {
+/// 尋找與來源檔同目錄的 `{CC}_wikidata_stub.json`（fixture/離線測試用）。
+pub(super) fn wikidata_stub_source(
+    source_path: &std::path::Path,
+    country_code: &str,
+) -> Option<PathBuf> {
     source_path
         .parent()
-        .map(|parent| parent.join("KR_wikidata_stub.json"))
+        .map(|parent| parent.join(format!("{country_code}_wikidata_stub.json")))
         .filter(|path| path.exists())
 }
 
-pub(super) fn korea_translation_cache_path() -> PathBuf {
-    std::path::Path::new("geoname_data").join("KR_wikidata_cache.json")
-}
-
-pub(super) fn thailand_stub_source(source_path: &std::path::Path) -> Option<PathBuf> {
-    source_path
-        .parent()
-        .map(|parent| parent.join("TH_wikidata_stub.json"))
-        .filter(|path| path.exists())
-}
-
-pub(super) fn thailand_translation_cache_path() -> PathBuf {
-    std::path::Path::new("geoname_data").join("TH_wikidata_cache.json")
+/// 該國 Wikidata 翻譯快取的標準路徑。
+pub(super) fn wikidata_cache_path(country_code: &str) -> PathBuf {
+    std::path::Path::new("geoname_data").join(format!("{country_code}_wikidata_cache.json"))
 }
