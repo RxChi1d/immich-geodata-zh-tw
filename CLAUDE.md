@@ -116,6 +116,13 @@
 
 **重要**：GitHub Release Notes 與 CHANGELOG 共用 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 分類規範。
 
+**生成機制（changelog-first）**：Release Notes 由 release workflow 自動從
+CHANGELOG.md 的對應版本區段生成（`.github/scripts/extract-release-notes.sh`，
+含 emoji 分類轉換與 compare 連結）。發版前只需完成 CHANGELOG 版本切割，無需
+手動撰寫 release notes；Release Drafter 草稿僅作為撰寫 CHANGELOG 時的 PR
+參考清單。正式版缺對應 CHANGELOG 區段時 release 會直接失敗；預發布版缺區段
+則自動生成簡化說明。
+
 #### 分類與 Emoji 對應
 
 | 類別 | Emoji | 說明 |
