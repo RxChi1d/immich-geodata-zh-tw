@@ -19,6 +19,14 @@ on:
       - reopened
       - synchronize
       - edited  # PR 標題修改後重新上 label
+  # 臨時：合併前實測 autolabeler 用（pull_request_target 只執行 default
+  # branch 上的 workflow，合併前無法觸發），驗證後移除
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
 
 # --------------------------------------------------------------------------
 # 頂層預設權限（最小化原則）
@@ -48,7 +56,8 @@ jobs:
   # --------------------------------------------------------------------------
   autolabeler:
     # 僅在 pull_request_target 事件時上 label；push 事件跳過此 job
-    if: github.event_name == 'pull_request_target'
+    # （pull_request 為臨時測試用，驗證後隨觸發一併移除）
+    if: github.event_name == 'pull_request_target' || github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
       # pull_request_target 具備寫入 token 權限，此 job 僅操作 PR label，
