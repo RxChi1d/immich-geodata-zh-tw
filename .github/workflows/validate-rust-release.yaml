@@ -37,9 +37,9 @@ jobs:
       contents: read
     runs-on: ubuntu-24.04
     env:
-      COUNTRY_CODES: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.country_codes || '' }}
-      SKIP_LOCATIONIQ: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_locationiq || 'true' }}
-      SKIP_PREPARE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_prepare || 'false' }}
+      COUNTRY_CODES: ${{ inputs.country_codes }}
+      SKIP_LOCATIONIQ: ${{ inputs.skip_locationiq }}
+      SKIP_PREPARE: ${{ inputs.skip_prepare }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
