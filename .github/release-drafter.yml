@@ -134,6 +134,10 @@ version-resolver:
 # breaking 的處理：含 ! 的標題（type(scope)!:）只由 breaking 規則匹配；
 # type 規則刻意「不」匹配 !（regex 中沒有 (!)?），避免 breaking PR 同時
 # 獲得 type label 而在草稿中重複列出（v7 分類無去重機制）。
+#
+# 注意：autolabeler 只會「新增」label，不會移除過時的 label。若 PR 改過
+# 標題（例如 feat: → feat!:），舊 label（type: feat）會殘留並導致草稿
+# 重複列出，需由維護者手動移除。
 autolabeler:
   # Breaking change：標題含 type(scope)?!: 格式
   - label: 'breaking'
