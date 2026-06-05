@@ -3,12 +3,14 @@
 # 用途：每次 push 到 main 時，自動維護一份「下一版」草稿 release。
 # 草稿內容依 Conventional Commit type 分類，列出所有待發布的 PR。
 #
-# 發版流程定位：
-#   1. 此草稿為中間產物，提供原始 PR 清單供參考。
-#   2. 發版前，維護者手動將草稿內容改寫為 Keep a Changelog 格式
-#      （Added / Changed / Fixed ... + emoji），再貼入正式 release notes。
-#   3. 正式 release 由 .github/workflows/release.yaml 中的
-#      ncipollo/release-action 建立（推送同名 tag 時接管此草稿並轉正）。
+# 發版流程定位（changelog-first）：
+#   1. 此草稿為「純參考清單」：彙整自上次發版以來合併的 PR，供撰寫
+#      CHANGELOG.md 時對照確認沒有遺漏；草稿本身不會被發佈或消耗。
+#   2. 正式 release notes 由 release workflow 自動從 CHANGELOG.md 的
+#      對應版本區段生成（.github/scripts/extract-release-notes.sh），
+#      發版前只需完成 CHANGELOG 版本切割。
+#   3. 草稿在每次 push main 時以最新正式 release 為基準自動重算，
+#      無需手動維護，tag 與實際發版版本不同也無妨。
 #
 # 語法依據：release-drafter v7 的 runtime 驗證 schema
 # （src/actions/drafter/config/schemas/config.schema.ts）。

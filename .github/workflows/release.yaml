@@ -109,6 +109,16 @@ jobs:
           # 無 non-handler 國家時 locationiq 階段會自動 skip。
           ".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}" release \
             --locationiq-api-key "${{ secrets.LOCATIONIQ_API_KEY }}"
+      - name: Generate release notes from CHANGELOG
+        if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
+        run: |
+          # Changelog-first：release notes 由 CHANGELOG.md 對應版本區段生成
+          # （正式版缺區段會在此失敗，提醒先完成 CHANGELOG 版本切割；
+          # 預發布版缺區段則輸出簡化說明）。
+          .github/scripts/extract-release-notes.sh "${VERSION_TAG}" CHANGELOG.md \
+            > /tmp/release_notes.md
+          echo "--- release notes 預覽 ---"
+          cat /tmp/release_notes.md
       - name: Create Release
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         uses: ncipollo/release-action@v1
@@ -128,14 +138,15 @@ jobs:
           generateReleaseNotes: false
           commit: main
           tag: ${{ env.VERSION_TAG }}
-          # Release Drafter 草稿接管：
-          #   release-drafter 每次 push main 會以同名 tag（vX.Y.Z）維護一份
-          #   草稿 release。啟用 allowUpdates 讓正式發布接管既有草稿並轉正
-          #   （上方 draft: false 在更新時生效），artifacts 附加至同一 release。
-          #   omitBodyDuringUpdate 保留草稿中已手動改寫的 release notes，
-          #   避免被空 body 覆寫。無同名草稿時照常建立新 release。
+          # Release notes 來源為 CHANGELOG.md 對應版本區段（changelog-first，
+          # 見上方 Generate release notes 步驟）；Release Drafter 草稿僅為
+          # 撰寫 CHANGELOG 時的參考清單，不會被發佈。
+          bodyFile: /tmp/release_notes.md
+          # 與 Release Drafter 草稿共存的保險：若草稿恰與本次 tag 同名，
+          # allowUpdates 讓發布接管該草稿（轉正並以 bodyFile 內容覆寫），
+          # 避免 tag 已有 release 的 422 衝突；一般情況草稿 tag 不同名，
+          # 照常建立新 release，草稿於下次 push main 時自動重算。
           allowUpdates: true
-          omitBodyDuringUpdate: true
           # 僅穩定版本標記為 latest；含預發布標識（a/b/rc/alpha/beta）的標記為 prerelease
           makeLatest: ${{ !contains(env.VERSION_TAG, 'a') && !contains(env.VERSION_TAG, 'b') && !contains(env.VERSION_TAG, 'rc') && !contains(env.VERSION_TAG, 'alpha') && !contains(env.VERSION_TAG, 'beta') }}
           prerelease: ${{ contains(env.VERSION_TAG, 'a') || contains(env.VERSION_TAG, 'b') || contains(env.VERSION_TAG, 'rc') || contains(env.VERSION_TAG, 'alpha') || contains(env.VERSION_TAG, 'beta') }}
