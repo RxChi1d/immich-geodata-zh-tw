@@ -152,9 +152,12 @@ mod tests {
 
     #[test]
     fn replace_taiwan_removes_old_rows_and_prepends_new_rows() {
-        let fixture = load_fixtures(std::path::Path::new("fixtures"), Some("tw_minimal"))
-            .unwrap()
-            .remove(0);
+        let fixture = load_fixtures(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures"),
+            Some("tw_minimal"),
+        )
+        .unwrap()
+        .remove(0);
         let mut rows = vec![
             vec![
                 "TW.OLD".to_string(),
@@ -182,9 +185,12 @@ mod tests {
 
     #[test]
     fn production_replacement_keeps_legacy_vstack_order() {
-        let fixture = load_fixtures(std::path::Path::new("fixtures"), Some("tw_minimal"))
-            .unwrap()
-            .remove(0);
+        let fixture = load_fixtures(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures"),
+            Some("tw_minimal"),
+        )
+        .unwrap()
+        .remove(0);
         let mut rows = vec![
             vec![
                 "AD.02".to_string(),
