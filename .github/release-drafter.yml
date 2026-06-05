@@ -1,0 +1,219 @@
+# Release Drafter 設定檔
+#
+# 用途：每次 push 到 main 時，自動維護一份「下一版」草稿 release。
+# 草稿內容依 Conventional Commit type 分類，列出所有待發布的 PR。
+#
+# 發版流程定位：
+#   1. 此草稿為中間產物，提供原始 PR 清單供參考。
+#   2. 發版前，維護者手動將草稿內容改寫為 Keep a Changelog 格式
+#      （Added / Changed / Fixed ... + emoji），再貼入正式 release notes。
+#   3. 正式 release 由 .github/workflows/release.yaml 中的
+#      ncipollo/release-action 建立（generateReleaseNotes: false）。
+
+# --------------------------------------------------------------------------
+# 版本號模板
+# --------------------------------------------------------------------------
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+
+# --------------------------------------------------------------------------
+# Release notes 主體模板
+# --------------------------------------------------------------------------
+template: |
+  # What's Changed
+
+  $CHANGES
+
+  ---
+
+  **完整變更記錄**: [$PREVIOUS_TAG...v$RESOLVED_VERSION](https://github.com/RxChi1d/immich-geodata-zh-tw/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION)
+
+# --------------------------------------------------------------------------
+# PR 變更項目格式
+# --------------------------------------------------------------------------
+# 使用 - $TITLE (#$NUMBER) 格式。change-title-escapes 處理 PR 標題中的
+# 特殊字元：<, *, _, & 會被加上反斜線避免被解讀為 Markdown 格式字元；
+# # 與 @ 則以附加 HTML 註解的方式處理，避免變成 issue 連結或 @mention。
+change-template: '- $TITLE (#$NUMBER)'
+change-title-escapes: '\<*_&#@'
+
+# --------------------------------------------------------------------------
+# 排除不需顯示在 release notes 的 PR
+# --------------------------------------------------------------------------
+exclude-labels:
+  - 'skip-changelog'
+
+# --------------------------------------------------------------------------
+# 分類與版本解析
+# --------------------------------------------------------------------------
+# categories 同時負責：
+#   (1) 將 PR 依 label 分群顯示在草稿中
+#   (2) 透過 type: version-resolver 項目決定下一個版本號的 semver increment
+#
+# Label 命名慣例：
+#   - 'breaking'           ← breaking change（含 ! 的 Conventional Commit）
+#   - 'type: feat'         ← 新功能
+#   - 'type: fix'          ← 修復
+#   - 'type: perf'         ← 效能改善
+#   - 'type: refactor'     ← 重構
+#   - 'type: docs'         ← 文件
+#   - 'type: test'         ← 測試
+#   - 'type: build'        ← 建置相關
+#   - 'type: ci'           ← CI/CD 相關
+#   - 'type: chore'        ← 雜項維護（含 style、revert）
+#   - 'skip-changelog'     ← 不顯示於 release notes
+
+#
+# exclusive: true 說明：
+#   release-drafter 預設允許同一 PR 同時落入多個同型別類別，導致 breaking
+#   PR（同時帶 'breaking' 與 'type: feat'/'type: fix' 等 label）會在
+#   Breaking Changes 與對應 feat/fix 區塊「重複列出」。為每個渲染類別加上
+#   exclusive: true 後，PR 只會落入「由上而下第一個匹配」的類別；因此
+#   Breaking Changes 置於最前，breaking PR 只會出現在該區塊一次。
+categories:
+  # --- Breaking Changes（major bump）---
+  - title: '⚠️ Breaking Changes'
+    semver-increment: major
+    exclusive: true
+    when:
+      labels:
+        - 'breaking'
+
+  # --- 新功能（minor bump）---
+  - title: '🚀 feat'
+    semver-increment: minor
+    exclusive: true
+    when:
+      labels:
+        - 'type: feat'
+
+  # --- 修復（patch bump）---
+  - title: '🐛 fix'
+    semver-increment: patch
+    exclusive: true
+    when:
+      labels:
+        - 'type: fix'
+
+  # --- 效能改善（patch bump）---
+  - title: '⚡ perf'
+    semver-increment: patch
+    exclusive: true
+    when:
+      labels:
+        - 'type: perf'
+
+  # --- 重構（patch bump）---
+  - title: '♻️ refactor'
+    semver-increment: patch
+    exclusive: true
+    when:
+      labels:
+        - 'type: refactor'
+
+  # --- 文件（patch bump）---
+  - title: '📝 docs'
+    semver-increment: patch
+    exclusive: true
+    when:
+      labels:
+        - 'type: docs'
+
+  # --- 測試（patch bump）---
+  - title: '🧪 test'
+    semver-increment: patch
+    exclusive: true
+    when:
+      labels:
+        - 'type: test'
+
+  # --- 建置 / CI / 雜項（patch bump）---
+  - title: '🔧 build / ci / chore'
+    semver-increment: patch
+    exclusive: true
+    when:
+      labels:
+        - 'type: build'
+        - 'type: ci'
+        - 'type: chore'
+
+  # --- 其他變更（未分類）---
+  # catch-all 收容區：省略 when，type 預設為 changelog。
+  # Reason: release-drafter 只有在存在「省略 when 的 changelog 類別」時，
+  #   無 label（autolabeler 漏接）的 PR 才會出現在草稿中；否則該 PR 會被
+  #   完全省略、靜默消失，導致維護者改寫 Keep a Changelog 時漏列變更。
+  #   此類別作為最低防線，讓漏接 PR 仍可見並供手動歸類。
+  #   不設 exclusive，但因排在所有具名類別之後，已被歸類的 PR 不會落入此區。
+  - title: '📦 其他變更（未分類）'
+
+  # --- 版本解析 fallback（無符合 label 時預設 patch）---
+  # type: version-resolver 項目不渲染 changelog 區塊，僅參與版本計算。
+  # 此項省略 when 條件，因此匹配「所有」PR，保證 $RESOLVED_VERSION 至少有
+  # patch 級別的 increment；最終版本取所有匹配項中最高的 increment
+  # （例如同時匹配 Breaking Changes 的 major 時，以 major 為準）。
+  - type: version-resolver
+    semver-increment: patch
+
+# --------------------------------------------------------------------------
+# Autolabeler：依 PR 標題自動上 label
+# --------------------------------------------------------------------------
+# regex 格式：/pattern/flags，flags i = 大小寫不敏感。
+# 各 type 允許：可選 scope（括號）、可選 breaking ! 符號。
+# breaking ! 額外觸發 'breaking' label（由專屬規則處理）。
+#
+# 冒號後空白以 \s? 表示（0 或 1 個空白）：
+#   Conventional Commits 規範要求冒號後有空白，但人工或自動產生的標題常
+#   漏打空白（如 'feat:沒有空白'）。放寬為 \s? 可容忍此情況，避免該類 PR
+#   掉出所有分類；即便如此，catch-all 類別仍是最低防線。
+autolabeler:
+  # Breaking change：標題含 type(scope)?!: 格式
+  - label: 'breaking'
+    title:
+      - '/^(feat|fix|perf|refactor|docs|test|build|ci|chore|style|revert)(\(.+\))?!:/i'
+
+  # feat
+  - label: 'type: feat'
+    title:
+      - '/^feat(\(.+\))?(!)?:\s?/i'
+
+  # fix
+  - label: 'type: fix'
+    title:
+      - '/^fix(\(.+\))?(!)?:\s?/i'
+
+  # perf
+  - label: 'type: perf'
+    title:
+      - '/^perf(\(.+\))?(!)?:\s?/i'
+
+  # refactor
+  - label: 'type: refactor'
+    title:
+      - '/^refactor(\(.+\))?(!)?:\s?/i'
+
+  # docs
+  - label: 'type: docs'
+    title:
+      - '/^docs(\(.+\))?(!)?:\s?/i'
+
+  # test
+  - label: 'type: test'
+    title:
+      - '/^test(\(.+\))?(!)?:\s?/i'
+
+  # build
+  - label: 'type: build'
+    title:
+      - '/^build(\(.+\))?(!)?:\s?/i'
+
+  # ci
+  - label: 'type: ci'
+    title:
+      - '/^ci(\(.+\))?(!)?:\s?/i'
+
+  # chore（含 style、revert 合併至此分類）
+  - label: 'type: chore'
+    title:
+      - '/^chore(\(.+\))?(!)?:\s?/i'
+      - '/^style(\(.+\))?(!)?:\s?/i'
+      - '/^revert(\(.+\))?(!)?:\s?/i'
