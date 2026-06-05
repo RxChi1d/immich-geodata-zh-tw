@@ -7,15 +7,15 @@ use crate::pipeline::{self, Stage};
 use crate::pipeline::{admin1_load, cities500_load, extract, locationiq, pack, translate};
 
 const HELP: &str = "\
-immich-geodata-migration
+immich-geodata
 
 USAGE:
-  immich-geodata-migration help
-  immich-geodata-migration list-stages
-  immich-geodata-migration run-stage --stage <stage> [--fixture <name>] [--fixtures-dir <path>] [--output-dir <path>]
-  immich-geodata-migration full-pipeline [--fixture <name>] [--fixtures-dir <path>] [--output-dir <path>]
-  immich-geodata-migration prepare [--country-code <cc...>] [--data-folder <path>] [--update]
-  immich-geodata-migration <cleanup|prepare|extract|enhance|locationiq|translate|pack|release> [--dry-run|--fixture-mode|--profile] [options]
+  immich-geodata help
+  immich-geodata list-stages
+  immich-geodata run-stage --stage <stage> [--fixture <name>] [--fixtures-dir <path>] [--output-dir <path>]
+  immich-geodata full-pipeline [--fixture <name>] [--fixtures-dir <path>] [--output-dir <path>]
+  immich-geodata prepare [--country-code <cc...>] [--data-folder <path>] [--update]
+  immich-geodata <cleanup|prepare|extract|enhance|locationiq|translate|pack|release> [--dry-run|--fixture-mode|--profile] [options]
 ";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,8 +29,8 @@ impl Default for RunOptions {
     fn default() -> Self {
         Self {
             fixture: None,
-            fixtures_dir: PathBuf::from("fixtures/parity"),
-            output_dir: PathBuf::from("rust/target/stage-output"),
+            fixtures_dir: PathBuf::from("fixtures"),
+            output_dir: PathBuf::from("target/stage-output"),
         }
     }
 }
@@ -600,22 +600,25 @@ fn current_date_iso() -> Result<String, String> {
     Ok(chrono::Local::now().format("%F").to_string())
 }
 
+/// fixture-mode 煙測使用的 pack-only fixture；run_stage 會以同名子目錄輸出產物。
+const RELEASE_SMOKE_FIXTURE: &str = "release_archive";
+
 fn run_fixture_production(command: &str, options: &ProductionOptions) -> Result<(), String> {
     if !matches!(command, "pack" | "release") || options.pass_pack {
         return Ok(());
     }
 
     let run_options = RunOptions {
-        fixture: Some("release_archive".to_string()),
-        fixtures_dir: PathBuf::from("fixtures/parity"),
+        fixture: Some(RELEASE_SMOKE_FIXTURE.to_string()),
         output_dir: options.output_folder.clone(),
+        ..RunOptions::default()
     };
     pipeline::run_stage(Stage::Pack, &run_options)?;
     copy_fixture_release_artifacts(&options.output_folder)
 }
 
 fn copy_fixture_release_artifacts(output_folder: &Path) -> Result<(), String> {
-    let pack_output = output_folder.join("release_archive").join("pack");
+    let pack_output = output_folder.join(RELEASE_SMOKE_FIXTURE).join("pack");
     for file_name in ["release.zip", "release.tar.gz"] {
         fs::copy(pack_output.join(file_name), output_folder.join(file_name))
             .map_err(|error| format!("無法複製 fixture release artifact {file_name}：{error}"))?;
@@ -722,11 +725,8 @@ mod tests {
     fn parse_default_options() {
         let options = parse_options(&[]).unwrap();
 
-        assert_eq!(options.fixtures_dir, PathBuf::from("fixtures/parity"));
-        assert_eq!(
-            options.output_dir,
-            PathBuf::from("rust/target/stage-output")
-        );
+        assert_eq!(options.fixtures_dir, PathBuf::from("fixtures"));
+        assert_eq!(options.output_dir, PathBuf::from("target/stage-output"));
         assert_eq!(options.fixture, None);
     }
 

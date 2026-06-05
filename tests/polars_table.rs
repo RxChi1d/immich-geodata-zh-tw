@@ -2,11 +2,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use immich_geodata_migration::pipeline::polars_table::{
+use immich_geodata::pipeline::polars_table::{
     ADMIN1_COLUMNS, read_cities_dataframe, read_cities_rows, read_string_rows, write_cities_rows,
     write_geodata_rows_with_header, write_string_rows,
 };
-use immich_geodata_migration::pipeline::table::{
+use immich_geodata::pipeline::table::{
     CITIES_COLUMNS, GEODATA_COLUMNS, read_delimited, write_delimited,
 };
 use polars::prelude::DataType;
@@ -14,7 +14,7 @@ use polars::prelude::DataType;
 #[test]
 fn reads_tw_minimal_cities_like_existing_parser() {
     assert_polars_matches_table(
-        "fixtures/parity/tw_minimal/geoname/cities500.txt",
+        "fixtures/tw_minimal/geoname/cities500.txt",
         b'\t',
         false,
         &CITIES_COLUMNS,
@@ -23,7 +23,7 @@ fn reads_tw_minimal_cities_like_existing_parser() {
 
 #[test]
 fn reads_cities_dataframe_with_legacy_typed_schema() {
-    let path = repo_path("fixtures/parity/tw_minimal/geoname/cities500.txt");
+    let path = repo_path("fixtures/tw_minimal/geoname/cities500.txt");
 
     let df = read_cities_dataframe(&path, b'\t').unwrap();
 
@@ -39,7 +39,7 @@ fn reads_cities_dataframe_with_legacy_typed_schema() {
 #[test]
 fn reads_tw_minimal_admin1_like_existing_parser() {
     assert_polars_matches_table(
-        "fixtures/parity/tw_minimal/geoname/admin1CodesASCII.txt",
+        "fixtures/tw_minimal/geoname/admin1CodesASCII.txt",
         b'\t',
         false,
         &ADMIN1_COLUMNS,
@@ -49,7 +49,7 @@ fn reads_tw_minimal_admin1_like_existing_parser() {
 #[test]
 fn reads_tw_minimal_extra_us_like_existing_parser() {
     assert_polars_matches_table(
-        "fixtures/parity/tw_minimal/extra_data/US.txt",
+        "fixtures/tw_minimal/extra_data/US.txt",
         b'\t',
         false,
         &CITIES_COLUMNS,
@@ -59,7 +59,7 @@ fn reads_tw_minimal_extra_us_like_existing_parser() {
 #[test]
 fn reads_tw_minimal_geodata_header_like_existing_parser() {
     assert_polars_matches_table(
-        "fixtures/parity/tw_minimal/geodata/tw_geodata.csv",
+        "fixtures/tw_minimal/geodata/tw_geodata.csv",
         b',',
         true,
         &GEODATA_COLUMNS,
@@ -69,7 +69,7 @@ fn reads_tw_minimal_geodata_header_like_existing_parser() {
 #[test]
 fn reads_tw_minimal_metadata_header_like_existing_parser() {
     assert_polars_matches_table(
-        "fixtures/parity/tw_minimal/meta_data/US.csv",
+        "fixtures/tw_minimal/meta_data/US.csv",
         b',',
         true,
         &GEODATA_COLUMNS,
@@ -79,7 +79,7 @@ fn reads_tw_minimal_metadata_header_like_existing_parser() {
 #[test]
 fn reads_alternate_chinese_name_csv_header_like_existing_parser() {
     assert_polars_matches_table(
-        "fixtures/parity/tw_minimal/alternate_chinese_name.csv",
+        "fixtures/tw_minimal/alternate_chinese_name.csv",
         b',',
         true,
         &["geoname_id", "name"],
@@ -223,9 +223,7 @@ fn assert_rows_equal(path: PathBuf, delimiter: u8, has_header: bool, columns: &[
 }
 
 fn repo_path(relative_path: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join(relative_path)
+    Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path)
 }
 
 fn write_temp_table(file_name: &str, content: &str) -> PathBuf {

@@ -153,7 +153,7 @@ The two centroids differ by a median of ~0.064 m, a 95th percentile of ~0.425 m,
 ```bash
 # 1. Download tha_admin_boundaries.shp.zip from HDX
 # 2. Unzip and use tha_admin3.shp
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country TH \
+cargo run --release -- extract --country TH \
   --shapefile path/to/tha_admin3.shp \
   --output meta_data/th_geodata.csv
 ```
@@ -161,7 +161,7 @@ cargo run --release --manifest-path rust/Cargo.toml -- extract --country TH \
 GeoJSON input is also supported (`--shapefile` accepts both `.shp` and `.geojson` / `.json`):
 
 ```bash
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country TH \
+cargo run --release -- extract --country TH \
   --shapefile path/to/tha_admin3.geojson \
   --output meta_data/th_geodata.csv
 ```

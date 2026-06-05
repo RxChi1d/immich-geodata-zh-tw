@@ -8,7 +8,7 @@
   "extra_files": [],
   "min_population": 0,
   "modification_date": "2026-01-01",
-  "name": "extract_logic_audit",
+  "name": "full_pipeline_handlers",
   "stages": [
     "extract",
     "transform_cities_schema",

@@ -7,10 +7,9 @@ cd "$repo_root"
 # 只納入會影響 production binary 的 Rust 輸入，避免 DB 或文件更新讓 binary cache 失效。
 mapfile -t source_files < <(
   git ls-files \
-    'rust/Cargo.toml' \
-    'rust/Cargo.lock' \
-    'rust/src/**' \
-    'rust/build.rs' \
+    'Cargo.toml' \
+    'Cargo.lock' \
+    'src/**' \
     | sort
 )
 

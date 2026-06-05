@@ -73,7 +73,7 @@
   - 神奈川県, 横浜市, 中区 → admin_2=「横浜市」, admin_3=「中区」
 
 > [!NOTE]
-> Rust production handler 目前固定採用「admin_2 顯示市名、admin_3 保留區名」策略。若未來需要恢復「市＋區」顯示在 admin_2（例如「横浜市中区」），應在 `rust/src/pipeline/extract/handlers.rs` 調整日本 handler，並同步更新 parity fixture 與真實資料驗證。
+> Rust production handler 目前固定採用「admin_2 顯示市名、admin_3 保留區名」策略。若未來需要恢復「市＋區」顯示在 admin_2（例如「横浜市中区」），應在 `src/pipeline/extract/handlers.rs` 調整日本 handler，並同步更新 parity fixture 與真實資料驗證。
 
 ### 4. 郡轄町村
 
@@ -121,7 +121,7 @@
 # 下載「行政区域データ（世界測地系）」並解壓縮
 
 # 2. 提取原始資料
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country JP \
+cargo run --release -- extract --country JP \
   --shapefile geoname_data/N03-20250101_GML/N03-20250101.shp \
   --output meta_data/jp_geodata.csv
 ```

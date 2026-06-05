@@ -133,7 +133,7 @@ Fixture 測試會使用 `TH_wikidata_stub.json`，避免測試依賴即時網路
 ```bash
 # 1. 從 HDX 下載 tha_admin_boundaries.shp.zip
 # 2. 解壓縮並使用 tha_admin3.shp
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country TH \
+cargo run --release -- extract --country TH \
   --shapefile path/to/tha_admin3.shp \
   --output meta_data/th_geodata.csv
 ```
@@ -141,7 +141,7 @@ cargo run --release --manifest-path rust/Cargo.toml -- extract --country TH \
 GeoJSON 格式也可使用（`--shapefile` 同時支援 `.shp` 與 `.geojson` / `.json`）：
 
 ```bash
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country TH \
+cargo run --release -- extract --country TH \
   --shapefile path/to/tha_admin3.geojson \
   --output meta_data/th_geodata.csv
 ```

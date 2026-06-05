@@ -1,14 +1,14 @@
 # Immich Reverse Geocoding - Taiwan Localization  
 
 > [!IMPORTANT]
-> - Upgrade notice: If you already deploy this project and your media library includes photos taken in Japan and South Korea, please run "[Re-extract photo metadata](#integrated-deployment-recommended-convenient-for-future-updates)" after upgrading to v2.2.0 to apply the latest Japanese dataset.
+> - Upgrade notice: v3.0.0 adds Thailand geodata (Traditional Chinese localization). If you already deploy this project and your media library includes photos taken in Thailand, please run "[Re-extract photo metadata](#integrated-deployment-recommended-convenient-for-future-updates)" after upgrading to v3.0.0 to apply the latest Thailand dataset.
 > - Starting on v2.2.0 every release bundles `update_data.sh`. Please point automation to the release-hosted script so it matches the published dataset; the repository copy stays for reference but the release artifact should be the source of truth.
 
 [繁體中文](README.md) | [English](README.en.md)
 
 This project delivers reverse geocoding enhancements tailored for users in Taiwan, providing natural and accurate location display that reflects local reading habits.
 
-Currently supports: 🇹🇼 **Taiwan** | 🇯🇵 **Japan** | 🇰🇷 **South Korea** | 🌏 **Traditional Chinese localization for other regions**
+Currently supports: 🇹🇼 **Taiwan** | 🇯🇵 **Japan** | 🇰🇷 **South Korea** | 🇹🇭 **Thailand** | 🌏 **Traditional Chinese localization for other regions**
 
 ## Design Philosophy
 
@@ -17,6 +17,7 @@ We focus on the Taiwan user experience and apply the most suitable language stra
 - **Taiwan**: Uses NLSC datasets to fix country and administrative naming issues
 - **Japan**: Uses 国土数値情報 datasets and preserves native names (漢字 + かな)
 - **South Korea**: Uses admdongkor project data and provides Traditional Chinese translations
+- **Thailand**: Uses official COD-AB boundary data and provides Traditional Chinese translations for Admin1/Admin2, falling back to official English and Thai names
 - **Other regions**: Provides Traditional Chinese translations, falling back to English when no common translation exists
 
 > [!TIP]
@@ -45,6 +46,7 @@ We focus on the Taiwan user experience and apply the most suitable language stra
     - [🇹🇼 Taiwan](#-taiwan)
     - [🇯🇵 Japan](#-japan)
     - [🇰🇷 South Korea](#-south-korea)
+    - [🇹🇭 Thailand](#-thailand)
   - [Update Geographic Data](#update-geographic-data)
     - [Integrated Deployment](#integrated-deployment)
     - [Manual Deployment](#manual-deployment-1)
@@ -56,9 +58,11 @@ We focus on the Taiwan user experience and apply the most suitable language stra
       - [Taiwan Data Extraction](#taiwan-data-extraction)
       - [Japan Data Extraction](#japan-data-extraction)
       - [South Korea Data Extraction](#south-korea-data-extraction)
+      - [Thailand Data Extraction](#thailand-data-extraction)
     - [3. Complete Data Processing Workflow](#3-complete-data-processing-workflow)
       - [Register LocationIQ API](#register-locationiq-api)
       - [Execute Data Processing](#execute-data-processing)
+    - [4. Rust Verification](#4-rust-verification)
   - [Acknowledgments](#acknowledgments)
   - [License](#license)
 
@@ -71,6 +75,7 @@ The project applies region-specific language handling to reflect the expectation
 | 🇹🇼 Taiwan | Official Traditional Chinese names | NLSC (National Land Surveying and Mapping Center) | Fixes incorrect country labels and missing municipality names |
 | 🇯🇵 Japan | Native Japanese (漢字 + かな) | 国土数値情報ダウンロードサービス | Displays official Japanese names without translating them |
 | 🇰🇷 South Korea | Traditional Chinese translations | admdongkor (Official administrative boundaries) | Provides Traditional Chinese translations |
+| 🇹🇭 Thailand | Traditional Chinese translations (official English / Thai fallback) | COD-AB Thailand | Computes administrative center points from official boundaries |
 | 🌏 Others | Traditional Chinese translations | Custom glossary → GeoNames translations → GeoNames English | Prioritizes Taiwan-style translations; falls back when unavailable |
 
 > **Why keep Japanese in Japanese?**
@@ -102,7 +107,12 @@ The geographic data used in this project mainly comes from the following sources
     - **Dataset**: South Korean official administrative boundary data (GeoJSON format)
     - **License**: MIT License
     - **Purpose**: As the primary data source for South Korea administrative boundaries and names
-6.  **Other References**
+6.  **Thailand COD-AB**
+    - **Source**: [HDX Thailand Subnational Administrative Boundaries](https://data.humdata.org/dataset/cod-ab-tha)
+    - **Dataset**: Thailand administrative level 0-3 boundaries (COD-AB)
+    - **License**: Creative Commons Attribution for Intergovernmental Organisations (CC BY-IGO)
+    - **Purpose**: As the primary data source for Thailand administrative boundaries and names
+7.  **Other References**
     - **Ministry of Economic Affairs International Trade Administration & Ministry of Foreign Affairs of Taiwan**: As reference sources for Chinese translations of some countries/regions
 
 > [!NOTE]
@@ -231,6 +241,15 @@ Please go to this project's [Releases page](https://github.com/RxChi1d/immich-ge
 - **Special administrative divisions**: Jeju Province distinguished from Jeju City, Sejong City uses industry-standard translations
 - **Administrative hierarchy handling**: Auto-splits "City + District/County" structure, supports special administrative structures
 
+### 🇹🇭 Thailand
+
+- **Official boundary data**: Uses COD-AB `tha_admin3` sub-district / tambon boundary data
+- **Traditional Chinese translations**: Admin1/Admin2 use the Wikidata translator, falling back to COD-AB official English and official Thai when no Chinese result exists
+- **Nearest-distance optimization**: Computes geometric center points with a Thailand Albers projection to improve Immich's nearest-point reverse geocoding hit rate
+- **Coordinate strategy validation**: Does not use the COD-AB built-in `center_lat` / `center_lon` by default, as they are closer to official representative points than to the optimal single point under the nearest-point model
+
+> 📖 See [Thailand Administrative Processing (zh-TW)](docs/zh-tw/thailand-admin-processing.md) • [Thailand Administrative Processing (English)](docs/en/thailand-admin-processing.md)
+
 ## Update Geographic Data
 
 ### Integrated Deployment
@@ -263,19 +282,19 @@ To run data processing on non-Linux systems or customized Linux environments, in
 toolchain and the PROJ development library, then run:
 
 ```bash
-cargo build --release --manifest-path rust/Cargo.toml
+cargo build --release
 ```
 
 After compilation, the binary is available at:
 
 ```bash
-rust/target/release/immich-geodata-migration
+target/release/immich-geodata
 ```
 
 You can also run the CLI directly through `cargo run`:
 
 ```bash
-cargo run --release --manifest-path rust/Cargo.toml -- help
+cargo run --release -- help
 ```
 
 ### 2. Extract Raw Geographic Data (Optional)
@@ -289,7 +308,7 @@ Data source: [National Land Surveying and Mapping Center (NLSC)](https://whgis-n
 ```bash
 # 1. Download "Village Boundaries (TWD97 Latitude/Longitude)" data and extract
 # 2. Execute extraction command
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country TW \
+cargo run --release -- extract --country TW \
   --shapefile geoname_data/VILLAGE_NLSC_1140825/VILLAGE_NLSC_1140825.shp \
   --output meta_data/tw_geodata.csv
 ```
@@ -301,7 +320,7 @@ Data source: [国土数値情報](https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjT
 ```bash
 # 1. Download "行政区域データ（世界測地系）" and extract
 # 2. Execute extraction command
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country JP \
+cargo run --release -- extract --country JP \
   --shapefile geoname_data/N03-20250101_GML/N03-20250101.shp \
   --output meta_data/jp_geodata.csv
 ```
@@ -313,10 +332,25 @@ Data source: [admdongkor](https://github.com/vuski/admdongkor)
 ```bash
 # 1. Download official administrative boundary data from admdongkor project and extract
 # 2. Execute extraction command
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country KR \
+cargo run --release -- extract --country KR \
   --shapefile geoname_data/HangJeongDong_verYYYYMMDD.geojson \
   --output meta_data/kr_geodata.csv
 ```
+
+#### Thailand Data Extraction
+
+Data source: [Thailand COD-AB](https://data.humdata.org/dataset/cod-ab-tha)
+
+```bash
+# 1. Download tha_admin_boundaries.shp.zip and extract it
+# 2. Use tha_admin3.shp to extract Admin 3 / Tambon boundary data
+cargo run --release -- extract --country TH \
+  --shapefile geoname_data/tha_admin_boundaries/tha_admin3.shp \
+  --output meta_data/th_geodata.csv
+```
+
+Thailand extraction reads or creates `geoname_data/TH_wikidata_cache.json` for Admin1/Admin2
+Traditional Chinese translations; Admin3 currently keeps the COD-AB official English names.
 
 After extraction is complete, the data will be automatically integrated when executing the Rust
 `release` command.
@@ -332,21 +366,43 @@ Register an account at [LocationIQ](https://locationiq.com/) and obtain an API K
 #### Execute Data Processing
 
 ```bash
-cargo run --release --manifest-path rust/Cargo.toml -- release \
+cargo run --release -- release \
   --locationiq-api-key "YOUR_API_KEY" \
   --country-code "KR" "TH"
 ```
 
 > [!NOTE]
-> - You can view more options through `cargo run --manifest-path rust/Cargo.toml -- help`.
+> - You can view more options through `cargo run -- help`.
 > - The `--country-code` parameter can specify country codes to process, multiple codes separated by spaces. (Currently only tested with "KR" "TH")
 
 > [!WARNING]
 > - Since LocationIQ API has request limits (can be checked in the backend after login), please pay attention to the number of place names in the countries to be processed to avoid exceeding limits.
 > - This project allows LocationIQ reverse geocoding query progress recovery. If daily request limits are exceeded, you can continue execution after changing API keys or the next day.
->   - Add `--pass-cleanup` to skip resetting the output folder: `cargo run --release --manifest-path rust/Cargo.toml -- release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH" --pass-cleanup`.
+>   - Add `--pass-cleanup` to skip resetting the output folder: `cargo run --release -- release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH" --pass-cleanup`.
 
-### Rust Production Status
+### 4. Rust Verification
+
+The Rust CLI provides a dry-run contract that validates the release orchestration without
+calling external APIs or downloading data:
+
+```bash
+cargo run -- release \
+  --dry-run \
+  --locationiq-api-key "fixture" \
+  --country-code "KR" "TH" \
+  --batch-size 100 \
+  --locationiq-qps 2
+```
+
+To verify the release archive and the directory layout required by `update_data.sh`, use
+fixture mode to produce a local smoke artifact:
+
+```bash
+cargo run -- release \
+  --fixture-mode \
+  --pass-locationiq \
+  --output-folder /tmp/rust-release-smoke
+```
 
 The release and nightly production workflows now run the Rust production path by default. The workflows keep a Rust fixture release smoke before the live build to validate archive layout and CLI contract without consuming LocationIQ quota.
 

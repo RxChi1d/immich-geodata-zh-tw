@@ -1,13 +1,3 @@
-# Distribution / packaging
-build/
-dist/
-*.egg-info/
-*.egg
-
-# Legacy local bytecode cache
-__pycache__/
-*.py[cod]
-
 # IDE and OS
 .DS_Store
 .vscode/
@@ -39,8 +29,9 @@ docs/superpowers/
 *.log
 
 # Rust build artifacts
-rust/target/
+target/
 
 # Local git worktrees
 .worktree/
 .worktrees/
+.claude/worktrees/

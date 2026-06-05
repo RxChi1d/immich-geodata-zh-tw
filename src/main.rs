@@ -1,7 +1,7 @@
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    match immich_geodata_migration::cli::run(std::env::args().collect()) {
+    match immich_geodata::cli::run(std::env::args().collect()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("{error}");

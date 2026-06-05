@@ -229,7 +229,7 @@ Gwangju's Dong-gu (East District) and Seo-gu (West District) have disambiguation
 
 After translation completes, the Rust handler removes trailing disambiguation
 parentheses only when `sidonm == "광주광역시"`. The implementation lives in
-`rust/src/pipeline/extract/handlers.rs` and is controlled by
+`src/pipeline/extract/handlers.rs` and is controlled by
 `strip_trailing_parenthetical`.
 
 **Impact**:
@@ -286,7 +286,7 @@ After:  Sejong → 대평동 → (empty)
 **Problem**: founded in 2012, Sejong's new neighborhoods often lack Traditional Chinese labels on Wikidata, forcing fallbacks to romanization ("Boram-dong") or Korean.
 
 **Solution**: the Rust handler's `sejong_admin2` mapping in
-`rust/src/pipeline/extract/handlers.rs` covers all 24 Admin 2 names.
+`src/pipeline/extract/handlers.rs` covers all 24 Admin 2 names.
 
 | Korean | Traditional Chinese |
 |--------|---------------------|

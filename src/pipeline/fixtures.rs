@@ -168,9 +168,12 @@ mod tests {
 
     #[test]
     fn parse_manifest_fields() {
-        let fixture = load_fixtures(Path::new("../fixtures/parity"), Some("tw_minimal"))
-            .unwrap()
-            .remove(0);
+        let fixture = load_fixtures(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures"),
+            Some("tw_minimal"),
+        )
+        .unwrap()
+        .remove(0);
 
         assert_eq!(fixture.manifest.name, "tw_minimal");
         assert_eq!(fixture.manifest.countries, vec!["TW"]);

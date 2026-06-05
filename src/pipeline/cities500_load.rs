@@ -202,7 +202,7 @@ mod tests {
     #[test]
     fn replace_country_cities_keeps_legacy_vstack_order() {
         let fixture = load_fixtures(
-            std::path::Path::new("../fixtures/parity"),
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures"),
             Some("tw_minimal"),
         )
         .unwrap()

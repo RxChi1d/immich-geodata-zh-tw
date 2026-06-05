@@ -7,7 +7,7 @@ license: MIT
 
 # immich-geodata-zh-tw 圖資更新與發布
 
-此 project skill 用於本儲存庫的圖資來源更新與 release artifact 重新產生。Rust CLI 是唯一 production path；所有 extract、release 與驗證流程都應以 `rust/` 下的實作為準。
+此 project skill 用於本儲存庫的圖資來源更新與 release artifact 重新產生。Rust CLI 是唯一 production path；所有 extract、release 與驗證流程都應以專案根目錄 crate 的實作為準。
 
 ## 事實來源
 
@@ -34,7 +34,7 @@ git status --short --branch
 4. 使用 Rust CLI 執行 extract，例如：
 
 ```bash
-cargo run --release --manifest-path rust/Cargo.toml -- extract --country TW \
+cargo run --release -- extract --country TW \
   --shapefile geoname_data/VILLAGE_NLSC_XXXXXX/VILLAGE_NLSC_XXXXXX.shp \
   --output meta_data/tw_geodata.csv
 ```
@@ -42,13 +42,13 @@ cargo run --release --manifest-path rust/Cargo.toml -- extract --country TW \
 5. 使用 Rust CLI 產生 release artifacts。若只更新 handler countries（TW/JP/KR/TH），跳過 LocationIQ：
 
 ```bash
-cargo run --release --manifest-path rust/Cargo.toml -- release \
+cargo run --release -- release \
   --pass-locationiq \
   --overwrite
 ```
 
 6. 若處理 non-handler countries，使用 `LOCATIONIQ_API_KEY` 或 `--locationiq-api-key`，所有紀錄中都要遮蔽 key；只有在續跑中斷工作時才使用 `--pass-cleanup`。
-7. 驗證時回報相關 row counts、checksums、`cargo test --manifest-path rust/Cargo.toml`，以及必要的 Rust release smoke 或 production validation 指令。
+7. 驗證時回報相關 row counts、checksums、`cargo test`，以及必要的 Rust release smoke 或 production validation 指令。
 
 ## Guardrails
 

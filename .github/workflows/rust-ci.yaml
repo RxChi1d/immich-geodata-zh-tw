@@ -1,0 +1,66 @@
+name: Rust CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'src/**'
+      - 'tests/**'
+      - 'fixtures/**'
+      - '.github/workflows/rust-ci.yaml'
+  pull_request:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'src/**'
+      - 'tests/**'
+      - 'fixtures/**'
+      - '.github/workflows/rust-ci.yaml'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  gates:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libproj-dev pkg-config
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Lint
+        run: cargo clippy -- -D warnings
+
+      - name: Test
+        run: cargo test
+
+      # Reason: 煙測不需要最佳化編譯，沿用 dev profile 可重用 test 步驟的建置產物
+      - name: Fixture release smoke
+        run: |
+          cargo run -- release \
+            --fixture-mode \
+            --pass-locationiq \
+            --output-folder /tmp/rust-release-smoke
+          test -f /tmp/rust-release-smoke/release.zip
+          test -f /tmp/rust-release-smoke/release.tar.gz
