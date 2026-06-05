@@ -9,7 +9,7 @@
 - **來源**: OpenStreetMap contributors
 - **授權**: Open Database License (ODbL) 1.0
 - **使用方式**: 透過 LocationIQ API 取得反向地理編碼資料
-- **資料範圍**: 非臺灣、非日本地區的地理資料
+- **資料範圍**: 臺灣、日本、南韓、泰國以外地區的地理資料
 - **授權連結**: https://opendatacommons.org/licenses/odbl/1-0/
 - **資料來源**: https://www.openstreetmap.org/copyright
 
@@ -42,7 +42,7 @@
 
 - **來源**: 內政部國土測繪中心開放資料平台
 - **資料集**: 村(里)界 (TWD97經緯度)
-- **版本**: 1140620 (2024年6月20日更新;實際使用版本請參考專案文件)
+- **版本**: 1140620 (2025年6月20日更新;實際使用版本請參考專案文件)
 - **授權**: 政府資料開放授權條款-第1版
 - **使用方式**: 臺灣地區行政區邊界與地名資料
 - **資料來源**: https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx
@@ -81,7 +81,22 @@
 
 ---
 
-## 6. 其他參考資料
+## 6. Thailand COD-AB
+
+- **來源**: Humanitarian Data Exchange (HDX) - Thailand Subnational Administrative Boundaries
+- **資料集**: Thailand administrative level 0-3 boundaries (COD-AB)
+- **授權**: Creative Commons Attribution for Intergovernmental Organisations (CC BY-IGO)
+- **使用方式**: 泰國地區行政區邊界與地名資料
+- **授權連結**: https://creativecommons.org/licenses/by/3.0/igo/
+- **資料來源**: https://data.humdata.org/dataset/cod-ab-tha
+
+**授權聲明**:
+
+> 本專案使用來自 [Humanitarian Data Exchange (HDX)](https://data.humdata.org/dataset/cod-ab-tha) 的泰國行政區邊界資料 (COD-AB)，該資料依 [Creative Commons Attribution for Intergovernmental Organisations (CC BY-IGO)](https://creativecommons.org/licenses/by/3.0/igo/) 授權提供。
+
+---
+
+## 7. 其他參考資料
 
 ### 國家/地區中文譯名參考
 
@@ -96,6 +111,7 @@
 
 - **ODbL 1.0**: https://opendatacommons.org/licenses/odbl/1-0/
 - **CC-BY 4.0**: https://creativecommons.org/licenses/by/4.0/legalcode
+- **CC BY-IGO 3.0**: https://creativecommons.org/licenses/by/3.0/igo/legalcode
 - **政府資料開放授權條款-第1版**: https://data.gov.tw/license
 
 ---
@@ -108,4 +124,4 @@
 
 ---
 
-**最後更新日期**: 2025-11-09
+**最後更新日期**: 2026-06-05
