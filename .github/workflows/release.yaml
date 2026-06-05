@@ -110,7 +110,7 @@ jobs:
           ".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}" release \
             --locationiq-api-key "${{ secrets.LOCATIONIQ_API_KEY }}"
       - name: Generate release notes from CHANGELOG
-        if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
+        # 臨時：合併前實測，讓 validate_only 模式也執行本步驟（驗證後還原）
         run: |
           # Changelog-first：release notes 由 CHANGELOG.md 對應版本區段生成
           # （正式版缺區段會在此失敗，提醒先完成 CHANGELOG 版本切割；
