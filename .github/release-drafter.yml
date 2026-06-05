@@ -1,0 +1,192 @@
+# Release Drafter 設定檔
+#
+# 用途：每次 push 到 main 時，自動維護一份「下一版」草稿 release。
+# 草稿內容依 Conventional Commit type 分類，列出所有待發布的 PR。
+#
+# 發版流程定位：
+#   1. 此草稿為中間產物，提供原始 PR 清單供參考。
+#   2. 發版前，維護者手動將草稿內容改寫為 Keep a Changelog 格式
+#      （Added / Changed / Fixed ... + emoji），再貼入正式 release notes。
+#   3. 正式 release 由 .github/workflows/release.yaml 中的
+#      ncipollo/release-action 建立（推送同名 tag 時接管此草稿並轉正）。
+#
+# 語法依據：release-drafter v7 的 runtime 驗證 schema
+# （src/actions/drafter/config/schemas/config.schema.ts）。
+# 注意 repo master 上的 schema.json 是未發布的開發版語法
+# （when/exclusive/semver-increment），v7 並不支援，勿混用。
+
+# --------------------------------------------------------------------------
+# 版本號模板
+# --------------------------------------------------------------------------
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+
+# --------------------------------------------------------------------------
+# Release notes 主體模板
+# --------------------------------------------------------------------------
+template: |
+  # What's Changed
+
+  $CHANGES
+
+  ---
+
+  **完整變更記錄**: [$PREVIOUS_TAG...v$RESOLVED_VERSION](https://github.com/RxChi1d/immich-geodata-zh-tw/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION)
+
+# --------------------------------------------------------------------------
+# PR 變更項目格式
+# --------------------------------------------------------------------------
+# 使用 - $TITLE (#$NUMBER) 格式。change-title-escapes 處理 PR 標題中的
+# 特殊字元：<, *, _, & 會被加上反斜線避免被解讀為 Markdown 格式字元；
+# # 與 @ 則以附加 HTML 註解的方式處理，避免變成 issue 連結或 @mention。
+change-template: '- $TITLE (#$NUMBER)'
+change-title-escapes: '\<*_&#@'
+
+# --------------------------------------------------------------------------
+# 排除不需顯示在 release notes 的 PR
+# --------------------------------------------------------------------------
+exclude-labels:
+  - 'skip-changelog'
+
+# --------------------------------------------------------------------------
+# 分類
+# --------------------------------------------------------------------------
+# 依 label 將 PR 分群顯示在草稿中。
+#
+# Label 命名慣例：
+#   - 'breaking'           ← breaking change（含 ! 的 Conventional Commit）
+#   - 'type: feat'         ← 新功能
+#   - 'type: fix'          ← 修復
+#   - 'type: perf'         ← 效能改善
+#   - 'type: refactor'     ← 重構
+#   - 'type: docs'         ← 文件
+#   - 'type: test'         ← 測試
+#   - 'type: build'        ← 建置相關
+#   - 'type: ci'           ← CI/CD 相關
+#   - 'type: chore'        ← 雜項維護（含 style、revert）
+#   - 'skip-changelog'     ← 不顯示於 release notes
+#
+# 重複列出的防範：v7 會把 PR「刻意 duplicate」到所有匹配的分類，因此
+# autolabeler 的 type regex 不匹配含 ! 的標題（見下方 autolabeler 區），
+# 讓 breaking PR 只獲得 'breaking' 一個 label、只出現在 Breaking Changes 區。
+categories:
+  - title: '⚠️ Breaking Changes'
+    labels:
+      - 'breaking'
+
+  - title: '🚀 feat'
+    labels:
+      - 'type: feat'
+
+  - title: '🐛 fix'
+    labels:
+      - 'type: fix'
+
+  - title: '⚡ perf'
+    labels:
+      - 'type: perf'
+
+  - title: '♻️ refactor'
+    labels:
+      - 'type: refactor'
+
+  - title: '📝 docs'
+    labels:
+      - 'type: docs'
+
+  - title: '🧪 test'
+    labels:
+      - 'type: test'
+
+  - title: '🔧 build / ci / chore'
+    labels:
+      - 'type: build'
+      - 'type: ci'
+      - 'type: chore'
+
+  # catch-all 收容區：不設 labels 的分類即為官方的「未分類」收容區
+  # （categorize-pull-requests.ts 以 labels 為空的分類承接無匹配 label 的
+  # PR）。autolabeler 漏接的 PR（非 conventional 標題等）會落入此區，
+  # 讓維護者改寫 Keep a Changelog 時看得見並手動歸類，而非靜默消失。
+  - title: '📦 其他變更（未分類）'
+
+# --------------------------------------------------------------------------
+# 版本解析
+# --------------------------------------------------------------------------
+# 依 label 決定 $RESOLVED_VERSION 的 semver increment：
+#   breaking → major、feat → minor、其餘（含無 label）→ patch（default）。
+version-resolver:
+  major:
+    labels:
+      - 'breaking'
+  minor:
+    labels:
+      - 'type: feat'
+  default: patch
+
+# --------------------------------------------------------------------------
+# Autolabeler：依 PR 標題自動上 label
+# --------------------------------------------------------------------------
+# regex 格式：/pattern/flags，flags i = 大小寫不敏感。
+# 各 type 允許可選 scope（括號）；冒號後空白以 \s? 表示（0 或 1 個空白），
+# 容忍漏打空白的標題（如 'feat:沒有空白'），避免該類 PR 掉出分類。
+#
+# breaking 的處理：含 ! 的標題（type(scope)!:）只由 breaking 規則匹配；
+# type 規則刻意「不」匹配 !（regex 中沒有 (!)?），避免 breaking PR 同時
+# 獲得 type label 而在草稿中重複列出（v7 分類無去重機制）。
+#
+# 注意：autolabeler 只會「新增」label，不會移除過時的 label。若 PR 改過
+# 標題（例如 feat: → feat!:），舊 label（type: feat）會殘留並導致草稿
+# 重複列出，需由維護者手動移除。
+autolabeler:
+  # Breaking change：標題含 type(scope)?!: 格式
+  - label: 'breaking'
+    title:
+      - '/^(feat|fix|perf|refactor|docs|test|build|ci|chore|style|revert)(\(.+\))?!:/i'
+
+  # feat
+  - label: 'type: feat'
+    title:
+      - '/^feat(\(.+\))?:\s?/i'
+
+  # fix
+  - label: 'type: fix'
+    title:
+      - '/^fix(\(.+\))?:\s?/i'
+
+  # perf
+  - label: 'type: perf'
+    title:
+      - '/^perf(\(.+\))?:\s?/i'
+
+  # refactor
+  - label: 'type: refactor'
+    title:
+      - '/^refactor(\(.+\))?:\s?/i'
+
+  # docs
+  - label: 'type: docs'
+    title:
+      - '/^docs(\(.+\))?:\s?/i'
+
+  # test
+  - label: 'type: test'
+    title:
+      - '/^test(\(.+\))?:\s?/i'
+
+  # build
+  - label: 'type: build'
+    title:
+      - '/^build(\(.+\))?:\s?/i'
+
+  # ci
+  - label: 'type: ci'
+    title:
+      - '/^ci(\(.+\))?:\s?/i'
+
+  # chore（含 style、revert 合併至此分類）
+  - label: 'type: chore'
+    title:
+      - '/^chore(\(.+\))?:\s?/i'
+      - '/^style(\(.+\))?:\s?/i'
+      - '/^revert(\(.+\))?:\s?/i'

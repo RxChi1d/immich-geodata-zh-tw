@@ -1,0 +1,61 @@
+name: Release Drafter
+
+# --------------------------------------------------------------------------
+# 觸發條件
+# --------------------------------------------------------------------------
+# push to main：更新下一版草稿 release（包含已合併 PR 的變更清單）。
+# pull_request_target：對 PR（含 fork）自動上 label，讓草稿分類正確。
+#   - edited 事件：PR 標題修改後重新觸發 autolabeler，確保 label 與標題一致。
+#   - 使用 pull_request_target 而非 pull_request，使 fork PR 也能被上 label
+#     （pull_request_target 具備寫入 token 權限，故 job 內絕不執行 PR 程式碼）。
+on:
+  push:
+    branches:
+      - main
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited  # PR 標題修改後重新上 label
+
+# --------------------------------------------------------------------------
+# 頂層預設權限（最小化原則）
+# --------------------------------------------------------------------------
+permissions:
+  contents: read
+
+jobs:
+  # --------------------------------------------------------------------------
+  # 更新草稿 release（push to main 時執行）
+  # --------------------------------------------------------------------------
+  release-drafter:
+    # 僅在 push to main 時更新草稿；PR 事件跳過此 job
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write       # 建立與更新 draft release 所需
+      pull-requests: read   # 讀取 PR metadata 以生成變更清單
+    steps:
+      - name: 更新草稿 Release
+        uses: release-drafter/release-drafter@v7
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  # --------------------------------------------------------------------------
+  # 自動上 label（PR 事件時執行）
+  # --------------------------------------------------------------------------
+  autolabeler:
+    # 僅在 pull_request_target 事件時上 label；push 事件跳過此 job
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-24.04
+    permissions:
+      # pull_request_target 具備寫入 token 權限，此 job 僅操作 PR label，
+      # 嚴格限制權限範圍；contents 保持 read 以降低供應鏈攻擊風險。
+      contents: read
+      pull-requests: write  # 對 PR 新增 label 所需
+    steps:
+      - name: 自動上 label
+        uses: release-drafter/release-drafter/autolabeler@v7
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

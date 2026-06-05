@@ -128,6 +128,14 @@ jobs:
           generateReleaseNotes: false
           commit: main
           tag: ${{ env.VERSION_TAG }}
+          # Release Drafter 草稿接管：
+          #   release-drafter 每次 push main 會以同名 tag（vX.Y.Z）維護一份
+          #   草稿 release。啟用 allowUpdates 讓正式發布接管既有草稿並轉正
+          #   （上方 draft: false 在更新時生效），artifacts 附加至同一 release。
+          #   omitBodyDuringUpdate 保留草稿中已手動改寫的 release notes，
+          #   避免被空 body 覆寫。無同名草稿時照常建立新 release。
+          allowUpdates: true
+          omitBodyDuringUpdate: true
           # 僅穩定版本標記為 latest；含預發布標識（a/b/rc/alpha/beta）的標記為 prerelease
           makeLatest: ${{ !contains(env.VERSION_TAG, 'a') && !contains(env.VERSION_TAG, 'b') && !contains(env.VERSION_TAG, 'rc') && !contains(env.VERSION_TAG, 'alpha') && !contains(env.VERSION_TAG, 'beta') }}
           prerelease: ${{ contains(env.VERSION_TAG, 'a') || contains(env.VERSION_TAG, 'b') || contains(env.VERSION_TAG, 'rc') || contains(env.VERSION_TAG, 'alpha') || contains(env.VERSION_TAG, 'beta') }}
