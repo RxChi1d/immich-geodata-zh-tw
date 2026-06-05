@@ -2,7 +2,6 @@
 
 > [!IMPORTANT]
 > - Upgrade notice: v3.0.0 adds Thailand geodata (Traditional Chinese localization). If you already deploy this project and your media library includes photos taken in Thailand, please run "[Re-extract photo metadata](#integrated-deployment-recommended-convenient-for-future-updates)" after upgrading to v3.0.0 to apply the latest Thailand dataset.
-> - Starting on v2.2.0 every release bundles `update_data.sh`. Please point automation to the release-hosted script so it matches the published dataset; the repository copy stays for reference but the release artifact should be the source of truth.
 
 [繁體中文](README.md) | [English](README.en.md)
 
