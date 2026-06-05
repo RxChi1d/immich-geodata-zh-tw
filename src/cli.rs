@@ -600,22 +600,25 @@ fn current_date_iso() -> Result<String, String> {
     Ok(chrono::Local::now().format("%F").to_string())
 }
 
+/// fixture-mode 煙測使用的 pack-only fixture；run_stage 會以同名子目錄輸出產物。
+const RELEASE_SMOKE_FIXTURE: &str = "release_archive";
+
 fn run_fixture_production(command: &str, options: &ProductionOptions) -> Result<(), String> {
     if !matches!(command, "pack" | "release") || options.pass_pack {
         return Ok(());
     }
 
     let run_options = RunOptions {
-        fixture: Some("release_archive".to_string()),
-        fixtures_dir: PathBuf::from("fixtures"),
+        fixture: Some(RELEASE_SMOKE_FIXTURE.to_string()),
         output_dir: options.output_folder.clone(),
+        ..RunOptions::default()
     };
     pipeline::run_stage(Stage::Pack, &run_options)?;
     copy_fixture_release_artifacts(&options.output_folder)
 }
 
 fn copy_fixture_release_artifacts(output_folder: &Path) -> Result<(), String> {
-    let pack_output = output_folder.join("release_archive").join("pack");
+    let pack_output = output_folder.join(RELEASE_SMOKE_FIXTURE).join("pack");
     for file_name in ["release.zip", "release.tar.gz"] {
         fs::copy(pack_output.join(file_name), output_folder.join(file_name))
             .map_err(|error| format!("無法複製 fixture release artifact {file_name}：{error}"))?;
