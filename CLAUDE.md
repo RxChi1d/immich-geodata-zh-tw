@@ -224,9 +224,10 @@ cargo run --release -- extract \
   --shapefile <path_to_tw_shapefile> \
   --output meta_data/tw_geodata.csv
 
+# LocationIQ 流程僅用於非 handler 國家（TW/JP/KR/TH 已由官方圖資 handler 產生）
 cargo run --release -- release \
   --locationiq-api-key "<api_key>" \
-  --country-code KR TH
+  --country-code US
 
 cargo run --release -- release \
   --fixture-mode \

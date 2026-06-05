@@ -189,7 +189,7 @@
 在某些情況下（例如最新的 release 出現問題），你可能需要下載或回滾到特定的 release 版本。本專案的更新腳本支援透過 `--tag` 參數來指定要下載的 release tag。
 
 **如何找到可用的 Tag？**
-請前往本專案的 [Releases 頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases) 查看所有可用的 release tag 名稱（例如  `v1.0.0`, `nightly` 等）。
+請前往本專案的 [Releases 頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases) 查看所有可用的 release tag 名稱（例如  `v2.2.4`, `nightly` 等）。
 
 **使用範例：**
 
@@ -359,17 +359,18 @@ cargo run --release -- extract --country TH \
 ```bash
 cargo run --release -- release \
   --locationiq-api-key "YOUR_API_KEY" \
-  --country-code "KR" "TH"
+  --country-code "US"
 ```
 
 > [!NOTE]
 > - 可以通過 `cargo run -- help` 查看更多選項。
-> - `--country-code` 參數可指定需要處理的國家代碼，多個代碼之間使用空格分隔。(目前僅測試過 "KR" "TH")
+> - `--country-code` 參數可指定需要處理的國家代碼，多個代碼之間使用空格分隔。
+> - 臺、日、韓、泰（TW/JP/KR/TH）已改由官方圖資 handler 產生，無需也不應以 LocationIQ 處理；此流程僅用於為其他國家產生 metadata。
 
 > [!WARNING]
 > - 由於 LocationIQ 的 API 有請求次數限制 (可登入後於後台查看)，因此請注意要處理的國家的地名數量，以免超出限制。
 > - 本專案允許 LocationIQ 反向地理編碼查詢的進度恢復，若超過當日請求限制，可於更換 api 金鑰或次日繼續執行。
->   - 需加上 `--pass-cleanup` 參數，以取消重設資料夾功能： `cargo run --release -- release --locationiq-api-key "YOUR_API_KEY" --country-code "KR" "TH" --pass-cleanup`。
+>   - 需加上 `--pass-cleanup` 參數，以取消重設資料夾功能： `cargo run --release -- release --locationiq-api-key "YOUR_API_KEY" --country-code "US" --pass-cleanup`。
 
 ### 4. Rust 驗證
 
