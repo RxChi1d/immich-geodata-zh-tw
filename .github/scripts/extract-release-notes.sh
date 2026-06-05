@@ -58,7 +58,10 @@ fi
 compare_url="$(grep -m1 "^\[${version}\]: " "${changelog}" | sed 's/^[^ ]* //' || true)"
 if [[ -z "${compare_url}" ]]; then
   repo_url="https://github.com/${GITHUB_REPOSITORY:-RxChi1d/immich-geodata-zh-tw}"
-  prev_tag="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+  # Reason: 在 tag checkout 上 git describe 會回傳 tag 自身，需改查 tag^
+  # 取得「前一個」tag；tag 尚不存在時（workflow_dispatch）退回查 HEAD。
+  prev_tag="$(git describe --tags --abbrev=0 "${version_tag}^" 2>/dev/null \
+    || git describe --tags --abbrev=0 2>/dev/null || true)"
   if [[ -n "${prev_tag}" && "${prev_tag}" != "${version_tag}" ]]; then
     compare_url="${repo_url}/compare/${prev_tag}...${version_tag}"
   else
@@ -84,10 +87,18 @@ if [[ -z "${section//[[:space:]]/}" ]]; then
     echo "正式發版前請先完成 CHANGELOG 版本切割（[未發佈版本] → [${version}]）。" >&2
     exit 1
   fi
-  # 預發布版缺區段：輸出簡化說明
+  # 預發布版缺區段：輸出簡化說明。
+  # 指引目標依 CHANGELOG 狀態而定：若對應正式版的區段已切割（如先切
+  # [3.0.0] 再發 v3.0.0rc1），指向該區段；否則指向 [未發佈版本]。
+  base_version="$(sed -E 's/(a|b|rc)[0-9]+$//' <<< "${version}")"
+  if grep -q "^## \[${base_version}\]" "${changelog}"; then
+    section_hint="「${base_version}」"
+  else
+    section_hint="「未發佈版本」"
+  fi
   body="預發布版本（\`${version_tag}\`），用於正式發布前的驗證；完整變更說明將隨對應的正式版本發布。
 
-詳細變更請參考 [CHANGELOG](https://github.com/${GITHUB_REPOSITORY:-RxChi1d/immich-geodata-zh-tw}/blob/main/CHANGELOG.md) 的「未發佈版本」區段。"
+詳細變更請參考 [CHANGELOG](https://github.com/${GITHUB_REPOSITORY:-RxChi1d/immich-geodata-zh-tw}/blob/main/CHANGELOG.md) 的 ${section_hint} 區段。"
 else
   # 分類標題轉換為 Release Notes 的 emoji 格式（對應表見 CLAUDE.md）
   body="$(sed \
