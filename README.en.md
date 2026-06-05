@@ -1,7 +1,7 @@
 # Immich Reverse Geocoding - Taiwan Localization  
 
 > [!IMPORTANT]
-> - Upgrade notice: If you already deploy this project and your media library includes photos taken in Japan and South Korea, please run "[Re-extract photo metadata](#integrated-deployment-recommended-convenient-for-future-updates)" after upgrading to v2.2.0 to apply the latest Japanese dataset.
+> - Upgrade notice: v3.0.0 adds Thailand geodata (Traditional Chinese localization). If you already deploy this project and your media library includes photos taken in Thailand, please run "[Re-extract photo metadata](#integrated-deployment-recommended-convenient-for-future-updates)" after upgrading to v3.0.0 to apply the latest Thailand dataset.
 > - Starting on v2.2.0 every release bundles `update_data.sh`. Please point automation to the release-hosted script so it matches the published dataset; the repository copy stays for reference but the release artifact should be the source of truth.
 
 [繁體中文](README.md) | [English](README.en.md)
@@ -17,6 +17,7 @@ We focus on the Taiwan user experience and apply the most suitable language stra
 - **Taiwan**: Uses NLSC datasets to fix country and administrative naming issues
 - **Japan**: Uses 国土数値情報 datasets and preserves native names (漢字 + かな)
 - **South Korea**: Uses admdongkor project data and provides Traditional Chinese translations
+- **Thailand**: Uses official COD-AB boundary data and provides Traditional Chinese translations for Admin1/Admin2, falling back to official English and Thai names
 - **Other regions**: Provides Traditional Chinese translations, falling back to English when no common translation exists
 
 > [!TIP]
