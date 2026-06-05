@@ -27,13 +27,26 @@
 
 ## [未發佈版本]
 
+---
+
+## [3.0.0] - 2026-06-05
+
+本版本為重大更新：新增泰國繁體中文在地化，並將資料處理引擎全面遷移至 Rust。
+
+**升級提醒**：
+- 若媒體庫含有泰國地區照片，請在更新後於 Immich 執行「重新擷取照片中繼資料」，以套用最新的泰國資料。
+- 若有自動化腳本下載 Rust binary 資產，請注意資產檔名已變更（見 Changed）。
+
 ### Added
 - **泰國繁體中文在地化**：泰國行政區改採官方 COD-AB 邊界資料搭配 Wikidata 繁體中文翻譯，一級行政區（府）全數翻譯、二級行政區（縣）覆蓋率約 94%，取代先前以 LocationIQ 產生的簡體與未翻譯名稱。
 
 ### Changed
-- **資料處理引擎全面遷移至 Rust**：正式發布流程改由 Rust pipeline 產生，提升處理效能與發布可重現性；Python 實作正式退場。
+- **資料處理引擎全面遷移至 Rust**：正式發布流程改由 Rust pipeline 產生，提升處理效能與發布可重現性。
 - **南韓地理資料更新**：同步 admdongkor 最新行政區界資料。
 - **Release 資產檔名變更**：Rust binary 由 `immich-geodata-migration` 更名為 `immich-geodata`，Release 下載資產檔名同步更新為 `immich-geodata-x86_64-unknown-linux-gnu`。
+
+### Removed
+- **Python 資料處理工具鏈**：Python 實作正式退場，所有資料處理與發布流程改由 Rust CLI 提供。
 
 ### Fixed
 - **地名翻譯正確性強化**：所有 Wikidata 翻譯逐級驗證行政隸屬關係（二級對一級、一級對國家），杜絕同名地名錯配（例如泰國難府不再被無關的同拼寫條目干擾）；跨行政區同名單位不會再取得錯誤翻譯，無法確認時保守顯示官方名稱。
@@ -276,7 +289,8 @@
 
 特定變更的詳細資訊請參閱 [提交歷史](https://github.com/RxChi1d/immich-geodata-zh-tw/commits/main) 或 [發佈頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases)。
 
-[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.4...HEAD
+[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.4...v3.0.0
 [2.2.4]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.3...v2.2.4
 [2.2.3]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.2...v2.2.3
 [2.2.2]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.1...v2.2.2
