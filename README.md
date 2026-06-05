@@ -83,7 +83,7 @@
     - **用途**: 作為全球地理位置的基礎數據庫
 2.  **OpenStreetMap** (透過 LocationIQ)
     - **授權**: Open Database License (ODbL) 1.0
-    - **用途**: 透過 LocationIQ API 取得非臺灣、非日本地區的反向地理編碼資料
+    - **用途**: 透過 LocationIQ API 取得臺灣、日本、南韓、泰國以外地區的反向地理編碼資料
     - **聲明**: Data © OpenStreetMap contributors, ODbL 1.0
 3.  **中華民國國土測繪中心 (NLSC)**
     - **來源**: [國土測繪中心開放資料平台](https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx)
@@ -98,7 +98,7 @@
 5.  **admdongkor**
     - **來源**: [admdongkor](https://github.com/vuski/admdongkor)
     - **資料集**: 南韓官方行政區邊界資料（GeoJSON 格式）
-    - **授權**: MIT License
+    - **授權**: 無額外限制（作者建議標示出處，詳見 [NOTICE.md](NOTICE.md)）
     - **用途**: 作為南韓地區行政區邊界與名稱的主要數據源
 6.  **Thailand COD-AB**
     - **來源**: [HDX Thailand Subnational Administrative Boundaries](https://data.humdata.org/dataset/cod-ab-tha)

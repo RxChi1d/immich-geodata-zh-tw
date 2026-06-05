@@ -90,7 +90,7 @@ The geographic data used in this project mainly comes from the following sources
     - **Purpose**: As the global geographic location database foundation
 2.  **OpenStreetMap** (via LocationIQ)
     - **License**: Open Database License (ODbL) 1.0
-    - **Purpose**: Via LocationIQ API for reverse geocoding requests for non-Taiwan, non-Japan regions
+    - **Purpose**: Via LocationIQ API for reverse geocoding of regions other than Taiwan, Japan, South Korea, and Thailand
     - **Attribution**: Data © OpenStreetMap contributors, ODbL 1.0
 3.  **National Land Surveying and Mapping Center (NLSC)** of Taiwan
     - **Source**: [NLSC Open Data Platform](https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx)
@@ -105,7 +105,7 @@ The geographic data used in this project mainly comes from the following sources
 5.  **admdongkor** (South Korea)
     - **Source**: [admdongkor](https://github.com/vuski/admdongkor)
     - **Dataset**: South Korean official administrative boundary data (GeoJSON format)
-    - **License**: MIT License
+    - **License**: No additional restrictions (attribution requested; see [NOTICE.md](NOTICE.md))
     - **Purpose**: As the primary data source for South Korea administrative boundaries and names
 6.  **Thailand COD-AB**
     - **Source**: [HDX Thailand Subnational Administrative Boundaries](https://data.humdata.org/dataset/cod-ab-tha)
