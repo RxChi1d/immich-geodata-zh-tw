@@ -264,6 +264,12 @@ cargo test
 - **Rust logging**：production CLI 使用 Rust logging/tracing 慣例，新增 pipeline
   訊息需避免輸出 API key、暫存路徑中敏感資訊或不可重現的 runtime metadata。
 
+### 資料保護規則
+- **`meta_data/*_geodata.csv` 為 canonical production metadata**：由各國官方圖資
+  經 extract 生成、由 release workflow 自動驗證與更新。除明確的資料更新任務外，
+  不得刪除、重新產生或正規化這些檔案；任何清理或重構工作都不應視其為可再生的
+  build 產物。
+
 ### 模組化設計原則
 - **單一檔案不得超過 500 行程式碼**
 - **每個模組都有清楚的職責分工**
