@@ -4,6 +4,8 @@
 //! 即時查詢）與 fixture（stub）兩條來源路徑得到一致的最終形態：
 //! 1. `fix_simplified_chars`：安全字元級簡轉繁（白名單），只修簡體獨有字。
 //! 2. `normalize_admin1_suffix`：admin1 補「省」字尾（特區／首都／已含字尾不動）。
+//!
+//! 跨國共用的譯名防禦（消歧括號、純中文判定）見 `label_sanitize`。
 
 // Reason: 對照表與 translator 的簡體字告警偵測共用單一事實來源
 // （`wikidata::simplified`），白名單設計緣由（避免 s2t 過度轉換）見該模組。
@@ -45,76 +47,9 @@ pub(super) fn normalize_admin1_suffix(name: &str) -> String {
     }
 }
 
-/// 判斷字串是否含 CJK 漢字。
-fn has_cjk(name: &str) -> bool {
-    name.chars()
-        .any(|ch| ('\u{4E00}'..='\u{9FFF}').contains(&ch))
-}
-
-/// 判斷譯名是否為「有效的中文翻譯」。
-///
-/// 有效條件：含 CJK 漢字、且不夾雜 ASCII 字母。
-///
-/// Reason: 翻譯的目的是中文輸出，任何非中文形態都應回退 BIG 印尼文原文：
-/// 1. 純拉丁字串（如「East Barito」）——英文 label 或 stale cache 殘留的
-///    舊回退鏈結果，不是中文翻譯。
-/// 2. 中英夾雜（如 Kutai Barat 的 zh label「西Kutai區」）——Wikidata
-///    半翻譯髒資料。
-///
-/// 此判定一次涵蓋上述所有非中文形態，對來源（即時查詢、cache、stub）
-/// 一視同仁，杜絕 cache 殘留繞過上游回退鏈修正的問題。
-pub(super) fn is_valid_chinese_translation(name: &str) -> bool {
-    has_cjk(name) && !name.chars().any(|ch| ch.is_ascii_alphabetic())
-}
-
-/// 移除譯名尾端的消歧括號（全形或半形）。
-///
-/// Reason: Wikidata 同名實體的 label 可能帶消歧後綴（真實案例：巴布亞省
-/// 的「薩米縣 (巴布亞省)」），直接顯示會洩漏 Wikidata 內部消歧格式。
-/// 比照 KR handler 的 `strip_trailing_parenthetical` 先例去除。
-pub(super) fn strip_trailing_parenthetical(value: &str) -> String {
-    let trimmed = value.trim();
-    let stripped = if let Some(rest) = trimmed.strip_suffix('）') {
-        rest.rfind('（').map(|start| &rest[..start])
-    } else if let Some(rest) = trimmed.strip_suffix(')') {
-        rest.rfind('(').map(|start| &rest[..start])
-    } else {
-        None
-    };
-    stripped.unwrap_or(trimmed).trim_end().to_string()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn strip_trailing_parenthetical_rules() {
-        // 真實案例：Wikidata 消歧後綴（半形）。
-        assert_eq!(strip_trailing_parenthetical("薩米縣 (巴布亞省)"), "薩米縣");
-        // 全形括號同樣處理。
-        assert_eq!(strip_trailing_parenthetical("薩米縣（巴布亞省）"), "薩米縣");
-        // 無括號或括號不在尾端者不動。
-        assert_eq!(strip_trailing_parenthetical("萬隆縣"), "萬隆縣");
-        assert_eq!(
-            strip_trailing_parenthetical("邦加-勿里洞省"),
-            "邦加-勿里洞省"
-        );
-    }
-
-    #[test]
-    fn valid_chinese_translation_detection() {
-        // 有效中文翻譯：純中文（含連字號等非字母符號）。
-        assert!(is_valid_chinese_translation("萬隆縣"));
-        assert!(is_valid_chinese_translation("邦加-勿里洞省"));
-        // 無效：純拉丁（英文 label 或 stale cache 殘留，真實案例 East Barito）。
-        assert!(!is_valid_chinese_translation("East Barito"));
-        assert!(!is_valid_chinese_translation("Barito Timur"));
-        // 無效：中英夾雜（真實案例：Kutai Barat 的 zh label「西Kutai區」）。
-        assert!(!is_valid_chinese_translation("西Kutai區"));
-        // 無效：空字串。
-        assert!(!is_valid_chinese_translation(""));
-    }
 
     #[test]
     fn fix_simplified_chars_converts_known_simplified() {

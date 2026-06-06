@@ -14,6 +14,7 @@ mod indonesia;
 mod indonesia_normalize;
 mod indonesia_wikidata;
 mod korea_wikidata;
+mod label_sanitize;
 mod sources;
 mod thailand_wikidata;
 mod types;

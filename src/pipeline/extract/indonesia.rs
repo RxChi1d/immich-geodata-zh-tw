@@ -8,10 +8,8 @@
 //!
 //! 比照 TH/KR：admin_1/admin_2 為翻譯後繁中，admin_3 以下沿用原文。
 
-use super::indonesia_normalize::{
-    fix_simplified_chars, is_valid_chinese_translation, normalize_admin1_suffix,
-    strip_trailing_parenthetical,
-};
+use super::indonesia_normalize::{fix_simplified_chars, normalize_admin1_suffix};
+use super::label_sanitize::{is_valid_chinese_translation, strip_trailing_parenthetical};
 use super::types::{ExtractRow, Feature, FeatureGeometry, WikidataTranslations};
 
 /// 將印尼 feature 集合轉為 ExtractRow，並過濾未定義行政區的列。
