@@ -7,7 +7,7 @@
 
 本專案為 Immich 提供專為臺灣使用者設計的反向地理編碼優化，根據使用者習慣提供自然且準確的地理資訊顯示。
 
-目前支援：🇹🇼 **臺灣** | 🇯🇵 **日本** | 🇰🇷 **南韓** | 🇹🇭 **泰國** | 🌏 **其他地區中文化**
+目前支援：🇹🇼 **臺灣** | 🇯🇵 **日本** | 🇰🇷 **南韓** | 🇹🇭 **泰國** | 🇮🇩 **印尼** | 🌏 **其他地區中文化**
 
 ## 設計理念
 
@@ -17,6 +17,7 @@
 - **日本地區**：使用国土数値情報ダウンロードサイト資料，保留日文原名（漢字+假名），符合臺灣使用者閱讀習慣
 - **南韓地區**：使用 admdongkor 專案資料，提供繁體中文翻譯，符合臺灣使用者閱讀習慣
 - **泰國地區**：使用 COD-AB 官方邊界資料，提供 Admin1/Admin2 繁中翻譯，並以官方英文與泰文作為 fallback
+- **印尼地區**：使用 BIG（印尼地理空間資訊局）官方村級圖資，提供 Admin1/Admin2 繁中翻譯，缺中文標籤時回退 BIG 官方印尼文
 - **其他地區**：提供繁體中文翻譯，確保資訊可讀性（無對照譯名則回退至英文）
 
 ### 使用前後對比
@@ -39,6 +40,7 @@
     - [🇯🇵 日本地區優化](#-日本地區優化)
     - [🇰🇷 南韓地區優化](#-南韓地區優化)
     - [🇹🇭 泰國地區優化](#-泰國地區優化)
+    - [🇮🇩 印尼地區優化](#-印尼地區優化)
   - [更新地理資料](#更新地理資料)
     - [整合式部署](#整合式部署)
     - [手動部署](#手動部署-1)
@@ -51,6 +53,7 @@
       - [日本資料提取](#日本資料提取)
       - [南韓資料提取](#南韓資料提取)
       - [泰國資料提取](#泰國資料提取)
+      - [印尼資料提取](#印尼資料提取)
     - [3. 完整資料處理流程](#3-完整資料處理流程)
       - [註冊 LocationIQ API](#註冊-locationiq-api)
       - [執行資料處理](#執行資料處理)
@@ -68,6 +71,7 @@
 | 🇯🇵 日本 | 日文原名（漢字+假名） | 国土数値情報ダウンロードサイト | 優化地理資料；以日文原名顯示 |
 | 🇰🇷 南韓 | 繁體中文翻譯 | admdongkor（官方行政區邊界） | 優化地理資料；提供繁體中文翻譯 |
 | 🇹🇭 泰國 | 繁體中文翻譯（官方英文 / 泰文 fallback） | COD-AB Thailand | 優化地理資料；以官方行政區邊界計算行政區中心點 |
+| 🇮🇩 印尼 | 繁體中文翻譯（BIG 官方印尼文 fallback） | BIG（Badan Informasi Geospasial） | 優化地理資料；以村級邊界計算行政區中心點，涵蓋 38 省 |
 | 🌏 其他 | 繁體中文翻譯 | 自訂翻譯 → GeoNames 翻譯 → GeoNames 英文 | 優先使用臺灣慣用譯名，若無則使用 GeoNames 資料 |
 
 > **為什麼日本保留日文？**
@@ -82,7 +86,7 @@
     - **用途**: 作為全球地理位置的基礎數據庫
 2.  **OpenStreetMap** (透過 LocationIQ)
     - **授權**: Open Database License (ODbL) 1.0
-    - **用途**: 透過 LocationIQ API 取得臺灣、日本、南韓、泰國以外地區的反向地理編碼資料
+    - **用途**: 透過 LocationIQ API 取得臺灣、日本、南韓、泰國、印尼以外地區的反向地理編碼資料
     - **聲明**: Data © OpenStreetMap contributors, ODbL 1.0
 3.  **中華民國國土測繪中心 (NLSC)**
     - **來源**: [國土測繪中心開放資料平台](https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx)
@@ -104,7 +108,12 @@
     - **資料集**: Thailand administrative level 0-3 boundaries (COD-AB)
     - **授權**: Creative Commons Attribution for Intergovernmental Organisations (CC BY-IGO)
     - **用途**: 作為泰國地區行政區邊界與名稱的主要數據源
-7.  **其他參考資料**
+7.  **印尼地理空間資訊局（BIG，Badan Informasi Geospasial）**
+    - **來源**: BIG 官方 ArcGIS REST FeatureServer（desa 村級圖徵服務）
+    - **資料集**: 印尼行政區 desa（村級）邊界，版本 TASWIL20230928，含 38 省全量資料
+    - **授權**: 印尼官方公開地理資料（本專案僅作衍生加工輸入，不散布原始向量圖資）
+    - **用途**: 作為印尼地區行政區邊界與名稱的主要數據源
+8.  **其他參考資料**
     - **中華民國經濟部國際貿易署 & 中華民國外交部**: 作為部分國家/地區中文譯名的參考來源
 
 > [!NOTE]
@@ -244,6 +253,15 @@
 
 > 📖 詳細的泰國行政區處理邏輯請參閱 [泰國行政區處理文檔](docs/zh-tw/thailand-admin-processing.md)
 
+### 🇮🇩 印尼地區優化
+
+- **官方村級圖資**：使用 BIG（Badan Informasi Geospasial，印尼地理空間資訊局）官方 ArcGIS REST 服務發布的 desa（村級）邊界資料（版本 TASWIL20230928，含 38 省全量 83,461 筆可用 feature）
+- **繁體中文翻譯**：Admin1（省）與 Admin2（縣／市）使用 Wikidata translator 並以 P131 行政隸屬逐級驗證；缺少可靠中文標籤時回退 BIG 官方印尼文原文，Admin3（郡）/ Admin4（村）則保留印尼文原文
+- **三時區解析**：依 38 省 per-province 對照表解析印尼三時區（WIB `Asia/Jakarta`、WITA `Asia/Makassar`、WIT `Asia/Jayapura`）
+- **最近距離最佳化**：使用印尼 Albers 等積投影（`+lat_1=1 +lat_2=-8 +lon_0=118`）計算幾何中心點；multipart polygon 每個 part 各出一列，提升群島地形的最近鄰命中率（admin2 命中率 96.99%）
+
+> 📖 詳細的印尼行政區處理邏輯請參閱 [印尼行政區處理文檔](docs/zh-tw/indonesia-admin-processing.md)
+
 ## 更新地理資料
 
 ### 整合式部署
@@ -346,6 +364,23 @@ cargo run --release -- extract --country TH \
 
 提取完成後，執行 Rust `release` 時會自動整合這些資料。
 
+#### 印尼資料提取
+
+資料來源：BIG（Badan Informasi Geospasial）官方 ArcGIS REST FeatureServer
+
+```bash
+# 1. 從 BIG 官方 REST 服務以分頁方式下載 desa 村級圖資（geometryPrecision=6，版本 TASWIL20230928）
+#    下載方式與固定參數請參閱 docs/research/indonesia-handler.md
+# 2. 執行提取命令
+cargo run --release -- extract --country ID \
+  --shapefile <path_to_BIG_desa_geojson> \
+  --output meta_data/id_geodata.csv
+```
+
+印尼提取會讀取或建立 `geoname_data/ID_wikidata_cache.json`，用於 Admin1（省）/ Admin2（縣市）繁中翻譯；Admin3（郡）/ Admin4（村）保留 BIG 官方印尼文。詳細下載流程與固定參數請參閱 [印尼 handler 研究文件](docs/research/indonesia-handler.md)。
+
+提取完成後，執行 Rust `release` 時會自動整合這些資料。
+
 ### 3. 完整資料處理流程
 
 完成資料提取（或使用現有的資料）後，可以執行完整的資料處理流程來生成 release。
@@ -365,7 +400,7 @@ cargo run --release -- release \
 > [!NOTE]
 > - 可以通過 `cargo run -- help` 查看更多選項。
 > - `--country-code` 參數可指定需要處理的國家代碼，多個代碼之間使用空格分隔。
-> - 臺、日、韓、泰（TW/JP/KR/TH）已改由官方圖資 handler 產生，無需也不應以 LocationIQ 處理；此流程僅用於為其他國家產生 metadata。
+> - 臺、日、韓、泰、印（TW/JP/KR/TH/ID）已改由官方圖資 handler 產生，無需也不應以 LocationIQ 處理；此流程僅用於為其他國家產生 metadata。
 
 > [!WARNING]
 > - 由於 LocationIQ 的 API 有請求次數限制 (可登入後於後台查看)，因此請注意要處理的國家的地名數量，以免超出限制。
