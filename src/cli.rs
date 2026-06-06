@@ -4,7 +4,9 @@ use std::time::Instant;
 
 use crate::pipeline::prepare::ProductionPrepareOptions;
 use crate::pipeline::{self, Stage};
-use crate::pipeline::{admin1_load, cities500_load, extract, locationiq, pack, translate};
+use crate::pipeline::{
+    admin1_load, cities500_load, extract, locationiq, naer_prepare, pack, translate,
+};
 
 const HELP: &str = "\
 immich-geodata
@@ -15,7 +17,8 @@ USAGE:
   immich-geodata run-stage --stage <stage> [--fixture <name>] [--fixtures-dir <path>] [--output-dir <path>]
   immich-geodata full-pipeline [--fixture <name>] [--fixtures-dir <path>] [--output-dir <path>]
   immich-geodata prepare [--country-code <cc...>] [--data-folder <path>] [--update]
-  immich-geodata <cleanup|prepare|extract|enhance|locationiq|translate|pack|release> [--dry-run|--fixture-mode|--profile] [options]
+  immich-geodata <cleanup|prepare|extract|enhance|locationiq|translate|pack|release|naer-prepare> [--dry-run|--fixture-mode|--profile] [options]
+  immich-geodata naer-prepare --input <原始CSV> [--output <vendored_path>] [--country-names <json_path>]
 ";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,6 +61,7 @@ pub fn run(args: Vec<String>) -> Result<(), String> {
         }
         "cleanup" | "prepare" | "extract" | "enhance" | "locationiq" | "translate" | "pack"
         | "release" => run_production_command(command, &args[2..]),
+        "naer-prepare" => run_naer_prepare_command(&args[2..]),
         other => Err(format!("未知命令：{other}\n\n{HELP}")),
     }
 }
@@ -298,9 +302,43 @@ fn run_translate_production(options: &ProductionOptions) -> Result<(), String> {
             .alternate_name_file
             .clone()
             .unwrap_or_else(|| options.output_folder.join("alternate_chinese_name.csv")),
+        naer_file: PathBuf::from("naer/naer_place_names.csv"),
         output_dir: options.output_folder.clone(),
         profile: options.profile,
     })
+}
+
+fn run_naer_prepare_command(args: &[String]) -> Result<(), String> {
+    let mut input: Option<PathBuf> = None;
+    let mut output = PathBuf::from("naer/naer_place_names.csv");
+    let mut country_names_file = PathBuf::from("i18n-iso-countries/langs/zh-tw.json");
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--input" => {
+                index += 1;
+                input = Some(PathBuf::from(args.get(index).ok_or("--input 需要參數")?));
+            }
+            "--output" => {
+                index += 1;
+                output = PathBuf::from(args.get(index).ok_or("--output 需要參數")?);
+            }
+            "--country-names" => {
+                index += 1;
+                country_names_file =
+                    PathBuf::from(args.get(index).ok_or("--country-names 需要參數")?);
+            }
+            other => return Err(format!("naer-prepare 不支援參數：{other}")),
+        }
+        index += 1;
+    }
+    let input = input.ok_or("naer-prepare 需要 --input <原始CSV>")?;
+    naer_prepare::run(&naer_prepare::NaerPrepareOptions {
+        input,
+        output,
+        country_names_file,
+    })
+    .map(|_| ())
 }
 
 fn run_pack_production(options: &ProductionOptions) -> Result<(), String> {
@@ -799,5 +837,11 @@ mod tests {
         let error = run_production_command("extract", &["--dry-run".to_string()]).unwrap_err();
 
         assert!(error.contains("--country"));
+    }
+
+    #[test]
+    fn naer_prepare_command_requires_input() {
+        let error = run(vec!["immich-geodata".into(), "naer-prepare".into()]).unwrap_err();
+        assert!(error.contains("--input"));
     }
 }

@@ -10,6 +10,7 @@ use polars::prelude::*;
 
 use crate::cli::RunOptions;
 use crate::pipeline::fixtures::{Fixture, load_fixtures};
+use crate::pipeline::naer_lookup::{NaerConfidence, NaerLookup, NaerStats, build_admin1_centroids};
 use crate::pipeline::polars_table::{
     read_admin1_rows, read_alternate_name_rows_with_header, read_cities_rows, read_string_rows,
     write_alternate_name_rows_with_header,
@@ -26,6 +27,7 @@ pub struct ProductionTranslateOptions {
     pub cities_file: PathBuf,
     pub admin1_file: PathBuf,
     pub alternate_name_file: PathBuf,
+    pub naer_file: PathBuf,
     pub output_dir: PathBuf,
     pub profile: bool,
 }
@@ -68,11 +70,27 @@ fn run_fixture(fixture: &Fixture, options: &RunOptions) -> Result<(), String> {
     ))?;
     let metadata_lookup = metadata_lookup_from_dataframe(&metadata)?;
     let alternate_lookup = alternate_lookup_from_dataframe(&alternate_names)?;
-    let mut cities_rows =
-        translate_cities_rows(cities_rows, &metadata_lookup, &alternate_lookup, &converter)?;
+    let naer_lookup = NaerLookup::load(&fixture.root.join("naer_place_names.csv"))?;
+    let admin1_centroids = build_admin1_centroids(&cities_rows);
+    let mut naer_stats = NaerStats::default();
+    let mut cities_rows = translate_cities_rows(
+        cities_rows,
+        &metadata_lookup,
+        &alternate_lookup,
+        &converter,
+        &naer_lookup,
+        &mut naer_stats,
+    )?;
     sort_city_rows_for_golden(&mut cities_rows);
 
-    let mut admin1_rows = translate_admin1_rows(admin1_rows, &alternate_lookup, &converter)?;
+    let mut admin1_rows = translate_admin1_rows(
+        admin1_rows,
+        &alternate_lookup,
+        &converter,
+        &naer_lookup,
+        &admin1_centroids,
+        &mut naer_stats,
+    )?;
     admin1_rows.sort_by(|left, right| left[0].cmp(&right[0]).then(left[3].cmp(&right[3])));
 
     let output_dir = fixture_output.join("translate");
@@ -81,6 +99,7 @@ fn run_fixture(fixture: &Fixture, options: &RunOptions) -> Result<(), String> {
         &output_dir.join("admin1CodesASCII_translated.txt"),
         &admin1_rows,
     )?;
+    println!("{}", naer_stats.log_line());
     println!(
         "stage=translate fixture={} cities_rows={} admin1_rows={}",
         fixture.manifest.name,
@@ -118,11 +137,32 @@ pub fn run_production(options: &ProductionTranslateOptions) -> Result<(), String
     let alternate_lookup = profile.time("build_alternate_lookup", || {
         alternate_lookup_from_dataframe(&alternate_names)
     })?;
+    let naer_lookup = profile.time("load_naer", || NaerLookup::load(&options.naer_file))?;
+    // Reason: cities_rows 隨後被 translate_cities_rows by-value 消費並
+    // shadow，admin1 質心索引必須在此之前以未翻譯列建立。
+    let admin1_centroids = profile.time("build_admin1_centroids", || {
+        Ok(build_admin1_centroids(&cities_rows))
+    })?;
+    let mut naer_stats = NaerStats::default();
     let cities_rows = profile.time("translate_cities", || {
-        translate_cities_rows(cities_rows, &metadata_lookup, &alternate_lookup, &converter)
+        translate_cities_rows(
+            cities_rows,
+            &metadata_lookup,
+            &alternate_lookup,
+            &converter,
+            &naer_lookup,
+            &mut naer_stats,
+        )
     })?;
     let admin1_rows = profile.time("translate_admin1", || {
-        translate_admin1_rows(admin1_rows, &alternate_lookup, &converter)
+        translate_admin1_rows(
+            admin1_rows,
+            &alternate_lookup,
+            &converter,
+            &naer_lookup,
+            &admin1_centroids,
+            &mut naer_stats,
+        )
     })?;
 
     profile.time("write_cities", || {
@@ -137,6 +177,7 @@ pub fn run_production(options: &ProductionTranslateOptions) -> Result<(), String
             &admin1_rows,
         )
     })?;
+    println!("{}", naer_stats.log_line());
     println!(
         "stage=translate mode=production output={} cities_rows={} admin1_rows={}",
         options.output_dir.display(),
@@ -676,6 +717,10 @@ impl CityRow {
         &self.row[1]
     }
 
+    fn asciiname(&self) -> &str {
+        &self.row[2]
+    }
+
     fn alternatenames(&self) -> &str {
         &self.row[3]
     }
@@ -733,6 +778,18 @@ impl Admin1Row {
         &self.row[3]
     }
 
+    fn code(&self) -> &str {
+        &self.row[0]
+    }
+
+    fn name(&self) -> &str {
+        &self.row[1]
+    }
+
+    fn asciiname(&self) -> &str {
+        &self.row[2]
+    }
+
     fn apply_name(&mut self, name: String) {
         self.row[1] = name;
         self.row[2] = self.row[1].clone();
@@ -781,14 +838,17 @@ fn translate_cities_rows(
     metadata: &MetadataLookup,
     alternate_names: &AlternateLookup,
     converter: &OpenCcConverter,
+    naer: &NaerLookup,
+    naer_stats: &mut NaerStats,
 ) -> Result<Vec<Vec<String>>, String> {
     let mut translated = Vec::with_capacity(rows.len());
     for row in rows {
         let mut city = CityRow::try_from_row(row)?;
+        let mut naer_applied = false;
         let final_name = if city.country_code() == "TW" {
             Some(city.name().to_string())
         } else {
-            metadata
+            let existing = metadata
                 .get_city_name(&city)
                 .filter(|value| !value.is_empty())
                 .and_then(|name| translate_metadata_name(name, converter))
@@ -798,11 +858,51 @@ fn translate_cities_rows(
                         .filter(|value| !value.is_empty())
                         .map(|name| translate_alternate_name(name, converter))
                 })
-                .or_else(|| extract_chinese_name(city.alternatenames(), converter))
+                .or_else(|| extract_chinese_name(city.alternatenames(), converter));
+            let naer_match = match (
+                city.latitude().parse::<f64>(),
+                city.longitude().parse::<f64>(),
+            ) {
+                (Ok(latitude), Ok(longitude)) => naer.lookup_city(
+                    city.name(),
+                    city.asciiname(),
+                    latitude,
+                    longitude,
+                    city.country_code(),
+                ),
+                _ => None,
+            };
+            match naer_match {
+                Some(matched) if matched.confidence == NaerConfidence::High => {
+                    if existing.is_some() {
+                        naer_stats.city_override += 1;
+                    } else {
+                        naer_stats.city_fill += 1;
+                    }
+                    naer_applied = true;
+                    Some(matched.name_zh)
+                }
+                Some(matched) => {
+                    if existing.is_none() {
+                        naer_stats.city_fill += 1;
+                        naer_applied = true;
+                        Some(matched.name_zh)
+                    } else {
+                        naer_stats.city_demoted_kept_existing += 1;
+                        existing
+                    }
+                }
+                None => existing,
+            }
         };
 
         if let Some(name) = final_name {
-            city.apply_name(name.replacen('裏', "里", 1));
+            if naer_applied {
+                // Reason: NAER 為官方審譯結果，原樣使用、不經 '裏'→'里' 後處理。
+                city.apply_name(name);
+            } else {
+                city.apply_name(name.replacen('裏', "里", 1));
+            }
         } else {
             city.sync_asciiname();
         }
@@ -817,6 +917,9 @@ fn translate_admin1_rows(
     rows: Vec<Vec<String>>,
     alternate_names: &AlternateLookup,
     converter: &OpenCcConverter,
+    naer: &NaerLookup,
+    admin1_centroids: &HashMap<String, (f64, f64)>,
+    naer_stats: &mut NaerStats,
 ) -> Result<Vec<Vec<String>>, String> {
     let mut translated = Vec::with_capacity(rows.len());
     for row in rows {
@@ -825,12 +928,22 @@ fn translate_admin1_rows(
             .get(admin1.geoname_id())
             .filter(|value| !value.is_empty())
         {
-            let translated = if is_simplified_chinese(name, converter) {
+            let translated_name = if is_simplified_chinese(name, converter) {
                 converter.s2t(name)
             } else {
                 name.clone()
             };
-            admin1.apply_name(translated);
+            admin1.apply_name(translated_name);
+        } else if let Some(name) = naer.lookup_admin1(
+            admin1.name(),
+            admin1.asciiname(),
+            admin1.code(),
+            admin1_centroids.get(admin1.code()).copied(),
+        ) {
+            // Reason: admin1 第一版僅補洞——只在既有來源無中文名時使用
+            // NAER，覆寫待品質報告量化錯配率後再評估。
+            naer_stats.admin1_fill += 1;
+            admin1.apply_name(name);
         } else {
             admin1.sync_asciiname();
         }
