@@ -2,21 +2,22 @@
 
 > This document explains how the project translates place names for
 > "non-handler countries" (every region except Taiwan, Japan, South Korea,
-> and Thailand). It is the detailed version of the "Other regions" section
-> in the README.
+> Thailand, and Indonesia). It is the detailed version of the "Other
+> regions" section in the README.
 
 ## Background: Two Translation Paths
 
 Place-name translation is split into two independent paths based on the data
 source:
 
-- **Handler countries (TW / JP / KR / TH)**: Built around official
+- **Handler countries (TW / JP / KR / TH / ID; the list is derived from the
+  extract handlers as the single source of truth)**: Built around official
   boundary handlers and the Wikidata translator (name search → zh / zh-tw /
   zh-hant labels → P131 administrative-parent chain validation for
   disambiguation → OpenCC simplified-to-traditional and Taiwan-usage
   conversion). This path is out of scope for this document.
 - **Global non-handler regions (translate stage)**: The production release
-  only runs the four handler countries above; the **LocationIQ flow is not
+  only runs the handler countries above; the **LocationIQ flow is not
   part of the production release**. As a result, the cities500 and admin1
   records for every other country derive their Chinese names solely from the
   zh-family language rows in GeoNames alternateNames and the embedded

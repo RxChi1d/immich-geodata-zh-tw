@@ -1,17 +1,19 @@
 # 全球（非 handler 地區）翻譯處理邏輯
 
-> 本文件說明本專案如何處理「非 handler 國家」（即臺灣、日本、南韓、泰國
-> 以外的全球地區）的中文翻譯，是 README 中「其他地區」優化章節的詳細版本。
+> 本文件說明本專案如何處理「非 handler 國家」（即臺灣、日本、南韓、泰國、
+> 印尼以外的全球地區）的中文翻譯，是 README 中「其他地區」優化章節的詳細
+> 版本。
 
 ## 背景：兩條翻譯路徑
 
 本專案的地名翻譯依資料來源分為兩條獨立路徑：
 
-- **handler 國家（TW / JP / KR / TH）**：以官方圖資 handler 為核心，
-  並使用 Wikidata translator（名稱搜尋 → zh / zh-tw / zh-hant label →
-  P131 上級行政區鏈驗證消歧 → OpenCC 簡繁與臺灣用語轉換）產生高品質的
-  繁中翻譯。此路徑不在本文件討論範圍。
-- **全球非 handler 地區（translate 階段）**：正式 release 只跑上述 4 個
+- **handler 國家（TW / JP / KR / TH / ID，清單由 extract handler 單一
+  來源決定）**：以官方圖資 handler 為核心，並使用 Wikidata translator
+  （名稱搜尋 → zh / zh-tw / zh-hant label → P131 上級行政區鏈驗證消歧 →
+  OpenCC 簡繁與臺灣用語轉換）產生高品質的繁中翻譯。此路徑不在本文件
+  討論範圍。
+- **全球非 handler 地區（translate 階段）**：正式 release 只跑上述
   handler 國家，**LocationIQ 流程不在 production release 中**。因此全球
   其餘所有國家的 cities500 與 admin1 記錄，原本的中文名僅來自 GeoNames
   alternateNames 的 zh 系語言列與 cities500 內嵌中文，再經 OpenCC 轉換，

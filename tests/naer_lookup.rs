@@ -86,19 +86,23 @@ fn lookup_city_confidence_tiers() {
             )
             .is_none()
     );
-    // 邊界：handler 國家直接跳過
-    assert!(
-        lookup
-            .lookup_city(
-                "Bay Minette",
-                "Bay Minette",
-                30.8830,
-                -87.7740,
-                "TW",
-                &mut stats
-            )
-            .is_none()
-    );
+    // 邊界：handler 國家直接跳過（清單由 extract handler 單一來源導出，
+    // 後續新增的 handler 國家如 ID 自動納入）
+    for handler_cc in ["TW", "ID"] {
+        assert!(
+            lookup
+                .lookup_city(
+                    "Bay Minette",
+                    "Bay Minette",
+                    30.8830,
+                    -87.7740,
+                    handler_cc,
+                    &mut stats
+                )
+                .is_none(),
+            "{handler_cc} 應被 handler 跳過"
+        );
+    }
 }
 
 #[test]
