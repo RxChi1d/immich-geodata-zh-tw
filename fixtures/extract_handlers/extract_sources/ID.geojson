@@ -1,0 +1,14 @@
+{
+"type": "FeatureCollection",
+"name": "ID",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "WADMPR": "DKI Jakarta", "WADMKK": "Kota Adm. Jakarta Pusat", "WADMKC": "Gambir", "WADMKD": "Gambir" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 106.81, -6.18 ], [ 106.83, -6.18 ], [ 106.83, -6.16 ], [ 106.81, -6.16 ], [ 106.81, -6.18 ] ] ] } },
+{ "type": "Feature", "properties": { "WADMPR": "Jawa Barat", "WADMKK": "Bandung", "WADMKC": "Cicendo", "WADMKD": "Pasirkaliki" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 107.59, -6.93 ], [ 107.61, -6.93 ], [ 107.61, -6.91 ], [ 107.59, -6.91 ], [ 107.59, -6.93 ] ] ] } },
+{ "type": "Feature", "properties": { "WADMPR": "Bali", "WADMKK": "Kota Denpasar", "WADMKC": "Denpasar Selatan", "WADMKD": "Sanur" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 115.25, -8.69 ], [ 115.27, -8.69 ], [ 115.27, -8.67 ], [ 115.25, -8.67 ], [ 115.25, -8.69 ] ] ] } },
+{ "type": "Feature", "properties": { "WADMPR": "Maluku", "WADMKK": "Kota Ambon", "WADMKC": "Sirimau", "WADMKD": "Batu Merah" }, "geometry": { "type": "MultiPolygon", "coordinates": [ [ [ [ 128.18, -3.71 ], [ 128.20, -3.71 ], [ 128.20, -3.69 ], [ 128.18, -3.69 ], [ 128.18, -3.71 ] ] ], [ [ [ 128.30, -3.65 ], [ 128.32, -3.65 ], [ 128.32, -3.63 ], [ 128.30, -3.63 ], [ 128.30, -3.65 ] ] ] ] } },
+{ "type": "Feature", "properties": { "WADMPR": "DKI Jakarta", "WADMKK": "Adm. Kep. Seribu", "WADMKC": "Kepulauan Seribu Utara", "WADMKD": "Pulau Kelapa" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 106.57, -5.74 ], [ 106.59, -5.74 ], [ 106.59, -5.72 ], [ 106.57, -5.72 ], [ 106.57, -5.74 ] ] ] } },
+{ "type": "Feature", "properties": { "WADMPR": "Jawa Barat", "WADMKK": "Kota Bandung", "WADMKC": "Coblong", "WADMKD": "Lebak Siliwangi" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 107.60, -6.91 ], [ 107.62, -6.91 ], [ 107.62, -6.89 ], [ 107.60, -6.89 ], [ 107.60, -6.91 ] ] ] } },
+{ "type": "Feature", "properties": { "WADMPR": " ", "WADMKK": " ", "WADMKC": " ", "WADMKD": " " }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 120.0, 0.0 ], [ 120.02, 0.0 ], [ 120.02, 0.02 ], [ 120.0, 0.02 ], [ 120.0, 0.0 ] ] ] } }
+]
+}

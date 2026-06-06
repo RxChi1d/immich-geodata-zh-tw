@@ -9,6 +9,34 @@ use super::types::{CentroidPipeline, Country, Feature, FeatureGeometry, WGS84_EP
 const PARALLEL_CENTROID_MIN_FEATURES: usize = 10_000;
 const PARALLEL_CENTROID_MAX_THREADS: usize = 8;
 
+/// 將 MultiPolygon feature 拆成每個 part 各一筆（單一 Polygon）feature。
+///
+/// 拆分後每個 part 會在後續 centroid 階段各自取中心點、各輸出一列，符合
+/// 「multipart polygon 每個部分各出一列」的預期行為。Point / Polygon 與
+/// 空 MultiPolygon 原樣保留；屬性與 CRS 在各 part 間複製（part 共享同一
+/// 行政區歸屬）。
+///
+/// Reason: 群島國家（印尼）的行政區常由多個不相連島嶼組成，若以合併 centroid
+/// 取單點，該點可能落在所有 part 之外（落海），降低最近鄰匹配準確度。
+pub(super) fn split_multipolygon_parts(features: Vec<Feature>) -> Vec<Feature> {
+    let mut expanded = Vec::with_capacity(features.len());
+    for feature in features {
+        match &feature.geometry {
+            FeatureGeometry::MultiPolygon(polygons) if polygons.len() > 1 => {
+                for rings in polygons {
+                    expanded.push(Feature {
+                        geometry: FeatureGeometry::Polygon(rings.clone()),
+                        attributes: feature.attributes.clone(),
+                        crs: feature.crs.clone(),
+                    });
+                }
+            }
+            _ => expanded.push(feature),
+        }
+    }
+    expanded
+}
+
 pub(super) fn apply_country_centroids(
     country: Country,
     features: &mut [Feature],
@@ -323,4 +351,59 @@ fn utm_epsg_for_lon(lon: f64) -> i32 {
 
 pub(super) fn epsg_crs(epsg: i32) -> String {
     format!("EPSG:{epsg}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::types::FeatureAttributes;
+    use super::*;
+
+    fn ring() -> Vec<(f64, f64)> {
+        vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 0.0)]
+    }
+
+    fn feature(geometry: FeatureGeometry) -> Feature {
+        Feature {
+            geometry,
+            attributes: FeatureAttributes::empty(Country::Indonesia),
+            crs: Some("EPSG:4326".to_string()),
+        }
+    }
+
+    #[test]
+    fn splits_multi_part_polygon_into_one_feature_per_part() {
+        let multi = feature(FeatureGeometry::MultiPolygon(vec![
+            vec![ring()],
+            vec![ring()],
+            vec![ring()],
+        ]));
+        let expanded = split_multipolygon_parts(vec![multi]);
+        assert_eq!(expanded.len(), 3);
+        for part in &expanded {
+            assert!(matches!(part.geometry, FeatureGeometry::Polygon(_)));
+            assert_eq!(part.crs.as_deref(), Some("EPSG:4326"));
+        }
+    }
+
+    #[test]
+    fn keeps_polygon_and_point_unchanged() {
+        let polygon = feature(FeatureGeometry::Polygon(vec![ring()]));
+        let point = feature(FeatureGeometry::Point((118.0, -3.0)));
+        let expanded = split_multipolygon_parts(vec![polygon, point]);
+        assert_eq!(expanded.len(), 2);
+        assert!(matches!(expanded[0].geometry, FeatureGeometry::Polygon(_)));
+        assert!(matches!(expanded[1].geometry, FeatureGeometry::Point(_)));
+    }
+
+    #[test]
+    fn single_part_multipolygon_is_left_as_is() {
+        // 邊界：只有 1 個 part 的 MultiPolygon 不需拆分，原樣保留。
+        let multi = feature(FeatureGeometry::MultiPolygon(vec![vec![ring()]]));
+        let expanded = split_multipolygon_parts(vec![multi]);
+        assert_eq!(expanded.len(), 1);
+        assert!(matches!(
+            expanded[0].geometry,
+            FeatureGeometry::MultiPolygon(_)
+        ));
+    }
 }

@@ -2,6 +2,13 @@ use std::collections::{HashMap, HashSet};
 
 pub const METADATA_OFFICIAL_EN: &str = "official_en";
 pub const METADATA_OFFICIAL_TH: &str = "official_th";
+/// 官方來源原文（language-agnostic）。
+///
+/// Reason: 部分國家來源（如印尼 BIG）無官方英文欄位，且搜尋字串為人工加上
+/// 消歧前綴（`Kabupaten `）的字串；翻譯失敗回退時必須使用乾淨的官方原文，
+/// 而非帶前綴的搜尋字串或被覆蓋的 Wikidata 英文 label。此 key 優先於
+/// `official_en` / `official_th` 作為回退來源。
+pub const METADATA_OFFICIAL_ORIGINAL: &str = "official_original";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AdminLevel {

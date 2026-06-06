@@ -1,5 +1,6 @@
 mod cache;
 mod client;
+pub(crate) mod simplified;
 mod translator;
 mod types;
 
@@ -15,6 +16,7 @@ pub use translator::{
     BatchTranslateOptions, WikidataCandidateMetadata, WikidataTranslator, dedupe_keep_order,
 };
 pub use types::{
-    AdminLevel, METADATA_OFFICIAL_EN, METADATA_OFFICIAL_TH, TranslationDataset,
-    TranslationDatasetBuilder, TranslationItem, TranslationResult, build_translation_item_id,
+    AdminLevel, METADATA_OFFICIAL_EN, METADATA_OFFICIAL_ORIGINAL, METADATA_OFFICIAL_TH,
+    TranslationDataset, TranslationDatasetBuilder, TranslationItem, TranslationResult,
+    build_translation_item_id,
 };

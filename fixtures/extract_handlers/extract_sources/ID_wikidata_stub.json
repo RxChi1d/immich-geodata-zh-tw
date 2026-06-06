@@ -1,0 +1,14 @@
+{
+  "translations": {
+    "admin_1/ID/DKI Jakarta": "雅加達",
+    "admin_1/ID/Jawa Barat": "西爪哇",
+    "admin_1/ID/Bali": "峇里",
+    "admin_1/ID/Maluku": "馬魯古",
+    "admin_2/ID/DKI Jakarta/Kota Adm. Jakarta Pusat": "中雅加達",
+    "admin_2/ID/DKI Jakarta/Adm. Kep. Seribu": "千島群島",
+    "admin_2/ID/Jawa Barat/Bandung": "萬隆縣",
+    "admin_2/ID/Jawa Barat/Kota Bandung": "萬隆市",
+    "admin_2/ID/Bali/Kota Denpasar": "登巴薩",
+    "admin_2/ID/Maluku/Kota Ambon": "安汶"
+  }
+}

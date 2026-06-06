@@ -184,7 +184,7 @@ production path 已遷移至 Rust：
 
 ```
 src/pipeline/
-├── extract.rs              # TW/JP/KR 圖資讀取、座標轉換與 normalized CSV 輸出
+├── extract.rs              # TW/JP/KR/TH/ID 圖資讀取、座標轉換與 normalized CSV 輸出
 ├── extract/handlers.rs     # 各國 extract handler 與行政區欄位規則
 ├── prepare.rs              # GeoNames、Natural Earth 等來源下載與前處理
 ├── admin1_load.rs          # admin1 replacement
@@ -224,7 +224,7 @@ cargo run --release -- extract \
   --shapefile <path_to_tw_shapefile> \
   --output meta_data/tw_geodata.csv
 
-# LocationIQ 流程僅用於非 handler 國家（TW/JP/KR/TH 已由官方圖資 handler 產生）
+# LocationIQ 流程僅用於非 handler 國家（TW/JP/KR/TH/ID 已由官方圖資 handler 產生）
 cargo run --release -- release \
   --locationiq-api-key "<api_key>" \
   --country-code US

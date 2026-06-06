@@ -1,7 +1,12 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use super::indonesia::indonesia_feature_rows;
+use super::indonesia_wikidata::build_indonesia_wikidata_cache;
 use super::korea_wikidata::build_korea_wikidata_cache;
+use super::label_sanitize::{
+    is_mixed_script, is_valid_chinese_translation, strip_trailing_parenthetical,
+};
 use super::thailand_wikidata::build_thailand_wikidata_cache;
 use super::types::{
     Country, ExtractContext, ExtractRow, Feature, FeatureGeometry, WikidataTranslations,
@@ -48,6 +53,21 @@ impl Country {
                     ..ExtractContext::default()
                 })
             }
+            Self::Indonesia => {
+                let stub = wikidata_stub
+                    .filter(|path| path.exists())
+                    .map(Path::to_path_buf)
+                    .or_else(|| wikidata_stub_source(source_path, "ID"));
+                let indonesia_translations = if let Some(stub) = stub {
+                    read_wikidata_stub(&stub, "ID")?
+                } else {
+                    build_indonesia_wikidata_cache(features, &wikidata_cache_path("ID"))?
+                };
+                Ok(ExtractContext {
+                    indonesia_translations,
+                    ..ExtractContext::default()
+                })
+            }
         }
     }
 
@@ -67,6 +87,7 @@ impl Country {
                 .iter()
                 .map(|feature| thailand_feature_row(feature, &context.thailand_translations))
                 .collect(),
+            Self::Indonesia => indonesia_feature_rows(features, &context.indonesia_translations),
         }
     }
 }
@@ -218,6 +239,9 @@ fn thailand_admin1(name: &str, translations: &WikidataTranslations) -> String {
         .admin1_by_name
         .get(name)
         .cloned()
+        // Reason: TH 的官方英文為設計內的合法回退輸出，不可要求純中文；
+        //         但中英夾雜（半翻譯髒資料）仍應視為無效，回退官方英文原文。
+        .filter(|value| !is_mixed_script(value))
         .unwrap_or_else(|| name.to_string())
 }
 
@@ -232,6 +256,9 @@ fn thailand_admin2(
         .and_then(|by_name| by_name.get(adm2_name))
         .or_else(|| translations.fallback_by_name.get(adm2_name))
         .cloned()
+        // Reason: TH 的官方英文為設計內的合法回退輸出，不可要求純中文；
+        //         但中英夾雜（半翻譯髒資料）仍應視為無效，回退官方英文原文。
+        .filter(|value| !is_mixed_script(value))
         .unwrap_or_else(|| adm2_name.to_string())
 }
 
@@ -330,6 +357,9 @@ fn korea_admin1(name: &str, translations: &WikidataTranslations) -> String {
             .admin1_by_name
             .get(name)
             .cloned()
+            // Reason: KR 期望純中文輸出；非中文形態（純拉丁、中英夾雜）的
+            //         「翻譯」一律視為無效（如 stale cache 殘留），回退韓文原文。
+            .filter(|value| is_valid_chinese_translation(value))
             .unwrap_or_else(|| name.to_string())
     } else {
         built_in.to_string()
@@ -346,6 +376,9 @@ fn korea_admin2(sidonm: &str, sggnm: &str, translations: &WikidataTranslations) 
         .and_then(|by_name| by_name.get(sggnm))
         .or_else(|| translations.fallback_by_name.get(sggnm))
         .cloned()
+        // Reason: KR 期望純中文輸出；非中文形態（純拉丁、中英夾雜）的
+        //         「翻譯」一律視為無效（如 stale cache 殘留），回退韓文原文。
+        .filter(|value| is_valid_chinese_translation(value))
         .unwrap_or_else(|| sggnm.to_string())
 }
 
@@ -399,13 +432,59 @@ fn split_korea_city_district(name: &str) -> Option<(String, String)> {
     Some((name[..city_end].to_string(), name[city_end..].to_string()))
 }
 
-fn strip_trailing_parenthetical(value: &str) -> String {
-    let trimmed = value.trim();
-    if !trimmed.ends_with(')') {
-        return trimmed.to_string();
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn translations_with_admin1(key: &str, value: &str) -> WikidataTranslations {
+        let mut translations = WikidataTranslations::default();
+        translations
+            .admin1_by_name
+            .insert(key.to_string(), value.to_string());
+        translations
     }
-    let Some(start) = trimmed.rfind('(') else {
-        return trimmed.to_string();
-    };
-    trimmed[..start].trim_end().to_string()
+
+    fn translations_with_admin2(parent: &str, key: &str, value: &str) -> WikidataTranslations {
+        let mut translations = WikidataTranslations::default();
+        translations.admin2_by_parent.insert(
+            parent.to_string(),
+            HashMap::from([(key.to_string(), value.to_string())]),
+        );
+        translations
+    }
+
+    #[test]
+    fn korea_rejects_non_chinese_translation_and_falls_back_to_original() {
+        // 正常：純中文翻譯直接採用。
+        let ok = translations_with_admin2("경기도", "수원시", "水原市");
+        assert_eq!(korea_admin2("경기도", "수원시", &ok), "水原市");
+        // stale cache 殘留英文 label → 回退韓文原文。
+        let stale = translations_with_admin2("경기도", "수원시", "Suwon");
+        assert_eq!(korea_admin2("경기도", "수원시", &stale), "수원시");
+        // 中英夾雜髒翻譯 → 回退韓文原文。
+        // Reason: 現有 17 個 admin1 全為 built-in 對照，translations 查表
+        //         僅在未知名稱（如未來行政區改制）時生效，故以非 built-in
+        //         名稱驗證防禦。
+        let mixed = translations_with_admin1("새특별자치도", "新特別Jachi道");
+        assert_eq!(korea_admin1("새특별자치도", &mixed), "새특별자치도");
+    }
+
+    #[test]
+    fn thailand_keeps_official_english_but_rejects_mixed_script() {
+        // 純中文翻譯直接採用。
+        let ok = translations_with_admin1("Bangkok", "曼谷");
+        assert_eq!(thailand_admin1("Bangkok", &ok), "曼谷");
+        // 官方英文為設計內的合法回退輸出，不可被純中文判定誤殺。
+        let english = translations_with_admin2("Udon Thani", "Ban Dung", "Ban Dung");
+        assert_eq!(
+            thailand_admin2("Udon Thani", "Ban Dung", &english),
+            "Ban Dung"
+        );
+        // 中英夾雜髒翻譯 → 回退官方英文原文。
+        let mixed = translations_with_admin2("Udon Thani", "Ban Dung", "班Dung縣");
+        assert_eq!(
+            thailand_admin2("Udon Thani", "Ban Dung", &mixed),
+            "Ban Dung"
+        );
+    }
 }

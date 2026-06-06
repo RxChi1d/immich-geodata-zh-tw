@@ -7,7 +7,7 @@
 
 This project delivers reverse geocoding enhancements tailored for users in Taiwan, providing natural and accurate location display that reflects local reading habits.
 
-Currently supports: 🇹🇼 **Taiwan** | 🇯🇵 **Japan** | 🇰🇷 **South Korea** | 🇹🇭 **Thailand** | 🌏 **Traditional Chinese localization for other regions**
+Currently supports: 🇹🇼 **Taiwan** | 🇯🇵 **Japan** | 🇰🇷 **South Korea** | 🇹🇭 **Thailand** | 🇮🇩 **Indonesia** | 🌏 **Traditional Chinese localization for other regions**
 
 ## Design Philosophy
 
@@ -17,6 +17,7 @@ We focus on the Taiwan user experience and apply the most suitable language stra
 - **Japan**: Uses 国土数値情報 datasets and preserves native names (漢字 + かな)
 - **South Korea**: Uses admdongkor project data and provides Traditional Chinese translations
 - **Thailand**: Uses official COD-AB boundary data and provides Traditional Chinese translations for Admin1/Admin2, falling back to official English and Thai names
+- **Indonesia**: Uses official village-level (desa) boundary data from BIG (Badan Informasi Geospasial) and provides Traditional Chinese translations for Admin1/Admin2, falling back to official Indonesian names when no Chinese label exists
 - **Other regions**: Provides Traditional Chinese translations, falling back to English when no common translation exists
 
 > [!TIP]
@@ -46,6 +47,7 @@ We focus on the Taiwan user experience and apply the most suitable language stra
     - [🇯🇵 Japan](#-japan)
     - [🇰🇷 South Korea](#-south-korea)
     - [🇹🇭 Thailand](#-thailand)
+    - [🇮🇩 Indonesia](#-indonesia)
   - [Update Geographic Data](#update-geographic-data)
     - [Integrated Deployment](#integrated-deployment)
     - [Manual Deployment](#manual-deployment-1)
@@ -58,6 +60,7 @@ We focus on the Taiwan user experience and apply the most suitable language stra
       - [Japan Data Extraction](#japan-data-extraction)
       - [South Korea Data Extraction](#south-korea-data-extraction)
       - [Thailand Data Extraction](#thailand-data-extraction)
+      - [Indonesia Data Extraction](#indonesia-data-extraction)
     - [3. Complete Data Processing Workflow](#3-complete-data-processing-workflow)
       - [Register LocationIQ API](#register-locationiq-api)
       - [Execute Data Processing](#execute-data-processing)
@@ -75,6 +78,7 @@ The project applies region-specific language handling to reflect the expectation
 | 🇯🇵 Japan | Native Japanese (漢字 + かな) | 国土数値情報ダウンロードサービス | Displays official Japanese names without translating them |
 | 🇰🇷 South Korea | Traditional Chinese translations | admdongkor (Official administrative boundaries) | Provides Traditional Chinese translations |
 | 🇹🇭 Thailand | Traditional Chinese translations (official English / Thai fallback) | COD-AB Thailand | Computes administrative center points from official boundaries |
+| 🇮🇩 Indonesia | Traditional Chinese translations (official Indonesian fallback) | BIG (Badan Informasi Geospasial) | Computes administrative center points from village-level boundaries; covers all 38 provinces |
 | 🌏 Others | Traditional Chinese translations | Custom glossary → GeoNames translations → GeoNames English | Prioritizes Taiwan-style translations; falls back when unavailable |
 
 > **Why keep Japanese in Japanese?**
@@ -89,7 +93,7 @@ The geographic data used in this project mainly comes from the following sources
     - **Purpose**: As the global geographic location database foundation
 2.  **OpenStreetMap** (via LocationIQ)
     - **License**: Open Database License (ODbL) 1.0
-    - **Purpose**: Via LocationIQ API for reverse geocoding of regions other than Taiwan, Japan, South Korea, and Thailand
+    - **Purpose**: Via LocationIQ API for reverse geocoding of regions other than Taiwan, Japan, South Korea, Thailand, and Indonesia
     - **Attribution**: Data © OpenStreetMap contributors, ODbL 1.0
 3.  **National Land Surveying and Mapping Center (NLSC)** of Taiwan
     - **Source**: [NLSC Open Data Platform](https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx)
@@ -111,7 +115,12 @@ The geographic data used in this project mainly comes from the following sources
     - **Dataset**: Thailand administrative level 0-3 boundaries (COD-AB)
     - **License**: Creative Commons Attribution for Intergovernmental Organisations (CC BY-IGO)
     - **Purpose**: As the primary data source for Thailand administrative boundaries and names
-7.  **Other References**
+7.  **BIG (Badan Informasi Geospasial) — Indonesia Geospatial Information Agency**
+    - **Source**: BIG official ArcGIS REST FeatureServer (desa village-level feature service)
+    - **Dataset**: Indonesia administrative desa (village-level) boundaries, version TASWIL20230928, covering all 38 provinces
+    - **License**: Indonesian official open geospatial data (this project uses it as derived input only and does not redistribute original vector polygons)
+    - **Purpose**: As the primary data source for Indonesia administrative boundaries and names
+8.  **Other References**
     - **Ministry of Economic Affairs International Trade Administration & Ministry of Foreign Affairs of Taiwan**: As reference sources for Chinese translations of some countries/regions
 
 > [!NOTE]
@@ -249,6 +258,15 @@ Please go to this project's [Releases page](https://github.com/RxChi1d/immich-ge
 
 > 📖 See [Thailand Administrative Processing (zh-TW)](docs/zh-tw/thailand-admin-processing.md) • [Thailand Administrative Processing (English)](docs/en/thailand-admin-processing.md)
 
+### 🇮🇩 Indonesia
+
+- **Official village-level data**: Uses BIG (Badan Informasi Geospasial) official ArcGIS REST desa (village-level) boundary data (version TASWIL20230928, 83,461 usable features across all 38 provinces)
+- **Traditional Chinese translations**: Admin1 (provinces) and Admin2 (regencies/cities) use the Wikidata translator with P131 administrative hierarchy validation at each level; falls back to BIG official Indonesian names when no reliable Chinese label exists; Admin3 (districts) and Admin4 (villages) retain Indonesian original names
+- **Three time zones**: Resolves Indonesia's three time zones (WIB `Asia/Jakarta`, WITA `Asia/Makassar`, WIT `Asia/Jayapura`) via a per-province lookup table covering all 38 provinces
+- **Nearest-distance optimization**: Uses an Indonesia Albers equal-area projection (`+lat_1=1 +lat_2=-8 +lon_0=118`) to compute geometric center points; each MultiPolygon part produces an independent candidate row, improving nearest-neighbor hit rates across the archipelago (Admin2 hit rate: 96.99%)
+
+> 📖 See [Indonesia Administrative Processing (zh-TW)](docs/zh-tw/indonesia-admin-processing.md)
+
 ## Update Geographic Data
 
 ### Integrated Deployment
@@ -354,6 +372,28 @@ Traditional Chinese translations; Admin3 currently keeps the COD-AB official Eng
 After extraction is complete, the data will be automatically integrated when executing the Rust
 `release` command.
 
+#### Indonesia Data Extraction
+
+Data source: BIG (Badan Informasi Geospasial) official ArcGIS REST FeatureServer
+
+```bash
+# 1. Download the desa village-level dataset from BIG official REST service
+#    using paginated requests (geometryPrecision=6, version TASWIL20230928)
+#    For download instructions and fixed parameters, see docs/research/indonesia-handler.md
+# 2. Execute extraction command
+cargo run --release -- extract --country ID \
+  --shapefile <path_to_BIG_desa_geojson> \
+  --output meta_data/id_geodata.csv
+```
+
+Indonesia extraction reads or creates `geoname_data/ID_wikidata_cache.json` for Admin1 (province)
+and Admin2 (regency/city) Traditional Chinese translations; Admin3 (district) and Admin4 (village)
+retain BIG official Indonesian names. For detailed download procedures and fixed parameters, see
+[Indonesia handler research document](docs/research/indonesia-handler.md).
+
+After extraction is complete, the data will be automatically integrated when executing the Rust
+`release` command.
+
 ### 3. Complete Data Processing Workflow
 
 After completing data extraction (or using existing data), you can execute the complete data processing workflow to generate releases.
@@ -373,7 +413,7 @@ cargo run --release -- release \
 > [!NOTE]
 > - You can view more options through `cargo run -- help`.
 > - The `--country-code` parameter can specify country codes to process, multiple codes separated by spaces.
-> - Taiwan, Japan, South Korea, and Thailand (TW/JP/KR/TH) are now generated by official-geodata handlers and must not be processed via LocationIQ; this flow is only for generating metadata for other countries.
+> - Taiwan, Japan, South Korea, Thailand, and Indonesia (TW/JP/KR/TH/ID) are now generated by official-geodata handlers and must not be processed via LocationIQ; this flow is only for generating metadata for other countries.
 
 > [!WARNING]
 > - Since LocationIQ API has request limits (can be checked in the backend after login), please pay attention to the number of place names in the countries to be processed to avoid exceeding limits.
