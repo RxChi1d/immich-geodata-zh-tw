@@ -1,7 +1,7 @@
 # Immich Reverse Geocoding - Taiwan Localization  
 
 > [!IMPORTANT]
-> - Upgrade notice: v3.0.0 adds Thailand geodata (Traditional Chinese localization). If you already deploy this project and your media library includes photos taken in Thailand, please run "[Re-extract photo metadata](#integrated-deployment-recommended-convenient-for-future-updates)" after upgrading to v3.0.0 to apply the latest Thailand dataset.
+> - Upgrade notice: v3.1.0 upgrades place names worldwide with official NAER Taiwan-style translations and adds Indonesia geodata (Traditional Chinese localization); v3.0.0 added Thailand geodata. If you already deploy this project, please run "[Re-extract photo metadata](#integrated-deployment-recommended-convenient-for-future-updates)" after upgrading to apply the latest datasets.
 
 [繁體中文](README.md) | [English](README.en.md)
 
@@ -48,6 +48,7 @@ We focus on the Taiwan user experience and apply the most suitable language stra
     - [🇰🇷 South Korea](#-south-korea)
     - [🇹🇭 Thailand](#-thailand)
     - [🇮🇩 Indonesia](#-indonesia)
+    - [🌏 Other Regions](#-other-regions)
   - [Update Geographic Data](#update-geographic-data)
     - [Integrated Deployment](#integrated-deployment)
     - [Manual Deployment](#manual-deployment-1)
@@ -253,6 +254,8 @@ Please go to this project's [Releases page](https://github.com/RxChi1d/immich-ge
 - **Special administrative divisions**: Jeju Province distinguished from Jeju City, Sejong City uses industry-standard translations
 - **Administrative hierarchy handling**: Auto-splits "City + District/County" structure, supports special administrative structures
 
+> 📖 See [South Korea Administrative Processing (zh-TW)](docs/zh-tw/south-korea-admin-processing.md) • [South Korea Administrative Processing (English)](docs/en/south-korea-admin-processing.md)
+
 ### 🇹🇭 Thailand
 
 - **Official boundary data**: Uses COD-AB `tha_admin3` sub-district / tambon boundary data
@@ -269,7 +272,15 @@ Please go to this project's [Releases page](https://github.com/RxChi1d/immich-ge
 - **Three time zones**: Resolves Indonesia's three time zones (WIB `Asia/Jakarta`, WITA `Asia/Makassar`, WIT `Asia/Jayapura`) via a per-province lookup table covering all 38 provinces
 - **Nearest-distance optimization**: Uses an Indonesia Albers equal-area projection (`+lat_1=1 +lat_2=-8 +lon_0=118`) to compute geometric center points; each MultiPolygon part produces an independent candidate row, improving nearest-neighbor hit rates across the archipelago (Admin2 hit rate: 96.99%)
 
-> 📖 See [Indonesia Administrative Processing (zh-TW)](docs/zh-tw/indonesia-admin-processing.md)
+> 📖 See [Indonesia Administrative Processing (zh-TW)](docs/zh-tw/indonesia-admin-processing.md) • [Indonesia Administrative Processing (English)](docs/en/indonesia-admin-processing.md)
+
+### 🌏 Other Regions
+
+- **Official NAER translations**: Integrates the National Academy for Educational Research (NAER) *Translations of Foreign Place Names* (64,000+ official Taiwan-style translations), matching by normalized names with coordinate verification to fill gaps and upgrade place names worldwide
+- **Confidence-tier protection**: Only high-confidence matches (matching country code + qualified distance + unambiguous) may overwrite existing translations; matches with weakening signals (natural-feature markers, near-distance ambiguity, etc.) only fill gaps; conservative rejection when disambiguation fails, eliminating same-name mismatches
+- **GeoNames fallback**: Uses GeoNames Chinese data (converted to Taiwan Traditional Chinese via OpenCC) when no official translation exists, falling back to English otherwise
+
+> 📖 See [Global Translation Processing (zh-TW)](docs/zh-tw/global-translation-processing.md) • [Global Translation Processing (English)](docs/en/global-translation-processing.md)
 
 ## Update Geographic Data
 
