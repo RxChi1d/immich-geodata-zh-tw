@@ -225,9 +225,46 @@ empty).
 
 ## Reading the Quality Report
 
-The translate stage emits a NAER statistics log (one of the acceptance
-gates), including: gap fills, overwrites, medium-confidence downgrades,
-rejections (categorized by reason), and a distance-distribution summary.
+The translate stage emits a single-line NAER statistics log (one of the
+acceptance gates), rendered as space-separated `key=value` pairs for easy
+grep/awk parsing. The full set of fields:
+
+**Adoption counts**
+
+- `city_fill`: cities with no existing Chinese name, filled by NAER.
+- `city_override`: cities with an existing name, overwritten by a
+  high-confidence NAER match.
+- `city_demoted_kept_existing`: cities with an existing name where the NAER
+  match was medium-confidence, so the existing name was kept.
+- `admin1_fill`: admin1 units with no existing Chinese name, filled by NAER.
+
+**Rejection counts (categorized by reason)**
+
+- `city_rejected_distance`: candidates existed but all exceeded the 15 km
+  tolerance.
+- `city_rejected_country`: candidates existed but none matched the country
+  code, and no empty-country candidate was available to demote to.
+- `admin1_rejected_no_centroid`: candidates existed but the admin1 has no
+  centroid (no member cities) to validate against.
+- `admin1_rejected_distance`: candidates existed but centroid validation
+  exceeded the 300 km threshold for all of them.
+- `admin1_rejected_ambiguous`: distance passed, but a near-distance
+  candidate carried a distinct translation, so the centroid could not
+  disambiguate.
+
+> Note: handler-country skips and "name with no candidate at all" are
+> normal and are not counted as rejections.
+
+**Distance-distribution summary (disambiguation distance of adopted
+matches, in km)**
+
+- city: `city_dist_0_1km` ([0,1)), `city_dist_1_5km` ([1,5)),
+  `city_dist_5_15km` ([5,15]).
+- admin1: `admin1_dist_0_1km` ([0,1)), `admin1_dist_1_5km` ([1,5)),
+  `admin1_dist_5km_plus` (>=5; admin1 centroids are approximations with a
+  wider tolerance, so anything beyond 5 km falls into this bucket to share
+  the same summary structure).
+
 During acceptance, compare against the expected order of magnitude from
 measurements:
 

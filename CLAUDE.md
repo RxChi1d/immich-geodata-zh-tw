@@ -189,6 +189,7 @@ src/pipeline/
 ├── prepare.rs              # GeoNames、Natural Earth 等來源下載與前處理
 ├── naer_prepare.rs         # NAER 原始 CSV 離線清理（座標解析、名稱正規化、國碼對應）
 ├── naer_lookup.rs          # NAER runtime 載入、座標消歧與信心分級匹配
+├── naer_stats.rs           # NAER translate 階段統計（採用計數、拒絕分類、距離分布桶）
 ├── admin1_load.rs          # admin1 replacement
 ├── cities500_load.rs       # cities500 merge / handler replacement
 ├── locationiq.rs           # LocationIQ metadata 產生與續跑

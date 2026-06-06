@@ -58,7 +58,7 @@ fn naer_layer_fills_overrides_and_demotes() {
     std::fs::create_dir_all(&metadata_dir).unwrap();
     let output_dir = dir.path().join("out");
 
-    run_production(&ProductionTranslateOptions {
+    let stats = run_production(&ProductionTranslateOptions {
         metadata_dir,
         data_dir: dir.path().to_path_buf(),
         cities_file,
@@ -84,6 +84,134 @@ fn naer_layer_fills_overrides_and_demotes() {
         std::fs::read_to_string(output_dir.join("admin1CodesASCII_translated.txt")).unwrap();
     // 正常：admin1 補洞
     assert!(admin1_out.contains("阿拉巴馬"), "{admin1_out}");
+
+    // 品質統計：採用計數逐項對應三個案例 + admin1 補洞
+    assert_eq!(stats.city_fill, 1, "{}", stats.log_line());
+    assert_eq!(stats.city_override, 1, "{}", stats.log_line());
+    assert_eq!(stats.city_demoted_kept_existing, 1, "{}", stats.log_line());
+    assert_eq!(stats.admin1_fill, 1, "{}", stats.log_line());
+    // 邊界：距離分布只計「被採用」匹配（補洞+覆寫=2），demote 不記錄
+    let city_total = stats.city_distance.near + stats.city_distance.mid + stats.city_distance.far;
+    assert_eq!(city_total, 2, "{}", stats.log_line());
+}
+
+// 共用：寫檔輔助與最小 cities500 列建構。
+fn write_file(dir: &std::path::Path, name: &str, content: &str) -> std::path::PathBuf {
+    let path = dir.join(name);
+    std::fs::File::create(&path)
+        .unwrap()
+        .write_all(content.as_bytes())
+        .unwrap();
+    path
+}
+
+fn city_row(id: &str, name: &str, alts: &str, lat: &str, lon: &str, cc: &str, a1: &str) -> String {
+    let mut row = vec![String::new(); 19];
+    row[0] = id.into();
+    row[1] = name.into();
+    row[2] = name.into();
+    row[3] = alts.into();
+    row[4] = lat.into();
+    row[5] = lon.into();
+    row[8] = cc.into();
+    row[10] = a1.into();
+    row.join("\t")
+}
+
+#[test]
+fn naer_applied_name_bypasses_inversion_replacement() {
+    // 驗證：naer_applied 的官方審譯名原樣保留，不經 '裏'→'里' 後處理。
+    let dir = tempfile::tempdir().unwrap();
+    // 城市無既有中文 → NAER 高信心補洞；name_zh 含「裏」字
+    let cities = city_row("10", "Innerton", "", "40.0", "-100.0", "US", "CA");
+    let cities_file = write_file(dir.path(), "cities500_optimized.txt", &cities);
+    let admin1_file = write_file(
+        dir.path(),
+        "admin1CodesASCII_optimized.txt",
+        "US.CA\tCalifornia\tCalifornia\t5332921\n",
+    );
+    let alternate_file = write_file(
+        dir.path(),
+        "alternate_chinese_name.csv",
+        "geoname_id,name\n",
+    );
+    let naer_file = write_file(
+        dir.path(),
+        "naer_place_names.csv",
+        "name_norm,name_zh,country_code,latitude,longitude,feature_hint\n\
+         innerton,裏鎮,US,40.0,-100.0,false\n",
+    );
+    let metadata_dir = dir.path().join("meta_data");
+    std::fs::create_dir_all(&metadata_dir).unwrap();
+    let output_dir = dir.path().join("out");
+
+    run_production(&ProductionTranslateOptions {
+        metadata_dir,
+        data_dir: dir.path().to_path_buf(),
+        cities_file,
+        admin1_file,
+        alternate_name_file: alternate_file,
+        naer_file,
+        output_dir: output_dir.clone(),
+        profile: false,
+    })
+    .unwrap();
+
+    let cities_out = std::fs::read_to_string(output_dir.join("cities500_translated.txt")).unwrap();
+    // 邊界：NAER 譯名保留「裏」，未被替換成「里」
+    assert!(cities_out.contains("裏鎮"), "{cities_out}");
+    assert!(!cities_out.contains("里鎮"), "{cities_out}");
+}
+
+#[test]
+fn handler_country_skips_naer_end_to_end() {
+    // 驗證：handler 國家即使名稱與座標皆命中 NAER，也不套用 NAER 譯名。
+    // Reason: 用 JP 而非 TW——TW 在 translate_cities_rows 有更早的特殊分支
+    // 不會進入 lookup_city，唯有 JP/KR/TH 走一般路徑才能鎖住 lookup 內部的
+    // handler 跳過機制。
+    let dir = tempfile::tempdir().unwrap();
+    // JP 城市，name 在 NAER 中有對應且座標一致
+    let cities = city_row("20", "Handlertown", "", "35.7", "139.7", "JP", "13");
+    let cities_file = write_file(dir.path(), "cities500_optimized.txt", &cities);
+    let admin1_file = write_file(
+        dir.path(),
+        "admin1CodesASCII_optimized.txt",
+        "JP.13\tTokyo\tTokyo\t1850144\n",
+    );
+    let alternate_file = write_file(
+        dir.path(),
+        "alternate_chinese_name.csv",
+        "geoname_id,name\n",
+    );
+    let naer_file = write_file(
+        dir.path(),
+        "naer_place_names.csv",
+        "name_norm,name_zh,country_code,latitude,longitude,feature_hint\n\
+         handlertown,韓德勒鎮,JP,35.7,139.7,false\n",
+    );
+    let metadata_dir = dir.path().join("meta_data");
+    std::fs::create_dir_all(&metadata_dir).unwrap();
+    let output_dir = dir.path().join("out");
+
+    let stats = run_production(&ProductionTranslateOptions {
+        metadata_dir,
+        data_dir: dir.path().to_path_buf(),
+        cities_file,
+        admin1_file,
+        alternate_name_file: alternate_file,
+        naer_file,
+        output_dir: output_dir.clone(),
+        profile: false,
+    })
+    .unwrap();
+
+    let cities_out = std::fs::read_to_string(output_dir.join("cities500_translated.txt")).unwrap();
+    // JP 為 handler 國家 → lookup_city 直接跳過，NAER 譯名不套用
+    assert!(!cities_out.contains("韓德勒鎮"), "{cities_out}");
+    // 無既有譯名 → 保留原始 name
+    assert!(cities_out.contains("Handlertown"), "{cities_out}");
+    // handler 跳過屬常態，不計入任何採用或拒絕統計
+    assert_eq!(stats, Default::default(), "{}", stats.log_line());
 }
 
 #[test]

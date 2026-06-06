@@ -293,6 +293,7 @@ fn run_locationiq_production(options: &ProductionOptions) -> Result<(), String> 
 }
 
 fn run_translate_production(options: &ProductionOptions) -> Result<(), String> {
+    // Reason: 統計已由 run_production 內部 log，CLI 不需回傳值。
     translate::run_production(&translate::ProductionTranslateOptions {
         metadata_dir: options.metadata_folder.clone(),
         data_dir: options.data_folder.clone(),
@@ -306,6 +307,7 @@ fn run_translate_production(options: &ProductionOptions) -> Result<(), String> {
         output_dir: options.output_folder.clone(),
         profile: options.profile,
     })
+    .map(|_| ())
 }
 
 fn run_naer_prepare_command(args: &[String]) -> Result<(), String> {

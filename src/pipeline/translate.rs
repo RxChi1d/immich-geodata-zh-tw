@@ -10,7 +10,8 @@ use polars::prelude::*;
 
 use crate::cli::RunOptions;
 use crate::pipeline::fixtures::{Fixture, load_fixtures};
-use crate::pipeline::naer_lookup::{NaerConfidence, NaerLookup, NaerStats, build_admin1_centroids};
+use crate::pipeline::naer_lookup::{NaerConfidence, NaerLookup, build_admin1_centroids};
+use crate::pipeline::naer_stats::NaerStats;
 use crate::pipeline::polars_table::{
     read_admin1_rows, read_alternate_name_rows_with_header, read_cities_rows, read_string_rows,
     write_alternate_name_rows_with_header,
@@ -109,7 +110,8 @@ fn run_fixture(fixture: &Fixture, options: &RunOptions) -> Result<(), String> {
     Ok(())
 }
 
-pub fn run_production(options: &ProductionTranslateOptions) -> Result<(), String> {
+/// 執行 production translate 並回傳 NAER 統計，供品質 gate 與測試斷言。
+pub fn run_production(options: &ProductionTranslateOptions) -> Result<NaerStats, String> {
     let mut profile = TranslateProfile::new(options.profile);
     let metadata = profile.time("load_metadata", || {
         load_metadata_dataframe(&options.metadata_dir)
@@ -185,7 +187,7 @@ pub fn run_production(options: &ProductionTranslateOptions) -> Result<(), String
         admin1_rows.len()
     );
     profile.print();
-    Ok(())
+    Ok(naer_stats)
 }
 
 struct TranslateProfile {
@@ -869,6 +871,7 @@ fn translate_cities_rows(
                     latitude,
                     longitude,
                     city.country_code(),
+                    naer_stats,
                 ),
                 _ => None,
             };
@@ -879,12 +882,16 @@ fn translate_cities_rows(
                     } else {
                         naer_stats.city_fill += 1;
                     }
+                    // Reason: 距離分布僅統計「被採用」的匹配；demote 保留
+                    // 既有譯名時不記錄，避免污染品質報告的採用距離語意。
+                    naer_stats.record_city_distance(matched.distance_km);
                     naer_applied = true;
                     Some(matched.name_zh)
                 }
                 Some(matched) => {
                     if existing.is_none() {
                         naer_stats.city_fill += 1;
+                        naer_stats.record_city_distance(matched.distance_km);
                         naer_applied = true;
                         Some(matched.name_zh)
                     } else {
@@ -939,6 +946,7 @@ fn translate_admin1_rows(
             admin1.asciiname(),
             admin1.code(),
             admin1_centroids.get(admin1.code()).copied(),
+            naer_stats,
         ) {
             // Reason: admin1 第一版僅補洞——只在既有來源無中文名時使用
             // NAER，覆寫待品質報告量化錯配率後再評估。

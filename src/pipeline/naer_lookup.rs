@@ -52,6 +52,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::pipeline::extract;
+use crate::pipeline::naer_stats::NaerStats;
 use crate::pipeline::table::read_delimited;
 
 /// 城市匹配距離容差（公里）。
@@ -86,24 +87,8 @@ pub enum NaerConfidence {
 pub struct NaerMatch {
     pub name_zh: String,
     pub confidence: NaerConfidence,
-}
-
-/// translate 階段的 NAER 統計，輸出於品質報告 log。
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct NaerStats {
-    pub city_fill: usize,
-    pub city_override: usize,
-    pub city_demoted_kept_existing: usize,
-    pub admin1_fill: usize,
-}
-
-impl NaerStats {
-    pub fn log_line(&self) -> String {
-        format!(
-            "stage=translate naer city_fill={} city_override={} city_demoted_kept_existing={} admin1_fill={}",
-            self.city_fill, self.city_override, self.city_demoted_kept_existing, self.admin1_fill
-        )
-    }
+    /// 被採用候選的座標消歧距離（公里），供品質報告距離分布統計。
+    pub distance_km: f64,
 }
 
 pub struct NaerLookup {
@@ -246,11 +231,15 @@ impl NaerLookup {
         latitude: f64,
         longitude: f64,
         country_code: &str,
+        stats: &mut NaerStats,
     ) -> Option<NaerMatch> {
         if self.handler_countries.contains(country_code) {
             return None;
         }
         let candidates = self.candidates_for(name, ascii_name);
+        // Reason: 「name 完全無候選」為常態（多數城市不在 NAER 詞典中），
+        // 不計入拒絕；只有候選存在卻被消歧規則排除才是品質觀測點。
+        let has_candidates = !candidates.is_empty();
         let exact: Vec<&NaerEntry> = candidates
             .iter()
             .copied()
@@ -266,6 +255,13 @@ impl NaerLookup {
         } else {
             (exact, false)
         };
+        // Reason: 有候選但國碼全不符、且無空國碼候選可降級 → 國碼拒絕。
+        if pool.is_empty() {
+            if has_candidates {
+                stats.city_rejected_country += 1;
+            }
+            return None;
+        }
         let mut scored: Vec<(f64, &NaerEntry)> = pool
             .into_iter()
             .map(|entry| {
@@ -277,6 +273,8 @@ impl NaerLookup {
             .filter(|(distance, _)| *distance <= NAER_CITY_DISTANCE_KM)
             .collect();
         if scored.is_empty() {
+            // Reason: pool 非空但全部超出距離容差 → 距離拒絕。
+            stats.city_rejected_distance += 1;
             return None;
         }
         scored.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -289,9 +287,13 @@ impl NaerLookup {
         } else {
             NaerConfidence::High
         };
+        // Reason: 距離分布僅統計「被採用」的匹配，但採用與否由 caller 依
+        // 既有譯名是否存在決定（中信心遇既有譯名會 demote 不採用），故
+        // 距離經 distance_km 欄位帶回、由 caller 在實際套用時記錄。
         Some(NaerMatch {
             name_zh: best.name_zh.clone(),
             confidence,
+            distance_km: best_distance,
         })
     }
 
@@ -302,6 +304,7 @@ impl NaerLookup {
         ascii_name: &str,
         admin1_code: &str,
         centroid: Option<(f64, f64)>,
+        stats: &mut NaerStats,
     ) -> Option<String> {
         let mut parts = admin1_code.splitn(2, '.');
         let country_code = parts.next().unwrap_or_default();
@@ -312,12 +315,23 @@ impl NaerLookup {
         if self.handler_countries.contains(country_code) {
             return None;
         }
-        // 無質心（無轄下城市）→ 保守放棄。
-        let (centroid_lat, centroid_lon) = centroid?;
-        let mut scored: Vec<(f64, &NaerEntry)> = self
+        // admin1 不接受空國碼候選；國碼一致者方為有效候選。
+        let pool: Vec<&NaerEntry> = self
             .candidates_for(name, ascii_name)
             .into_iter()
-            .filter(|entry| entry.country_code == country_code) // admin1 不接受空國碼
+            .filter(|entry| entry.country_code == country_code)
+            .collect();
+        // Reason: 國碼一致候選不存在屬常態（多數 admin1 不在詞典中），不計拒絕。
+        if pool.is_empty() {
+            return None;
+        }
+        // 無質心（無轄下城市）→ 保守放棄；有候選卻無法驗證計入拒絕。
+        let Some((centroid_lat, centroid_lon)) = centroid else {
+            stats.admin1_rejected_no_centroid += 1;
+            return None;
+        };
+        let mut scored: Vec<(f64, &NaerEntry)> = pool
+            .into_iter()
             .map(|entry| {
                 (
                     distance_km(centroid_lat, centroid_lon, entry.latitude, entry.longitude),
@@ -327,6 +341,8 @@ impl NaerLookup {
             .filter(|(distance, _)| *distance <= NAER_ADMIN1_DISTANCE_KM)
             .collect();
         if scored.is_empty() {
+            // Reason: 候選存在但質心驗證全部超距 → 距離拒絕。
+            stats.admin1_rejected_distance += 1;
             return None;
         }
         scored.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -338,8 +354,12 @@ impl NaerLookup {
             entry.name_zh != best.name_zh && (distance - best_distance) < NAER_AMBIGUITY_MARGIN_KM
         });
         if ambiguous {
+            stats.admin1_rejected_ambiguous += 1;
             return None;
         }
+        // Reason: admin1 質心為近似值，距離量級遠大於 city；仍記錄分布以供
+        // 校準 NAER_ADMIN1_DISTANCE_KM 門檻（初值待品質報告確立）。
+        stats.record_admin1_distance(best_distance);
         Some(best.name_zh.clone())
     }
 }

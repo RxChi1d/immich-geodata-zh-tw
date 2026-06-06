@@ -174,9 +174,35 @@ cargo run --release -- naer-prepare \
 
 ## 品質報告解讀
 
-translate 階段會輸出 NAER 統計 log（驗收 gate 之一），包含：補洞數、
-覆寫數、中信心降級數、拒絕數（依原因分類）、距離分布摘要。驗收時與
-實測預期量級對照：
+translate 階段會輸出單行 NAER 統計 log（驗收 gate 之一），以 `key=value`
+形式呈現、空白分隔，方便 grep/awk 解析。完整欄位如下：
+
+**採用計數**
+
+- `city_fill`：city 既無中文名、NAER 補洞數。
+- `city_override`：city 既有中文名、NAER 高信心覆寫數。
+- `city_demoted_kept_existing`：city 既有中文名、NAER 為中信心 → 保留既有數。
+- `admin1_fill`：admin1 既無中文名、NAER 補洞數。
+
+**拒絕計數（依原因分類）**
+
+- `city_rejected_distance`：有候選但座標全部超出 15 km 容差。
+- `city_rejected_country`：有候選但國碼全不符、且無空國碼候選可降級。
+- `admin1_rejected_no_centroid`：有候選但該 admin1 無質心（無轄下城市）可驗證。
+- `admin1_rejected_distance`：有候選但質心驗證全部超過 300 km 門檻。
+- `admin1_rejected_ambiguous`：距離合格但近距存在不同譯名、質心無法消歧。
+
+> 註：handler 國家跳過與「name 完全無候選」為常態，不計入拒絕。
+
+**距離分布摘要（被採用匹配的消歧距離，單位 km）**
+
+- city：`city_dist_0_1km`（[0,1)）、`city_dist_1_5km`（[1,5)）、
+  `city_dist_5_15km`（[5,15]）。
+- admin1：`admin1_dist_0_1km`（[0,1)）、`admin1_dist_1_5km`（[1,5)）、
+  `admin1_dist_5km_plus`（≥5；admin1 質心為近似值、容差較寬，超過 5 km
+  一律歸入此桶以共用同一摘要結構）。
+
+驗收時與實測預期量級對照：
 
 - cities 補洞 ≈ 16,380
 - cities 覆寫上限 ≈ 9,415（信心分級降級後實際值會更低，以首次品質報告
