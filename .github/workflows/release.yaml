@@ -91,7 +91,7 @@ jobs:
           # handler 國家的納入依賴 meta_data/*_geodata.csv 存在；
           # 缺檔會讓該國「靜默」消失於 release，因此先硬性驗證。
           missing=0
-          for country in tw jp kr th; do
+          for country in tw jp kr th id; do
             if [[ ! -s "meta_data/${country}_geodata.csv" ]]; then
               echo "::error::meta_data/${country}_geodata.csv 缺失或為空，該國將從 release 消失"
               missing=1
