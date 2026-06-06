@@ -27,9 +27,18 @@
 
 ## [未發佈版本]
 
+---
+
+## [3.1.0] - 2026-06-06
+
+本版本整合國教院官方譯名全面提升全球地名的翻譯品質，並新增印尼繁體中文在地化。
+
+**升級提醒**：
+- 本版本更新全球各地區與印尼的地名資料。若您已部署本專案，請在更新後於 Immich 執行「重新擷取照片中繼資料」，以套用最新資料。
+
 ### Added
+- **國教院官方譯名整合**：全球地名翻譯新增國家教育研究院《外國地名譯名》資料來源，以信心分級補洞並升級為官方臺灣譯名，提升全球非特化地區的中文覆蓋率與譯名品質。
 - **印尼繁體中文在地化**：新增印尼行政區支援，採用 BIG（印尼地理空間資訊局）官方村界圖資，省與縣市名稱提供繁體中文翻譯，並以村級資料提升定位精準度。
-- **國教院官方譯名整合**：全球地名翻譯新增國家教育研究院《外國地名譯名》資料來源，以信心分級補洞並升級為官方臺灣譯名，提升非 handler 地區的中文覆蓋率與譯名品質
 
 ---
 
@@ -293,7 +302,8 @@
 
 特定變更的詳細資訊請參閱 [提交歷史](https://github.com/RxChi1d/immich-geodata-zh-tw/commits/main) 或 [發佈頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases)。
 
-[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v3.0.0...HEAD
+[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.4...v3.0.0
 [2.2.4]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.3...v2.2.4
 [2.2.3]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.2...v2.2.3
