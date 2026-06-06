@@ -1,0 +1,14 @@
+{
+  "base_geoname_id": 95000000,
+  "countries": [],
+  "extra_files": [],
+  "min_population": 0,
+  "modification_date": "2026-01-01",
+  "name": "translate_naer",
+  "stages": [
+    "admin1_load",
+    "cities500_load",
+    "translate"
+  ],
+  "comment": "非 handler 國家 NAER 翻譯層覆蓋：補洞、覆寫、降級三路徑"
+}

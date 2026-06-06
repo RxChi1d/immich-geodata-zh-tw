@@ -15,6 +15,7 @@ proj = { version = "0.31.0", features = ["pkg_config"] }
 regex = "1.12.2"
 reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "rustls-tls"] }
 serde_json = "1.0"
+unicode-normalization = "0.1.25"
 shapefile = "0.8.0"
 tar = "0.4"
 zip = { version = "2.4", default-features = false, features = ["deflate"] }
@@ -26,3 +27,6 @@ path = "src/lib.rs"
 [[bin]]
 name = "immich-geodata"
 path = "src/main.rs"
+
+[dev-dependencies]
+tempfile = "3"

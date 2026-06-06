@@ -1,0 +1,5 @@
+name_norm,name_zh,country_code,latitude,longitude,feature_hint
+alabama,阿拉巴馬,US,31.0,-86.0,false
+demoteton,德莫頓灣,US,32.0,-85.0,true
+fillville,菲爾維爾,US,30.0,-87.0,false
+overridetown,歐弗萊鎮,US,31.0,-86.0,false

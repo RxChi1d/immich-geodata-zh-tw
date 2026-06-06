@@ -187,10 +187,13 @@ src/pipeline/
 ├── extract.rs              # TW/JP/KR/TH/ID 圖資讀取、座標轉換與 normalized CSV 輸出
 ├── extract/handlers.rs     # 各國 extract handler 與行政區欄位規則
 ├── prepare.rs              # GeoNames、Natural Earth 等來源下載與前處理
+├── naer_prepare.rs         # NAER 原始 CSV 離線清理（座標解析、名稱正規化、國碼對應）
+├── naer_lookup.rs          # NAER runtime 載入、座標消歧與信心分級匹配
+├── naer_stats.rs           # NAER translate 階段統計（採用計數、拒絕分類、距離分布桶）
 ├── admin1_load.rs          # admin1 replacement
 ├── cities500_load.rs       # cities500 merge / handler replacement
 ├── locationiq.rs           # LocationIQ metadata 產生與續跑
-├── translate.rs            # 繁中翻譯、OpenCC 與 alternate names
+├── translate.rs            # 繁中翻譯、NAER 官方譯名（信心分級）、OpenCC 與 alternate names
 └── pack.rs                 # release tree、zip 與 tar.gz 打包
 ```
 

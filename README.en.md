@@ -18,7 +18,7 @@ We focus on the Taiwan user experience and apply the most suitable language stra
 - **South Korea**: Uses admdongkor project data and provides Traditional Chinese translations
 - **Thailand**: Uses official COD-AB boundary data and provides Traditional Chinese translations for Admin1/Admin2, falling back to official English and Thai names
 - **Indonesia**: Uses official village-level (desa) boundary data from BIG (Badan Informasi Geospasial) and provides Traditional Chinese translations for Admin1/Admin2, falling back to official Indonesian names when no Chinese label exists
-- **Other regions**: Provides Traditional Chinese translations, falling back to English when no common translation exists
+- **Other regions**: Prioritizes the official Taiwan translations from the National Academy for Educational Research (NAER) *Translations of Foreign Place Names* to fill gaps and upgrade names, then GeoNames translations, falling back to English when no common translation exists
 
 > [!TIP]
 > Compatibility Notice
@@ -79,7 +79,7 @@ The project applies region-specific language handling to reflect the expectation
 | 🇰🇷 South Korea | Traditional Chinese translations | admdongkor (Official administrative boundaries) | Provides Traditional Chinese translations |
 | 🇹🇭 Thailand | Traditional Chinese translations (official English / Thai fallback) | COD-AB Thailand | Computes administrative center points from official boundaries |
 | 🇮🇩 Indonesia | Traditional Chinese translations (official Indonesian fallback) | BIG (Badan Informasi Geospasial) | Computes administrative center points from village-level boundaries; covers all 38 provinces |
-| 🌏 Others | Traditional Chinese translations | Custom glossary → GeoNames translations → GeoNames English | Prioritizes Taiwan-style translations; falls back when unavailable |
+| 🌏 Others | Traditional Chinese translations | NAER official translations → GeoNames translations → GeoNames English | Prioritizes NAER official Taiwan-style translations; falls back to GeoNames when unavailable |
 
 > **Why keep Japanese in Japanese?**
 > Taiwanese users are familiar with Japanese kanji and kana in combination. Names such as 「横浜市」 or 「うるま市」 remain understandable without romanization or Chinese conversion.
@@ -120,7 +120,11 @@ The geographic data used in this project mainly comes from the following sources
     - **Dataset**: Indonesia administrative desa (village-level) boundaries, version TASWIL20230928, covering all 38 provinces
     - **License**: Indonesian official open geospatial data (this project uses it as derived input only and does not redistribute original vector polygons)
     - **Purpose**: As the primary data source for Indonesia administrative boundaries and names
-8.  **Other References**
+8.  **NAER *Translations of Foreign Place Names***
+    - **Source**: [Open Government Data Platform dataset 15211](https://data.gov.tw/dataset/15211)
+    - **License**: Government Open Data License, Version 1.0
+    - **Purpose**: Fills gaps and overwrites with official Taiwan translations for global non-handler regions
+9.  **Other References**
     - **Ministry of Economic Affairs International Trade Administration & Ministry of Foreign Affairs of Taiwan**: As reference sources for Chinese translations of some countries/regions
 
 > [!NOTE]
