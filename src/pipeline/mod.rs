@@ -5,6 +5,8 @@ pub mod fixtures;
 pub mod geodata;
 pub mod indonesia_timezone;
 pub mod locationiq;
+pub mod naer_lookup;
+pub mod naer_prepare;
 pub mod pack;
 pub mod polars_cities;
 pub mod polars_table;
