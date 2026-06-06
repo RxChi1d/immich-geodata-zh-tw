@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use super::indonesia::indonesia_feature_rows;
+use super::indonesia_wikidata::build_indonesia_wikidata_cache;
 use super::korea_wikidata::build_korea_wikidata_cache;
 use super::thailand_wikidata::build_thailand_wikidata_cache;
 use super::types::{
@@ -48,6 +50,21 @@ impl Country {
                     ..ExtractContext::default()
                 })
             }
+            Self::Indonesia => {
+                let stub = wikidata_stub
+                    .filter(|path| path.exists())
+                    .map(Path::to_path_buf)
+                    .or_else(|| wikidata_stub_source(source_path, "ID"));
+                let indonesia_translations = if let Some(stub) = stub {
+                    read_wikidata_stub(&stub, "ID")?
+                } else {
+                    build_indonesia_wikidata_cache(features, &wikidata_cache_path("ID"))?
+                };
+                Ok(ExtractContext {
+                    indonesia_translations,
+                    ..ExtractContext::default()
+                })
+            }
         }
     }
 
@@ -67,6 +84,7 @@ impl Country {
                 .iter()
                 .map(|feature| thailand_feature_row(feature, &context.thailand_translations))
                 .collect(),
+            Self::Indonesia => indonesia_feature_rows(features, &context.indonesia_translations),
         }
     }
 }

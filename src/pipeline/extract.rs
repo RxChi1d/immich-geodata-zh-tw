@@ -10,6 +10,9 @@ use std::time::Instant;
 
 mod geometry;
 mod handlers;
+mod indonesia;
+mod indonesia_normalize;
+mod indonesia_wikidata;
 mod korea_wikidata;
 mod sources;
 mod thailand_wikidata;
@@ -24,7 +27,7 @@ pub fn handler_country_codes() -> Vec<&'static str> {
         .collect()
 }
 
-use geometry::apply_country_centroids;
+use geometry::{apply_country_centroids, split_multipolygon_parts};
 use sources::{read_geojson_features_from_content, read_shapefile};
 use types::{Country, ExtractRow};
 
@@ -364,6 +367,9 @@ fn read_geospatial_rows_from_path_profiled(
         country.load_context(source_path, wikidata_stub, &features)
     })?;
     let source_crs = features.first().and_then(|feature| feature.crs.clone());
+    if country.splits_multipolygon_parts() {
+        features = profile.time("split_parts", || Ok(split_multipolygon_parts(features)))?;
+    }
     profile.time("centroid", || {
         apply_country_centroids(country, &mut features, source_crs.as_deref())
     })?;
@@ -392,6 +398,9 @@ fn read_shapefile_rows_from_path_profiled(
         country.load_context(source_path, wikidata_stub, &features)
     })?;
     let source_crs = features.first().and_then(|feature| feature.crs.clone());
+    if country.splits_multipolygon_parts() {
+        features = profile.time("split_parts", || Ok(split_multipolygon_parts(features)))?;
+    }
     profile.time("centroid", || {
         apply_country_centroids(country, &mut features, source_crs.as_deref())
     })?;

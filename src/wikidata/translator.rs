@@ -8,8 +8,8 @@ use serde_json::Value;
 use super::cache::TranslationCacheStore;
 use super::client::{WikidataApi, WikidataClientOptions, WikidataHttpClient};
 use super::types::{
-    METADATA_OFFICIAL_EN, METADATA_OFFICIAL_TH, TranslationDataset, TranslationItem,
-    TranslationResult,
+    METADATA_OFFICIAL_EN, METADATA_OFFICIAL_ORIGINAL, METADATA_OFFICIAL_TH, TranslationDataset,
+    TranslationItem, TranslationResult,
 };
 
 const SEARCH_LIMIT: usize = 7;
@@ -334,10 +334,14 @@ impl<C: WikidataApi> WikidataTranslator<C> {
             return self.source_fallback_result(item);
         };
         if let Some(label) = labels.get(&self.options.target_lang) {
+            self.warn_if_simplified(label, &self.options.target_lang, item);
             return wikidata_result(label, "wikidata", &self.options.target_lang);
         }
         for lang in &self.options.fallback_langs {
             if let Some(label) = labels.get(lang) {
+                if lang == "zh-hant" {
+                    self.warn_if_simplified(label, lang, item);
+                }
                 if lang == "zh" {
                     if let Some(converter) = &self.opencc {
                         return wikidata_result(&converter.convert(label), "opencc", "zh→zh-tw");
@@ -358,8 +362,32 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         self.source_fallback_result(item)
     }
 
+    /// 非破壞性偵測：若 `zh-tw` / `zh-hant` 來源 label 含簡體字則僅告警，
+    /// 不自動改寫。
+    ///
+    /// Reason: 共用層只應信任宣稱為繁體的來源 label，不可在此自動套用簡轉繁
+    /// （cn2t/s2t 對已正確的繁體專名有過度轉換風險，如 `里→裏`、`占→佔`，
+    /// 會波及 KR/TH 等既有輸出）。但 Wikidata 的 zh-hant label 實務上偶有
+    /// 簡體污染（如印尼 Papua 的「巴布亚省」），此處以「明確簡體字」白名單
+    /// 偵測（避免 cn2t 對異體字的誤報），作為累積各國案例的偵測點，供各國
+    /// handler 自行決定是否在 handler 層做後處理。
+    fn warn_if_simplified(&self, label: &str, lang: &str, item: &TranslationItem) {
+        if !label.chars().any(is_simplified_char) {
+            return;
+        }
+        eprintln!(
+            "stage=wikidata phase=label_check level={} lang={lang} \
+             warn=simplified_in_traditional_label original_name={} label={label}",
+            item.level.as_str(),
+            item.original_name
+        );
+    }
+
     fn source_fallback_result(&self, item: &TranslationItem) -> TranslationResult {
+        // Reason: 官方原文（language-agnostic）優先於英文/泰文官方名稱與
+        // item.original_name（後者可能是帶消歧前綴的搜尋字串）。
         for (key, used_lang) in [
+            (METADATA_OFFICIAL_ORIGINAL, "official_original"),
             (METADATA_OFFICIAL_EN, "official_en"),
             (METADATA_OFFICIAL_TH, "official_th"),
         ] {
@@ -396,6 +424,20 @@ fn resolve_parent_qid<'a>(
         .or_else(|| options.parent_qids.get(&item.original_name))
         .map(String::as_str)
         .unwrap_or(dataset.country_qid.as_str())
+}
+
+/// 判斷字元是否為「明確簡體字」（簡體獨有、無正體歧義）。
+///
+/// Reason: 僅用於非破壞性告警偵測。刻意只列簡體獨有字，不含 `里`/`占`/`岩`
+/// 等本身即合法正體的字，以避免對已正確的繁體 label 誤報。此清單可隨累積的
+/// 各國案例擴充，但永遠不應加入有正體用途的字。
+fn is_simplified_char(ch: char) -> bool {
+    const SIMPLIFIED_ONLY: &[char] = &[
+        '亚', '东', '县', '区', '岛', '湾', '门', '华', '汉', '观', '旧', '属', '寿', '万', '丰',
+        '严', '丽', '举', '义', '乐', '习', '乡', '书', '买', '争', '亲', '们', '单', '卖', '国',
+        '图', '壮', '节', '苏', '蓝',
+    ];
+    SIMPLIFIED_ONLY.contains(&ch)
 }
 
 pub fn dedupe_keep_order(values: impl IntoIterator<Item = String>) -> Vec<String> {

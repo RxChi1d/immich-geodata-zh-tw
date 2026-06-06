@@ -3,6 +3,7 @@ pub mod cities500_load;
 pub mod extract;
 pub mod fixtures;
 pub mod geodata;
+pub mod indonesia_timezone;
 pub mod locationiq;
 pub mod pack;
 pub mod polars_cities;
