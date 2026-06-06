@@ -7,6 +7,7 @@ use serde_json::Value;
 
 use super::cache::TranslationCacheStore;
 use super::client::{WikidataApi, WikidataClientOptions, WikidataHttpClient};
+use super::simplified::is_simplified_char;
 use super::types::{
     METADATA_OFFICIAL_EN, METADATA_OFFICIAL_ORIGINAL, METADATA_OFFICIAL_TH, TranslationDataset,
     TranslationItem, TranslationResult,
@@ -424,20 +425,6 @@ fn resolve_parent_qid<'a>(
         .or_else(|| options.parent_qids.get(&item.original_name))
         .map(String::as_str)
         .unwrap_or(dataset.country_qid.as_str())
-}
-
-/// 判斷字元是否為「明確簡體字」（簡體獨有、無正體歧義）。
-///
-/// Reason: 僅用於非破壞性告警偵測。刻意只列簡體獨有字，不含 `里`/`占`/`岩`
-/// 等本身即合法正體的字，以避免對已正確的繁體 label 誤報。此清單可隨累積的
-/// 各國案例擴充，但永遠不應加入有正體用途的字。
-fn is_simplified_char(ch: char) -> bool {
-    const SIMPLIFIED_ONLY: &[char] = &[
-        '亚', '东', '县', '区', '岛', '湾', '门', '华', '汉', '观', '旧', '属', '寿', '万', '丰',
-        '严', '丽', '举', '义', '乐', '习', '乡', '书', '买', '争', '亲', '们', '单', '卖', '国',
-        '图', '壮', '节', '苏', '蓝',
-    ];
-    SIMPLIFIED_ONLY.contains(&ch)
 }
 
 pub fn dedupe_keep_order(values: impl IntoIterator<Item = String>) -> Vec<String> {

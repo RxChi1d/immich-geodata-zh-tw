@@ -49,23 +49,25 @@ const INDONESIA_ADMIN2_CLASSES: &[&str] = &[
     INDONESIA_ADMIN_REGENCY_CLASS,
 ];
 
-/// 搜尋候選排除關鍵字（避免選舉區等非行政實體混入）。
+/// 搜尋候選排除關鍵字（避免選舉區等非行政實體混入），以「完整單詞」比對。
 ///
 /// Reason: 印尼 Wikidata 上「選區（daerah pemilihan / dapil）」常與行政區同名，
-/// 含國會（DPR / DPD）與地方議會（DPR-D）選區；以小寫子字串比對候選 label
-/// 排除。對照 KR 先例的 keyword 排除做法。另須注意「省名＋羅馬數字」型態的
-/// 選區（如 `Jawa Barat V`）：既有比對機制要求候選 label 與搜尋字串完全相符
-/// （見 wikidata translator 的 exact-match 判定），搜尋字串為純省名／縣市名時，
+/// 含國會（DPR / DPD）與地方議會（DPRD / DPR-D）選區；對照 KR 先例的 keyword
+/// 排除做法。`dpr`/`dpd` 等短縮寫若用子字串比對，可能誤殺任何語言中恰含該
+/// 字串的合法 label，因此改以 label 斷詞後的完整單詞比對（`DPR-D` 斷詞為
+/// `dpr`+`d`，仍命中 `dpr`）。另須注意「省名＋羅馬數字」型態的選區（如
+/// `Jawa Barat V`）：既有比對機制要求候選 label 與搜尋字串完全相符（見
+/// wikidata translator 的 exact-match 判定），搜尋字串為純省名／縣市名時，
 /// 此類帶羅馬數字後綴的選區 label 不會完全相等，因此自然被排除。
-const EXCLUDED_KEYWORDS: &[&str] = &[
-    "dapil",
-    "daerah pemilihan",
-    "electoral district",
-    "dpr-d",
-    "dpr",
-    "dpd",
-    "pemilihan",
-];
+const EXCLUDED_WORDS: &[&str] = &["dapil", "dpr", "dprd", "dpd", "pemilihan", "electoral"];
+
+/// 判斷候選 label 是否含任一排除單詞（小寫斷詞後逐詞比對）。
+fn label_has_excluded_word(label: &str) -> bool {
+    label
+        .to_ascii_lowercase()
+        .split(|ch: char| !ch.is_ascii_alphanumeric())
+        .any(|word| EXCLUDED_WORDS.contains(&word))
+}
 
 /// 建構印尼 Wikidata 翻譯查詢表。
 pub(super) fn build_indonesia_wikidata_cache(
@@ -290,12 +292,10 @@ fn class_filter(allowed_classes: &[&str]) -> impl Fn(&str, &WikidataCandidateMet
         .map(|class| (*class).to_string())
         .collect();
     move |_name, metadata: &WikidataCandidateMetadata<'_>| {
-        let label_excluded = metadata.labels.values().any(|label| {
-            let lower = label.to_ascii_lowercase();
-            EXCLUDED_KEYWORDS
-                .iter()
-                .any(|keyword| lower.contains(keyword))
-        });
+        let label_excluded = metadata
+            .labels
+            .values()
+            .any(|label| label_has_excluded_word(label));
         if label_excluded {
             return false;
         }
@@ -387,6 +387,20 @@ fn attribute<'a>(feature: &'a Feature, key: &str) -> &'a str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn excluded_word_matching_is_word_boundary_aware() {
+        // 選區實體的典型 label 形態應被排除。
+        assert!(label_has_excluded_word("Jawa Barat I (Dapil)"));
+        assert!(label_has_excluded_word("DPRD Jawa Barat"));
+        assert!(label_has_excluded_word("DPR-D Jakarta")); // 斷詞為 dpr + d
+        assert!(label_has_excluded_word("daerah pemilihan Aceh II"));
+        assert!(label_has_excluded_word("West Java 1st electoral district"));
+        // 合法行政區 label 不應因「恰含縮寫子字串」被誤殺。
+        assert!(!label_has_excluded_word("Kabupaten Bandung"));
+        assert!(!label_has_excluded_word("Sumedang")); // 子字串比對下不含 dpr/dpd
+        assert!(!label_has_excluded_word("Dprtown")); // 假想：dpr 為前綴的完整單詞
+    }
 
     fn translated(text: &str) -> TranslationResult {
         TranslationResult {

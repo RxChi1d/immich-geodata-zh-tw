@@ -171,8 +171,9 @@ impl CountryProfile {
         match self.timezone_resolver {
             Some(resolver) => resolver(admin1).ok_or_else(|| {
                 format!(
-                    "無法解析 admin1「{admin1}」的時區：省名未命中時區對照表\
-                     （可能為 Wikidata 譯名漂移），請校準 indonesia_timezone 對照表"
+                    "無法解析{}admin1「{admin1}」的時區：省名未命中時區對照表\
+                     （可能為 Wikidata 譯名漂移），請校準該國 timezone resolver 的對照表",
+                    self.country_name
                 )
             }),
             None => Ok(self.timezone),
