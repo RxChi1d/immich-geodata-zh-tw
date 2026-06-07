@@ -124,14 +124,13 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           name: ${{ env.VERSION_TAG }}
+          # Reason: 僅上傳對使用者有意義的 assets；未壓縮 binary、
+          # ldd.txt 與 manifest.json 為 CI 工程用途（workflow 間以
+          # artifacts 傳遞），不需出現在 release 頁面。
           artifacts: |
             output/release.*
-            .rust-binary/${{ needs.rust-binary.outputs.binary_filename }}
-            .rust-binary/${{ needs.rust-binary.outputs.binary_filename }}.sha256
             .rust-binary/${{ needs.rust-binary.outputs.binary_filename }}.tar.gz
             .rust-binary/${{ needs.rust-binary.outputs.binary_filename }}.tar.gz.sha256
-            .rust-binary/${{ needs.rust-binary.outputs.binary_filename }}.ldd.txt
-            .rust-binary/${{ needs.rust-binary.outputs.binary_filename }}.manifest.json
             LICENSE
             update_data.sh
           draft: false

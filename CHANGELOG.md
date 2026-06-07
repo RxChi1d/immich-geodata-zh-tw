@@ -27,6 +27,9 @@
 
 ## [未發佈版本]
 
+### Changed
+- **Release 頁面精簡**：發佈頁面不再附帶未壓縮 CLI binary、ldd 診斷清單與 build manifest 等工程性檔案；預編譯 CLI 仍以 tar.gz 與對應 sha256 校驗檔提供。
+
 ---
 
 ## [3.1.0] - 2026-06-06
