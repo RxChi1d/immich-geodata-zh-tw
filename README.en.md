@@ -3,6 +3,9 @@
 > [!IMPORTANT]
 > - Upgrade notice: v3.1.0 upgrades place names worldwide with official NAER Taiwan-style translations and adds Indonesia geodata (Traditional Chinese localization); v3.0.0 added Thailand geodata. If you already deploy this project, please run "[Re-extract photo metadata](#integrated-deployment-recommended-convenient-for-future-updates)" after upgrading to apply the latest datasets.
 
+> [!NOTE]
+> Supports Immich v2 and v3.
+
 [繁體中文](README.md) | [English](README.en.md)
 
 This project delivers reverse geocoding enhancements tailored for users in Taiwan, providing natural and accurate location display that reflects local reading habits.
