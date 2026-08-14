@@ -2,12 +2,40 @@ use std::fs;
 use std::fs::File;
 use std::io;
 use std::path::Path;
+use std::time::Duration;
 
-use crate::http::HttpClient;
+use crate::http::{HttpClient, HttpRequestPolicy};
 use crate::pipeline::prepare::ProductionPrepareOptions;
 
 pub const GEONAMES_BASE_URL: &str = "https://download.geonames.org/export/dump";
 pub const NATURAL_EARTH_URL: &str = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_0_countries.geojson";
+
+/// 大檔下載的總逾時。
+///
+/// Reason: 預設 policy 的 30 秒總逾時是為了 API 呼叫（回應僅數 KB）而設，
+/// 但 `alternateNamesV2.zip` 超過 200 MB，30 秒等同要求下載速率必須高於
+/// 6.8 MB/s，一旦上游變慢就必然逾時且每次重試都死在同一個地方。放寬至
+/// 5 分鐘可容忍約 700 KB/s 的下載速率。
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// 大檔下載的重試次數。
+///
+/// Reason: reqwest blocking client 的總逾時同時涵蓋「等待 headers」與
+/// 「讀取 body」，且未提供單獨的 read timeout；伺服器接受連線後不回應時，
+/// 每次嘗試都會耗滿 DOWNLOAD_TIMEOUT。因此下載端刻意降低重試次數，
+/// 將最壞情況控制在約 15 分鐘，避免放寬逾時反而讓 job 長時間空轉。
+const DOWNLOAD_MAX_RETRIES: usize = 3;
+
+/// 下載大型資料檔的請求 policy。
+///
+/// 連線逾時沿用預設值，確保主機不可達時仍在數秒內失敗。
+pub fn download_request_policy() -> HttpRequestPolicy {
+    HttpRequestPolicy {
+        timeout: DOWNLOAD_TIMEOUT,
+        max_retries: DOWNLOAD_MAX_RETRIES,
+        ..HttpRequestPolicy::default()
+    }
+}
 
 pub fn run_production(options: &ProductionPrepareOptions) -> Result<(), String> {
     run_production_with_downloader(options, &download_file)
@@ -126,7 +154,7 @@ fn download_file(url: &str, output_path: &Path) -> Result<(), String> {
             .map_err(|error| format!("無法建立下載目錄 {}：{error}", parent.display()))?;
     }
     let temp_path = output_path.with_extension("download");
-    let client = HttpClient::with_default_policy()?;
+    let client = HttpClient::new(download_request_policy())?;
     let bytes = client.get_bytes(url)?;
     fs::write(&temp_path, bytes)
         .map_err(|error| format!("無法寫入暫存下載檔案 {}：{error}", temp_path.display()))?;

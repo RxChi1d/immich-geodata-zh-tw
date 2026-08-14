@@ -9,7 +9,15 @@ use reqwest::header::RETRY_AFTER;
 #[derive(Debug, Clone)]
 pub struct HttpRequestPolicy {
     pub user_agent: String,
+    /// 單次請求的總逾時（含 response body 讀取）。
     pub timeout: Duration,
+    /// 建立連線階段的逾時。
+    ///
+    /// Reason: `timeout` 同時涵蓋連線與 body 下載，大檔下載必須放寬總逾時，
+    /// 但連線階段不應跟著放寬——否則伺服器無回應時，每次重試都要等滿整個
+    /// 總逾時才失敗。拆成獨立的連線逾時可讓「連不上」快速失敗、「下載慢」
+    /// 有足夠時間完成。
+    pub connect_timeout: Duration,
     pub max_retries: usize,
     pub base_backoff: Duration,
     pub throttle_after_success: Duration,
@@ -76,6 +84,7 @@ impl Default for HttpRequestPolicy {
         Self {
             user_agent: "immich-geodata/0.1".to_string(),
             timeout: Duration::from_secs(30),
+            connect_timeout: Duration::from_secs(10),
             max_retries: 5,
             base_backoff: Duration::from_secs(2),
             throttle_after_success: Duration::ZERO,
@@ -99,6 +108,7 @@ impl HttpClient {
         let client = Client::builder()
             .user_agent(policy.user_agent.clone())
             .timeout(policy.timeout)
+            .connect_timeout(policy.connect_timeout)
             .build()
             .map_err(|error| format!("無法建立 HTTP client：{error}"))?;
         let throttle = Arc::new(Mutex::new(AdaptiveThrottle::new(
