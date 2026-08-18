@@ -215,7 +215,7 @@
 
 分離式部署的安裝步驟：
 
-1. **確認安裝位置**（加速器會建立 `/build` 的 synthetic link，因此 geodata 路徑與容器一致，不需要額外設定）
+1. **確認安裝位置**。加速器會建立 `/build` 的 synthetic link，因此 geodata 路徑與容器一致，不需要額外設定；`i18n-iso-countries` 則位於依 Immich 版本區分的 server 目錄下，先確認輸出的版本與目前執行的 Immich 相符。
 
    ```bash
    bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --print-paths
@@ -229,7 +229,13 @@
    bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install
    ```
 
-3. **重啟 worker**，讓 Immich 重新匯入地理資料
+3. **重啟 worker**，讓 Immich 重新匯入地理資料。以 Homebrew services 管理時，必須使用 `brew services restart`：
+
+   ```bash
+   brew services restart immich-accelerator
+   ```
+
+   未使用 Homebrew services 時，改用：
 
    ```bash
    immich-accelerator stop && immich-accelerator start
@@ -239,7 +245,8 @@
 
 > [!NOTE]
 > - Immich 會比對 `geodata-date.txt` 與資料庫中的紀錄，只有不同時才會重新匯入，重啟本身不會造成重複匯入。
-> - Docker 端若仍在執行 microservices worker，兩台都會嘗試匯入，資料版本不一致時會互相覆蓋。分離式部署建議在 Docker 端設定 `IMMICH_WORKERS_INCLUDE=api`。
+> - Docker 端若仍在執行 microservices worker，兩台都會嘗試匯入，資料版本不一致時會互相覆蓋。分離式部署建議在 Docker 端設定 `IMMICH_WORKERS_INCLUDE=api`；設定後該端不會讀取地理資料，可一併從其 `entrypoint` 移除更新指令，避免每次啟動重複下載。
+> - 以 Homebrew services 管理時，`immich-accelerator stop` 會觸發 launchd 依 `KeepAlive` 立即重啟服務，隨後的 `start` 會因連接埠已被佔用而失敗。請改用 `brew services restart`。
 
 與容器不同，加速器的資料是持久的：`stop` / `start` 或重新開機都不需要重新安裝。只有在 `immich-accelerator update` 切換 Immich 版本時才需要，詳見[更新地理資料](#macos-原生-worker-與其他非容器部署)。
 
@@ -375,22 +382,18 @@ bash update_data.sh --install --archive /path/to/release.tar.gz
    bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install
    ```
 
-2. 重啟 worker。
-
-   ```bash
-   immich-accelerator stop && immich-accelerator start
-   ```
+2. 重啟 worker。以 Homebrew services 管理時使用 `brew services restart immich-accelerator`，否則使用 `immich-accelerator stop && immich-accelerator start`。
 
 3. 於 Immich 執行**重新提取照片元數據**。
 
-若不想記得版本切換這件事，可以用一個包裝腳本取代 `immich-accelerator start`，效果與容器的 `entrypoint` 相同：
+上述步驟可以合併成一個腳本，需要更新時執行一次即可：
 
 ```bash
 #!/bin/bash
-# ~/.local/bin/immich-start
+# ~/.local/bin/immich-geodata-update
 set -e
 bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install
-immich-accelerator start
+brew services restart immich-accelerator
 ```
 
 安裝流程本身是冪等的，資料已是最新時重跑不會有副作用。
