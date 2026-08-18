@@ -45,6 +45,7 @@ We focus on the Taiwan user experience and apply the most suitable language stra
     - [Integrated Deployment (Recommended, convenient for future updates)](#integrated-deployment-recommended-convenient-for-future-updates)
     - [Manual Deployment](#manual-deployment)
   - [Specify Specific Version](#specify-specific-version)
+  - [Non-Container Deployments (macOS native worker, LXC, bare metal)](#non-container-deployments-macos-native-worker-lxc-bare-metal)
   - [Administrative Optimization Strategy](#administrative-optimization-strategy)
     - [🇹🇼 Taiwan](#-taiwan)
     - [🇯🇵 Japan](#-japan)
@@ -229,9 +230,52 @@ Please go to this project's [Releases page](https://github.com/RxChi1d/immich-ge
     ```
     Replace `<tag_name>` with the specific tag name you want to download. If `--tag` is omitted, the latest release (`latest`) is downloaded by default.
 
+### Installing from a local archive
+
+If you already have `release.tar.gz` (offline environment, or reinstalling the same build), install it directly with `--archive` instead of downloading:
+
+```bash
+bash update_data.sh --install --archive /path/to/release.tar.gz
+```
+
 > [!NOTE]
 > The script will first verify whether the specified tag exists in GitHub Releases. If the tag is invalid, it will prompt an error and terminate execution, so please ensure the tag is valid before execution.
   
+## Non-Container Deployments (macOS native worker, LXC, bare metal)
+
+`update_data.sh --install` is not limited to the official Docker container. The script detects Immich's directory layout automatically, so it also works where the Immich server runs as a native process, for example the macOS worker of [epheterson/immich-apple-silicon](https://github.com/epheterson/immich-apple-silicon).
+
+Detection order (first directory containing `node_modules` wins):
+
+1. The `IMMICH_SERVER_ROOT` environment variable
+2. `/usr/src/app/server`, `/usr/src/app` (official container)
+3. `server_dir` from `~/.immich-accelerator/config.json` (immich-accelerator)
+
+If none match, the script scans the candidate roots for the package's actual location (Immich moved it inside the container in 1.136.0). Multiple matches produce a warning, and finding no installed package is a hard failure rather than creating an empty directory.
+
+geodata is installed under `IMMICH_BUILD_DATA` as `geodata/` (`/build/geodata` by default). That is the variable Immich itself uses to locate geodata, so the script reuses it instead of introducing its own setting.
+
+Check the resolved paths before installing:
+
+```bash
+bash update_data.sh --print-paths
+# geodata: /build/geodata
+# i18n-iso-countries: /Users/you/.immich-accelerator/server/3.1.0/node_modules/i18n-iso-countries
+
+bash update_data.sh --install
+```
+
+If detection fails, point the script at the server root explicitly:
+
+```bash
+IMMICH_SERVER_ROOT=/path/to/immich/server bash update_data.sh --install
+```
+
+> [!NOTE]
+> - Path detection requires neither `node` nor root privileges; file ownership is normalized only when running as root.
+> - After installing, the script confirms that the file Immich will load is the one just installed: it delegates to `node` when available, and otherwise applies the same module resolution rule itself, so the check also runs on installations without `node`.
+> - In a split deployment (Docker core + native worker), geodata is read by **the host running the microservices worker**, so install it there.
+
 ## Administrative Optimization Strategy
 
 ### 🇹🇼 Taiwan
