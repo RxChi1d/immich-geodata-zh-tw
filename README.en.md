@@ -220,7 +220,7 @@ This project supports the following two deployment methods:
 
 Steps for a split deployment:
 
-1. **Check the install locations.** The accelerator creates a synthetic link for `/build`, so the geodata path matches the container and needs no extra configuration.
+1. **Check the install locations.** The accelerator creates a synthetic link for `/build`, so the geodata path matches the container and needs no extra configuration. `i18n-iso-countries` lives under a server directory named after the Immich version, so confirm that the version in the output matches the Immich you are running.
 
    ```bash
    bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --print-paths
@@ -234,7 +234,13 @@ Steps for a split deployment:
    bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install
    ```
 
-3. **Restart the worker** so Immich re-imports the geographic data.
+3. **Restart the worker** so Immich re-imports the geographic data. Under Homebrew services, you must use `brew services restart`:
+
+   ```bash
+   brew services restart immich-accelerator
+   ```
+
+   Without Homebrew services, use:
 
    ```bash
    immich-accelerator stop && immich-accelerator start
@@ -244,7 +250,8 @@ Steps for a split deployment:
 
 > [!NOTE]
 > - Immich compares `geodata-date.txt` with the record in its database and only re-imports when they differ, so restarting alone does not trigger a redundant import.
-> - If the Docker side still runs a microservices worker, both hosts attempt the import and will overwrite each other when their data versions differ. For split deployments, set `IMMICH_WORKERS_INCLUDE=api` on the Docker side.
+> - If the Docker side still runs a microservices worker, both hosts attempt the import and will overwrite each other when their data versions differ. For split deployments, set `IMMICH_WORKERS_INCLUDE=api` on the Docker side; once it is set that host never reads the geographic data, so the update command can also be removed from its `entrypoint` to avoid downloading the release on every start.
+> - Under Homebrew services, `immich-accelerator stop` lets launchd restart the services immediately because of `KeepAlive`, and the following `start` then fails because the port is already in use. Use `brew services restart` instead.
 
 Unlike the container, the accelerator's data is persistent: `stop` / `start` and rebooting never require a reinstall. Only `immich-accelerator update`, which switches the Immich version, does — see [Update Geographic Data](#macos-native-worker-and-other-non-container-deployments).
 
@@ -380,22 +387,18 @@ To update:
    bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install
    ```
 
-2. Restart the worker.
-
-   ```bash
-   immich-accelerator stop && immich-accelerator start
-   ```
+2. Restart the worker. Under Homebrew services run `brew services restart immich-accelerator`; otherwise run `immich-accelerator stop && immich-accelerator start`.
 
 3. Run **Extract Metadata** in Immich.
 
-If you would rather not have to remember the version-switch case, replace `immich-accelerator start` with a small wrapper, which behaves like the container's `entrypoint`:
+The steps above can be combined into one script, to be run whenever an update is needed:
 
 ```bash
 #!/bin/bash
-# ~/.local/bin/immich-start
+# ~/.local/bin/immich-geodata-update
 set -e
 bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install
-immich-accelerator start
+brew services restart immich-accelerator
 ```
 
 The install itself is idempotent, so re-running it when the data is already current has no side effects.

@@ -27,6 +27,9 @@
 
 ## [未發佈版本]
 
+### Changed
+- **非容器部署說明**：補充 Homebrew services 環境下的重啟方式（`immich-accelerator stop` 會因 `KeepAlive` 立即被 launchd 拉回，隨後的 `start` 會因連接埠被佔用而失敗），並說明分離式部署下 Docker 端設定 `IMMICH_WORKERS_INCLUDE=api` 後可自 `entrypoint` 移除更新指令。
+
 ### Security
 - **相依套件安全性更新**：將 `quinn-proto` 更新至 0.11.17，解除 GHSA 對 QUIC 亂序封包重組可造成記憶體耗盡的警示。該套件為 `reqwest` 的選用相依，本專案未啟用 HTTP/3，實際上未編譯進產物，因此無使用者可感知的行為變更。
 
