@@ -37,8 +37,9 @@
   - [使用方式](#使用方式)
     - [整合式部署（推薦，方便後續更新）](#整合式部署推薦方便後續更新)
     - [手動部署](#手動部署)
+    - [macOS 原生 worker（immich-accelerator）](#macos-原生-workerimmich-accelerator)
+    - [LXC 與裸機](#lxc-與裸機)
   - [指定特定版本](#指定特定版本)
-  - [非容器部署（macOS 原生 worker、LXC、裸機）](#非容器部署macos-原生-workerlxc裸機)
   - [行政區優化策略](#行政區優化策略)
     - [🇹🇼 臺灣地區優化](#-臺灣地區優化)
     - [🇯🇵 日本地區優化](#-日本地區優化)
@@ -49,6 +50,7 @@
   - [更新地理資料](#更新地理資料)
     - [整合式部署](#整合式部署)
     - [手動部署](#手動部署-1)
+    - [macOS 原生 worker 與其他非容器部署](#macos-原生-worker-與其他非容器部署)
   - [開發者：本地資料處理](#開發者本地資料處理)
     - [1. 安裝依賴](#1-安裝依賴)
     - [官方預編譯 Binary](#官方預編譯-binary)
@@ -202,6 +204,58 @@
 3. **重啟 Immich 和重新提取照片元數據**  
    與[**整合式部署**](#整合式部署)的步驟 2、3 相同。
 
+### macOS 原生 worker（immich-accelerator）
+
+[epheterson/immich-apple-silicon](https://github.com/epheterson/immich-apple-silicon) 可將 Immich 的 microservices worker 與機器學習服務以原生行程跑在 Apple Silicon 上，資料庫與 API 仍留在 Docker。這種部署下，臺灣特化資料要裝在**執行 microservices worker 的那一台**：反向地理編碼的資料匯入只在 microservices worker 啟動時執行。
+
+| 加速器模式 | 安裝位置 |
+| :--- | :--- |
+| `--ml-only`（Mac 只跑機器學習） | Docker 主機，照[整合式部署](#整合式部署推薦方便後續更新)即可 |
+| 分離式部署（Mac 跑 worker + 機器學習） | **Mac** |
+
+分離式部署的安裝步驟：
+
+1. **確認安裝位置**（加速器會建立 `/build` 的 synthetic link，因此 geodata 路徑與容器一致，不需要額外設定）
+
+   ```bash
+   bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --print-paths
+   # geodata: /build/geodata
+   # i18n-iso-countries: /Users/you/.immich-accelerator/server/3.1.0/node_modules/i18n-iso-countries
+   ```
+
+2. **安裝資料**
+
+   ```bash
+   bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install
+   ```
+
+3. **重啟 worker**，讓 Immich 重新匯入地理資料
+
+   ```bash
+   immich-accelerator stop && immich-accelerator start
+   ```
+
+4. 於 Immich 執行**重新擷取照片中繼資料**，套用到既有照片。
+
+> [!NOTE]
+> - Immich 會比對 `geodata-date.txt` 與資料庫中的紀錄，只有不同時才會重新匯入，重啟本身不會造成重複匯入。
+> - Docker 端若仍在執行 microservices worker，兩台都會嘗試匯入，資料版本不一致時會互相覆蓋。分離式部署建議在 Docker 端設定 `IMMICH_WORKERS_INCLUDE=api`。
+
+與容器不同，加速器的資料是持久的：`stop` / `start` 或重新開機都不需要重新安裝。只有在 `immich-accelerator update` 切換 Immich 版本時才需要，詳見[更新地理資料](#macos-原生-worker-與其他非容器部署)。
+
+### LXC 與裸機
+
+自行安裝的 Immich 若不在預設位置，以 `IMMICH_SERVER_ROOT` 指向 Immich server 根目錄（其下應有 `node_modules/`）：
+
+```bash
+IMMICH_SERVER_ROOT=/path/to/immich/server bash update_data.sh --install
+```
+
+一旦設定此變數即為唯一搜尋範圍，指定錯誤時會直接失敗，不會改裝到其他位置。
+
+> [!NOTE]
+> 以上兩種非容器部署的安裝位置由腳本自動偵測。偵測規則與設計原因請參閱[安裝路徑偵測文檔](docs/zh-tw/install-path-detection.md)。
+
 ## 指定特定版本
 
 在某些情況下（例如最新的 release 出現問題），你可能需要下載或回滾到特定的 release 版本。本專案的更新腳本支援透過 `--tag` 參數來指定要下載的 release tag。
@@ -236,41 +290,6 @@ bash update_data.sh --install --archive /path/to/release.tar.gz
 > [!NOTE]
 > 腳本會先驗證指定的 tag 是否存在於 GitHub Releases，如果 tag 無效則會提示錯誤並終止執行，因此請在執行前確保 tag 有效。
   
-## 非容器部署（macOS 原生 worker、LXC、裸機）
-
-`update_data.sh --install` 不限於官方 Docker 容器。腳本會自動偵測 Immich 的目錄版面，因此在以原生行程執行 Immich server 的環境也能直接使用，例如 [epheterson/immich-apple-silicon](https://github.com/epheterson/immich-apple-silicon) 的 macOS worker。
-
-偵測順序（取第一個含有 `node_modules` 的目錄）：
-
-1. 環境變數 `IMMICH_SERVER_ROOT`
-2. `/usr/src/app/server`、`/usr/src/app`（官方容器）
-3. `~/.immich-accelerator/config.json` 中的 `server_dir`（immich-accelerator）
-
-以上都沒命中時，腳本會掃描候選目錄找出套件的實際位置（Immich 曾在 1.136.0 變更容器內路徑）；找到多個位置會提出警告，完全找不到已安裝的套件則直接失敗，不會自行建立空目錄。
-
-geodata 安裝到 `IMMICH_BUILD_DATA` 之下的 `geodata/`（預設 `/build/geodata`）。這是 Immich 自己用來決定 geodata 位置的變數，腳本直接沿用，不另立設定。
-
-先確認偵測結果再安裝：
-
-```bash
-bash update_data.sh --print-paths
-# geodata: /build/geodata
-# i18n-iso-countries: /Users/you/.immich-accelerator/server/3.1.0/node_modules/i18n-iso-countries
-
-bash update_data.sh --install
-```
-
-若偵測不到，手動指定根目錄：
-
-```bash
-IMMICH_SERVER_ROOT=/path/to/immich/server bash update_data.sh --install
-```
-
-> [!NOTE]
-> - 偵測路徑不需要 `node`，也不需要 root 權限；只有以 root 執行時才會統一檔案擁有者。
-> - 安裝後會驗證 Immich 實際載入的檔案是否為本次安裝的內容：找得到 `node` 就交由 `node` 解析，找不到則以相同的模組解析規則自行判斷，兩者皆不需要特定的 `node` 安裝方式。
-> - 分離式部署（Docker 核心 + 原生 worker）時，geodata 由 **執行 microservices worker 的那一台** 讀取，因此要安裝在 worker 所在主機。
-
 ## 行政區優化策略
 
 ### 🇹🇼 臺灣地區優化
@@ -335,6 +354,46 @@ IMMICH_SERVER_ROOT=/path/to/immich/server bash update_data.sh --install
 1. 下載最新 release.zip，並解壓至指定位置。
 
 2. 重新提取照片元數據（與「使用方式-[手動部署](#手動部署)」相同）。
+
+### macOS 原生 worker 與其他非容器部署
+
+加速器的資料是持久的，不像容器那樣每次啟動都會重新安裝：
+
+| 動作 | 是否需要重新安裝 |
+| :--- | :--- |
+| `immich-accelerator stop` / `start`、重新開機 | 否 |
+| `immich-accelerator update`（切換 Immich 版本） | **是** |
+| 本專案發布新版資料 | **是** |
+
+切換 Immich 版本時，加速器會重建 `build-data`（geodata 隨之移除），並改用新版本號的 server 目錄（語系檔隨之失效），因此兩份資料都會回到上游狀態。
+
+更新步驟：
+
+1. 重新執行安裝。
+
+   ```bash
+   bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install
+   ```
+
+2. 重啟 worker。
+
+   ```bash
+   immich-accelerator stop && immich-accelerator start
+   ```
+
+3. 於 Immich 執行**重新提取照片元數據**。
+
+若不想記得版本切換這件事，可以用一個包裝腳本取代 `immich-accelerator start`，效果與容器的 `entrypoint` 相同：
+
+```bash
+#!/bin/bash
+# ~/.local/bin/immich-start
+set -e
+bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install
+immich-accelerator start
+```
+
+安裝流程本身是冪等的，資料已是最新時重跑不會有副作用。
 
 ## 開發者：本地資料處理
 

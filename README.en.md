@@ -44,8 +44,9 @@ We focus on the Taiwan user experience and apply the most suitable language stra
   - [Usage](#usage)
     - [Integrated Deployment (Recommended, convenient for future updates)](#integrated-deployment-recommended-convenient-for-future-updates)
     - [Manual Deployment](#manual-deployment)
+    - [macOS native worker (immich-accelerator)](#macos-native-worker-immich-accelerator)
+    - [LXC and bare metal](#lxc-and-bare-metal)
   - [Specify Specific Version](#specify-specific-version)
-  - [Non-Container Deployments (macOS native worker, LXC, bare metal)](#non-container-deployments-macos-native-worker-lxc-bare-metal)
   - [Administrative Optimization Strategy](#administrative-optimization-strategy)
     - [🇹🇼 Taiwan](#-taiwan)
     - [🇯🇵 Japan](#-japan)
@@ -56,6 +57,7 @@ We focus on the Taiwan user experience and apply the most suitable language stra
   - [Update Geographic Data](#update-geographic-data)
     - [Integrated Deployment](#integrated-deployment)
     - [Manual Deployment](#manual-deployment-1)
+    - [macOS native worker and other non-container deployments](#macos-native-worker-and-other-non-container-deployments)
   - [Developer: Local Data Processing](#developer-local-data-processing)
     - [1. Install Dependencies](#1-install-dependencies)
     - [Official Prebuilt Binary](#official-prebuilt-binary)
@@ -207,6 +209,58 @@ This project supports the following two deployment methods:
 3. **Restart Immich and re-extract photo metadata**  
    Same as steps 2 and 3 in [**Integrated Deployment**](#integrated-deployment).
 
+### macOS native worker (immich-accelerator)
+
+[epheterson/immich-apple-silicon](https://github.com/epheterson/immich-apple-silicon) runs Immich's microservices worker and machine learning service as native processes on Apple Silicon, while the database and API stay in Docker. In this setup the Taiwan localization data belongs on **the host that runs the microservices worker**: the reverse-geocoding import only happens when the microservices worker starts.
+
+| Accelerator mode | Install on |
+| :--- | :--- |
+| `--ml-only` (Mac runs machine learning only) | The Docker host, following [Integrated Deployment](#integrated-deployment-recommended-convenient-for-future-updates) |
+| Split deployment (Mac runs worker + machine learning) | **The Mac** |
+
+Steps for a split deployment:
+
+1. **Check the install locations.** The accelerator creates a synthetic link for `/build`, so the geodata path matches the container and needs no extra configuration.
+
+   ```bash
+   bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --print-paths
+   # geodata: /build/geodata
+   # i18n-iso-countries: /Users/you/.immich-accelerator/server/3.1.0/node_modules/i18n-iso-countries
+   ```
+
+2. **Install the data.**
+
+   ```bash
+   bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install
+   ```
+
+3. **Restart the worker** so Immich re-imports the geographic data.
+
+   ```bash
+   immich-accelerator stop && immich-accelerator start
+   ```
+
+4. Run **Extract Metadata** in Immich to apply the data to existing photos.
+
+> [!NOTE]
+> - Immich compares `geodata-date.txt` with the record in its database and only re-imports when they differ, so restarting alone does not trigger a redundant import.
+> - If the Docker side still runs a microservices worker, both hosts attempt the import and will overwrite each other when their data versions differ. For split deployments, set `IMMICH_WORKERS_INCLUDE=api` on the Docker side.
+
+Unlike the container, the accelerator's data is persistent: `stop` / `start` and rebooting never require a reinstall. Only `immich-accelerator update`, which switches the Immich version, does — see [Update Geographic Data](#macos-native-worker-and-other-non-container-deployments).
+
+### LXC and bare metal
+
+If your Immich installation is not in a default location, point `IMMICH_SERVER_ROOT` at the Immich server root (the directory containing `node_modules/`):
+
+```bash
+IMMICH_SERVER_ROOT=/path/to/immich/server bash update_data.sh --install
+```
+
+Once this variable is set it becomes the only search scope: a wrong value fails outright instead of silently installing somewhere else.
+
+> [!NOTE]
+> For both non-container deployments the install location is detected automatically. See the [install path detection document](docs/en/install-path-detection.md) for the rules and the reasoning behind them.
+
 ## Specify Specific Version
 
 In some cases (e.g., when the latest release has issues), you may need to download or rollback to a specific release version. This project's update script supports specifying the release tag to download through the `--tag` parameter.
@@ -241,41 +295,6 @@ bash update_data.sh --install --archive /path/to/release.tar.gz
 > [!NOTE]
 > The script will first verify whether the specified tag exists in GitHub Releases. If the tag is invalid, it will prompt an error and terminate execution, so please ensure the tag is valid before execution.
   
-## Non-Container Deployments (macOS native worker, LXC, bare metal)
-
-`update_data.sh --install` is not limited to the official Docker container. The script detects Immich's directory layout automatically, so it also works where the Immich server runs as a native process, for example the macOS worker of [epheterson/immich-apple-silicon](https://github.com/epheterson/immich-apple-silicon).
-
-Detection order (first directory containing `node_modules` wins):
-
-1. The `IMMICH_SERVER_ROOT` environment variable
-2. `/usr/src/app/server`, `/usr/src/app` (official container)
-3. `server_dir` from `~/.immich-accelerator/config.json` (immich-accelerator)
-
-If none match, the script scans the candidate roots for the package's actual location (Immich moved it inside the container in 1.136.0). Multiple matches produce a warning, and finding no installed package is a hard failure rather than creating an empty directory.
-
-geodata is installed under `IMMICH_BUILD_DATA` as `geodata/` (`/build/geodata` by default). That is the variable Immich itself uses to locate geodata, so the script reuses it instead of introducing its own setting.
-
-Check the resolved paths before installing:
-
-```bash
-bash update_data.sh --print-paths
-# geodata: /build/geodata
-# i18n-iso-countries: /Users/you/.immich-accelerator/server/3.1.0/node_modules/i18n-iso-countries
-
-bash update_data.sh --install
-```
-
-If detection fails, point the script at the server root explicitly:
-
-```bash
-IMMICH_SERVER_ROOT=/path/to/immich/server bash update_data.sh --install
-```
-
-> [!NOTE]
-> - Path detection requires neither `node` nor root privileges; file ownership is normalized only when running as root.
-> - After installing, the script confirms that the file Immich will load is the one just installed: it delegates to `node` when available, and otherwise applies the same module resolution rule itself, so the check also runs on installations without `node`.
-> - In a split deployment (Docker core + native worker), geodata is read by **the host running the microservices worker**, so install it there.
-
 ## Administrative Optimization Strategy
 
 ### 🇹🇼 Taiwan
@@ -340,6 +359,46 @@ Simply restart the Immich container to automatically update geographic data.
 1. Download the latest release.zip and extract it to the specified location.
 
 2. Re-extract photo metadata (same as [Manual Deployment](#manual-deployment)).
+
+### macOS native worker and other non-container deployments
+
+The accelerator's data is persistent, so unlike the container it is not reinstalled on every start:
+
+| Action | Reinstall required |
+| :--- | :--- |
+| `immich-accelerator stop` / `start`, rebooting | No |
+| `immich-accelerator update` (switching Immich version) | **Yes** |
+| A new data release from this project | **Yes** |
+
+Switching Immich versions rebuilds `build-data` (removing geodata) and moves to a server directory named after the new version (leaving the language files behind), so both halves revert to upstream state.
+
+To update:
+
+1. Run the install again.
+
+   ```bash
+   bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install
+   ```
+
+2. Restart the worker.
+
+   ```bash
+   immich-accelerator stop && immich-accelerator start
+   ```
+
+3. Run **Extract Metadata** in Immich.
+
+If you would rather not have to remember the version-switch case, replace `immich-accelerator start` with a small wrapper, which behaves like the container's `entrypoint`:
+
+```bash
+#!/bin/bash
+# ~/.local/bin/immich-start
+set -e
+bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install
+immich-accelerator start
+```
+
+The install itself is idempotent, so re-running it when the data is already current has no side effects.
 
 ## Developer: Local Data Processing
 
