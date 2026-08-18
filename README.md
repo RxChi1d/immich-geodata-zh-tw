@@ -38,6 +38,7 @@
     - [整合式部署（推薦，方便後續更新）](#整合式部署推薦方便後續更新)
     - [手動部署](#手動部署)
   - [指定特定版本](#指定特定版本)
+  - [非容器部署（macOS 原生 worker、LXC、裸機）](#非容器部署macos-原生-workerlxc裸機)
   - [行政區優化策略](#行政區優化策略)
     - [🇹🇼 臺灣地區優化](#-臺灣地區優化)
     - [🇯🇵 日本地區優化](#-日本地區優化)
@@ -224,9 +225,52 @@
     ```
     將 `<tag_name>` 替換為你想要下載的具體 tag 名稱。如果省略 `--tag`，則預設下載最新的 release (`latest`)。
 
+### 使用已下載的壓縮檔
+
+已經有 `release.tar.gz`（例如離線環境或想重複安裝同一份）時，可用 `--archive` 直接安裝，不再連線下載：
+
+```bash
+bash update_data.sh --install --archive /path/to/release.tar.gz
+```
+
 > [!NOTE]
 > 腳本會先驗證指定的 tag 是否存在於 GitHub Releases，如果 tag 無效則會提示錯誤並終止執行，因此請在執行前確保 tag 有效。
   
+## 非容器部署（macOS 原生 worker、LXC、裸機）
+
+`update_data.sh --install` 不限於官方 Docker 容器。腳本會自動偵測 Immich 的目錄版面，因此在以原生行程執行 Immich server 的環境也能直接使用，例如 [epheterson/immich-apple-silicon](https://github.com/epheterson/immich-apple-silicon) 的 macOS worker。
+
+偵測順序（取第一個含有 `node_modules` 的目錄）：
+
+1. 環境變數 `IMMICH_SERVER_ROOT`
+2. `/usr/src/app/server`、`/usr/src/app`（官方容器）
+3. `~/.immich-accelerator/config.json` 中的 `server_dir`（immich-accelerator）
+
+以上都沒命中時，腳本會掃描候選目錄找出套件的實際位置（Immich 曾在 1.136.0 變更容器內路徑）；找到多個位置會提出警告，完全找不到已安裝的套件則直接失敗，不會自行建立空目錄。
+
+geodata 安裝到 `IMMICH_BUILD_DATA` 之下的 `geodata/`（預設 `/build/geodata`）。這是 Immich 自己用來決定 geodata 位置的變數，腳本直接沿用，不另立設定。
+
+先確認偵測結果再安裝：
+
+```bash
+bash update_data.sh --print-paths
+# geodata: /build/geodata
+# i18n-iso-countries: /Users/you/.immich-accelerator/server/3.1.0/node_modules/i18n-iso-countries
+
+bash update_data.sh --install
+```
+
+若偵測不到，手動指定根目錄：
+
+```bash
+IMMICH_SERVER_ROOT=/path/to/immich/server bash update_data.sh --install
+```
+
+> [!NOTE]
+> - 偵測路徑不需要 `node`，也不需要 root 權限；只有以 root 執行時才會統一檔案擁有者。
+> - 安裝後會驗證 Immich 實際載入的檔案是否為本次安裝的內容：找得到 `node` 就交由 `node` 解析，找不到則以相同的模組解析規則自行判斷，兩者皆不需要特定的 `node` 安裝方式。
+> - 分離式部署（Docker 核心 + 原生 worker）時，geodata 由 **執行 microservices worker 的那一台** 讀取，因此要安裝在 worker 所在主機。
+
 ## 行政區優化策略
 
 ### 🇹🇼 臺灣地區優化
