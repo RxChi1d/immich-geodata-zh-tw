@@ -11,21 +11,55 @@ on:
       - 'tests/**'
       - 'fixtures/**'
       - '.github/workflows/rust-ci.yaml'
+  # Reason: No paths filter here. A path-filtered workflow never reports a
+  # status on unrelated PRs, which would leave a required check pending
+  # forever. The changes job decides whether the gates need to run instead.
   pull_request:
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'src/**'
-      - 'tests/**'
-      - 'fixtures/**'
-      - '.github/workflows/rust-ci.yaml'
 
 defaults:
   run:
     shell: bash
 
 jobs:
+  changes:
+    name: Detect Rust changes
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+    steps:
+      # Reason: pull_request checks out refs/pull/N/merge, so HEAD^1..HEAD is
+      # the merge-base diff. push events fall back to running the gates.
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Check for Rust-relevant changes
+        id: filter
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed="$(git diff --name-only HEAD^1 HEAD -- \
+            Cargo.toml Cargo.lock 'src/*' 'tests/*' 'fixtures/*' \
+            .github/workflows/rust-ci.yaml)"
+
+          if [ -n "$changed" ]; then
+            echo "Rust-relevant files changed:"
+            echo "$changed"
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No Rust-relevant files changed; gates will be skipped."
+            echo "rust=false" >> "$GITHUB_OUTPUT"
+          fi
+
   gates:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -64,3 +98,29 @@ jobs:
             --output-folder /tmp/rust-release-smoke
           test -f /tmp/rust-release-smoke/release.zip
           test -f /tmp/rust-release-smoke/release.tar.gz
+
+  # Reason: This job always reports, so it can be used as a required status
+  # check. It passes when the gates succeeded or were legitimately skipped,
+  # and fails when they failed or were cancelled.
+  summary:
+    name: Rust gates
+    if: always()
+    needs: [changes, gates]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Report gate result
+        env:
+          RESULT: ${{ needs.gates.result }}
+        run: |
+          case "$RESULT" in
+            success)
+              echo "Rust gates passed."
+              ;;
+            skipped)
+              echo "No Rust-relevant changes; gates were skipped."
+              ;;
+            *)
+              echo "::error::Rust gates did not pass (result: $RESULT)."
+              exit 1
+              ;;
+          esac
