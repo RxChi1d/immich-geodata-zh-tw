@@ -127,6 +127,7 @@ jobs:
               --base main \
               --head nightly-build \
               --title "chore(geodata): 自動更新 ${{ env.TODAY }}" \
+              --label "data-update" \
               --body "這是 nightly 自動更新產生的 geodata 變更，請審核後合併。"
           else
             echo "已有開啟中的 PR，跳過建立。"

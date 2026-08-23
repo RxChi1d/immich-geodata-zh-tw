@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 安全性問題
+    url: https://github.com/RxChi1d/immich-geodata-zh-tw/security/advisories/new
+    about: 安全性問題請私下回報，不要開公開 issue。
+  - name: Immich 本身的問題
+    url: https://github.com/immich-app/immich/issues
+    about: 與地理資料無關的 Immich 問題請回報至 Immich 專案。
