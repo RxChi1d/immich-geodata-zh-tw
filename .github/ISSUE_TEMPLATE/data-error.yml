@@ -1,0 +1,36 @@
+name: 地名或行政區資料錯誤
+description: 地點名稱翻譯錯誤、行政區歸屬錯誤、顯示位置不正確
+labels: ["data-error"]
+body:
+  - type: input
+    id: country
+    attributes:
+      label: 國家或地區
+      placeholder: 例如 臺灣、日本
+    validations:
+      required: true
+  - type: input
+    id: coordinate
+    attributes:
+      label: 座標
+      description: 相片的 GPS 座標，用於重現問題。
+      placeholder: 例如 25.0330, 121.5654
+    validations:
+      required: true
+  - type: input
+    id: actual
+    attributes:
+      label: 目前顯示的名稱
+    validations:
+      required: true
+  - type: input
+    id: expected
+    attributes:
+      label: 預期的名稱
+    validations:
+      required: true
+  - type: input
+    id: data-version
+    attributes:
+      label: 使用的資料版本
+      description: 見 geodata/geodata-date.txt，或安裝時的 release tag。

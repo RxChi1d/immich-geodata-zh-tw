@@ -1,0 +1,46 @@
+name: 安裝或更新問題
+description: 資料安裝失敗、更新後沒有生效、容器無法啟動
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        回報前請先確認已依 [README](https://github.com/RxChi1d/immich-geodata-zh-tw#readme) 的安裝步驟操作，並重啟 Immich 後重新擷取照片中繼資料。
+  - type: input
+    id: immich-version
+    attributes:
+      label: Immich 版本
+      placeholder: 例如 v3.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: 部署方式
+      options:
+        - Docker Compose（整合式部署，entrypoint）
+        - Docker Compose（手動部署，掛載資料夾）
+        - macOS 原生 worker（immich-accelerator）
+        - LXC 或裸機
+        - 其他
+    validations:
+      required: true
+  - type: input
+    id: image
+    attributes:
+      label: 使用的映像檔
+      description: 非官方映像檔的安裝路徑不同，不在本專案的測試範圍。
+      placeholder: 例如 ghcr.io/immich-app/immich-server:release
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 問題描述
+      description: 說明預期結果與實際結果。
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相關日誌
+      description: 貼上 Immich 啟動日誌中與安裝腳本相關的部分，請移除個人資訊。
+      render: shell

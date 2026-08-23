@@ -107,9 +107,11 @@ jobs:
             .rust-binary/${{ needs.rust-binary.outputs.binary_filename }}.tar.gz
             .rust-binary/${{ needs.rust-binary.outputs.binary_filename }}.tar.gz.sha256
           body: |
-            這是定期自動生成的 nightly 版本 (包含最新 geodata)，可能未經充分測試。建議使用標有 "Latest" 的穩定版本。
-            如果發現問題請提 issue 並暫時選擇到 [此處](https://github.com/RxChi1d/immich-geodata-zh-tw/releases) 選擇手動發布的 Release 文件。
-            如果遇到 Immich 沒有更新數據，請手動修改 geodata-date.txt 文件，將其內容中的時間修改為更新的時間（比如當前時間）。
+            這是自動發布的 nightly 版本，包含最新的地理資料，未經正式版本的完整驗證。
+            需要穩定版本請選擇標示 "Latest" 的 [release](https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest)。
+
+            若 Immich 沒有套用新資料，請將 `geodata/geodata-date.txt` 的內容改成與目前不同的值後重啟。
+            遇到問題歡迎回報 [issue](https://github.com/RxChi1d/immich-geodata-zh-tw/issues)。
           draft: false
           generateReleaseNotes: false
           commit: nightly-build
@@ -127,6 +129,7 @@ jobs:
               --base main \
               --head nightly-build \
               --title "chore(geodata): 自動更新 ${{ env.TODAY }}" \
+              --label "data-update" \
               --body "這是 nightly 自動更新產生的 geodata 變更，請審核後合併。"
           else
             echo "已有開啟中的 PR，跳過建立。"
