@@ -11,8 +11,9 @@
 - **handler 國家（TW / JP / KR / TH / ID，清單由 extract handler 單一
   來源決定）**：以官方圖資 handler 為核心，並使用 Wikidata translator
   （名稱搜尋 → zh / zh-tw / zh-hant label → P131 上級行政區鏈驗證消歧 →
-  OpenCC 簡繁與臺灣用語轉換）產生高品質的繁中翻譯。此路徑不在本文件
-  討論範圍。
+  OpenCC 字元級簡繁轉換）產生高品質的繁中翻譯。臺灣用語來自 Wikidata 的
+  zh-tw label 與 handler 內建對照表，OpenCC 只負責字元層級的簡轉繁。
+  此路徑不在本文件討論範圍。
 - **全球非 handler 地區（translate 階段）**：正式 release 只跑上述
   handler 國家，**LocationIQ 流程不在 production release 中**。因此全球
   其餘所有國家的 cities500 與 admin1 記錄，原本的中文名僅來自 GeoNames
@@ -30,8 +31,10 @@
 | admin1（非 handler 全球） | 3,720 | 2,211（59.4%） |
 
 這意味著全球絕大多數城市記錄在沒有額外翻譯來源時只能回退英文，這也是
-本專案引入國教院（NAER）官方譯名作為補強層的原因。完整研究與實測過程
-見 [中文地名翻譯來源替代方案評估](../research/chinese-translation-sources.md)。
+本專案引入國教院（NAER）官方譯名作為補強層的原因。上表為離線實測結果，
+不隨程式碼自動驗證；重算需重跑 prepare 與 translate 階段。完整研究與
+實測過程見
+[中文地名翻譯來源替代方案評估](../research/chinese-translation-sources.md)。
 
 ## 翻譯優先序
 
@@ -57,18 +60,29 @@ admin1 第一版採保守策略，NAER **僅補洞、不覆寫**：
 2. **NAER lookup**：僅在既有來源無中文名時使用
 3. fallback（既有）
 
+admin1 的匹配條件與 city 不同，下方的信心分級表不適用於此路徑：
+
+- 候選國碼必須與 admin1 code 的國碼前綴完全一致，不接受空國碼候選。
+- 以旗下 cities500 的平均座標為近似質心，距離門檻放寬為 300 km。
+- 容差內若次近候選的譯名與最近者不同、且兩者距離差不到 5 km，直接放棄
+  補洞。
+- 不讀 `feature_hint`，也不計算信心等級——此路徑一律僅補洞，降權與否對
+  結果沒有差別。
+- 找不到國碼一致的候選屬常態（多數 admin1 不在 NAER 詞典中），不計入
+  拒絕計數。
+
 ### 信心分級（confidence tiers）
 
-NAER 命中後依下表判定信心等級（轉錄自設計規格 4.3）：
+NAER 在 cities500 命中後依下表判定信心等級（實作見
+`src/pipeline/naer_lookup.rs`）：
 
 | 等級 | 條件（全部成立） | 權限 |
 |---|---|---|
 | 高 | 國碼一致、距離 ≤ 15 km、`feature_hint=false`、無歧義（容差內唯一譯名，或最近與次近差 ≥ 5 km） | 覆寫既有譯名 + 補洞 |
-| 中 | 命中但有任一弱化訊號：國碼為空、`feature_hint=true`、近距歧義 | 僅補洞（既有來源皆無中文名時才使用） |
-| 低 | 國碼不一致、距離 > 15 km、畸形輸入 | 拒絕 |
+| 中 | 命中但有任一弱化訊號：無國碼一致候選而改用空國碼候選、`feature_hint=true`、近距歧義 | 僅補洞（既有來源皆無中文名時才使用） |
+| 低 | 國碼不符且無空國碼候選可降級、容差內無候選（距離 > 15 km）、座標畸形無法解析 | 拒絕 |
 
-- admin1 第一版一律以「中」為上限（僅補洞），待品質報告量化錯配率後
-  再評估開放覆寫。
+- admin1 第一版一律僅補洞，待品質報告量化錯配率後再評估開放覆寫。
 - 容差常數 `NAER_CITY_DISTANCE_KM = 15.0` 的依據：NAER 座標精度為
   ±1 角分（約 2 km），加上城市中心點偏移緩衝；實測此容差下美國錯配率
   趨近 0。
@@ -79,14 +93,20 @@ NAER 命中後依下表判定信心等級（轉錄自設計規格 4.3）：
   [dataset 15211](https://data.gov.tw/dataset/15211)
 - **授權**：政府資料開放授權條款－第 1 版（OGDL 1.0），與
   CC BY 4.0 相容；發佈物需保留 attribution（見 [NOTICE.md](../../NOTICE.md)）
-- **資料規模**：64,487 筆，涵蓋 700 國家／地區
+- **資料規模**：原始 dataset 64,487 筆、涵蓋 700 國家／地區（離線實測值，
+  見[研究文檔](../research/chinese-translation-sources.md)）；經
+  `naer-prepare` 清理後的 vendored 檔為 64,075 筆，差額 412 筆是座標不可
+  解析、座標欄為空或名稱不可用而丟棄的列
 - **vendored 檔**：清理後的 6 欄 CSV 存放於 `naer/naer_place_names.csv`，
-  欄位說明見 [`naer/README.md`](../../naer/README.md)
+  對應 192 個 ISO 3166-1 alpha-2 國碼，另有 1,798 筆國名未對應
+  （`country_code` 留空）；欄位說明見
+  [`naer/README.md`](../../naer/README.md)
 
 ## 為什麼選 NAER（研究結論摘要）
 
 對非 handler 地區（佔 release 絕大多數記錄）而言，NAER 是效益最大的補強
-來源。相對於 GeoNames alternateNames 基線，NAER 帶來：
+來源。相對於 GeoNames alternateNames 基線，NAER 帶來以下效益（2026-06
+離線實測，未隨程式碼驗證）：
 
 - **cities500**：補洞 +16,380 筆（+7.1 pp，相對 +35%），覆蓋率自
   20.1% 提升至 27.3%
@@ -159,20 +179,30 @@ cargo run --release -- naer-prepare \
 
 - **座標解析鏈**：HTML entity 還原 → 標籤移除 → 撇號字元統一 → 度分制
   轉十進位 → 範圍驗證（|lat| ≤ 90、|lon| ≤ 180）。實測成功率約 99.4%。
-- **名稱正規化**（`name_norm`，匹配 key）：去除 `[...]` / `(...)` 註記、
-  取逗號前段、NFKD 變音符號折疊、小寫。
-- **中文名清理**（`name_zh`）：剝離括號註記（`科魯涅(科倫納)` →
+- **名稱正規化**（`name_norm`，匹配 key）：去除括號註記（圓括號、全形
+  括號與方括號，含 `〔〕`）、取逗號前段、NFKD 變音符號折疊、小寫、
+  壓縮連續空白。
+- **中文名清理**（`name_zh`）：剝離同一組括號註記（`科魯涅(科倫納)` →
   `科魯涅`）。
 - **國碼對應**（`country_code`）：以 i18n-iso-countries 的 zh-tw 對照表
   加 alias 表（如 `韓國→KR`、`剛果{金夏沙}→CD`）對應為 ISO 3166-1
   alpha-2；無法對應者留空（依信心分級降為中信心，僅補洞）。
 - **自然地物啟發式**（`feature_hint`）：英文名含地物標記（`R.`、`Bay`、
   `Mt.`、`Cape`、`Island` 等）或中文譯名以地形字尾（河／灣／島／山／湖／
-  角／峽 等）結尾時標記為 `true`。僅作降權依據、不刪列，避免誤殺
-  `San Francisco → 舊金山` 這類字尾撞型的城市。
+  角／峽 等）結尾時標記為 `true`。僅作降權依據、不刪列：
+  `San Francisco → 舊金山` 這類字尾撞型的城市仍會被標記為 `true`，但只是
+  降為中信心（僅補洞），不會從詞典中消失。
 
-失敗列處理：座標不可解析的列**丟棄**（無法參與座標消歧即無法安全使用）；
-國名未對應的列**保留**（country_code 留空）。
+失敗列處理：
+
+- **丟棄**：座標不可解析（`coordinate_failures`）、座標欄為空
+  （`coordinate_empty`）、名稱不可用——正規化後 `name_norm` 或 `name_zh`
+  為空、或 `name_zh` 含逗號（兩者皆計入 `name_failures`）。
+- **保留**：國名未對應的列（`country_code` 留空）；座標解析成功但為
+  (0,0) 的列僅計入 `suspicious_zero_coordinates`，不刪列。
+
+輸出前依欄位排序以利 git diff 審查，並偵測同 `(name_norm, country_code)`
+但相距不到 5 km 卻譯名不同的列，計入報告的 `conflicts`。
 
 ## 品質報告解讀
 
@@ -204,7 +234,8 @@ translate 階段會輸出單行 NAER 統計 log（驗收 gate 之一），以 `k
   `admin1_dist_5km_plus`（≥5；admin1 質心為近似值、容差較寬，超過 5 km
   一律歸入此桶以共用同一摘要結構）。
 
-驗收時與實測預期量級對照：
+驗收時與離線實測的預期量級對照（來源同上節，尚未以品質報告 log 校準，
+首次產出報告後應改以實際值為基準）：
 
 - cities 補洞 ≈ 16,380
 - cities 覆寫上限 ≈ 9,415（信心分級降級後實際值會更低，以首次品質報告

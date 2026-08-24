@@ -1,6 +1,6 @@
 # South Korea Administrative Processing Guide
 
-This document captures the processing strategy, administrative hierarchy, translation rules, and implementation details for South Korean geospatial data.
+> This document explains how the project handles geographic information for South Korea. It is the detailed version of [Supported Regions and Language Strategy](../../README.en.md#supported-regions-and-language-strategy) in the README.
 
 ## Table of Contents
 
@@ -8,11 +8,11 @@ This document captures the processing strategy, administrative hierarchy, transl
 - [Metropolitan City and Province Types](#metropolitan-city-and-province-types)
 - [Centroid Calculation Method](#centroid-calculation-method)
 - [Traditional Chinese Translation Strategy](#traditional-chinese-translation-strategy)
-  - [Priority per Level](#priority-per-level)
+  - [Translation Levels and Priority](#translation-levels-and-priority)
   - [Rust Wikidata Translation Source and Cache](#rust-wikidata-translation-source-and-cache)
 - [Data Normalization](#data-normalization)
-  - [Split City-District Composite Names](#split-city-district-composite-names)
-  - [Handling Duplicate Names](#handling-duplicate-names)
+  - [Splitting Combined City-District Names](#splitting-combined-city-district-names)
+  - [Handling Duplicate Place Names](#handling-duplicate-place-names)
 - [Special Handling for Sejong Special Self-Governing City](#special-handling-for-sejong-special-self-governing-city)
 - [Data Sources](#data-sources)
 
@@ -20,54 +20,59 @@ This document captures the processing strategy, administrative hierarchy, transl
 
 ## Administrative Levels
 
-South Korea uses a three-level system beneath the country level:
+> [!NOTE]
+> `admin_3` and `admin_4` exist only in the project's intermediate CSV. They preserve the source administrative level for traceability and debugging, and are never written to the cities500 file Immich consumes. The finest level Immich displays is `admin_2`. Representative point density depends on the source feature granularity used during extract (administrative dong for South Korea) and is unrelated to these two columns.
+
+South Korea uses a three-level administrative system (excluding the country level):
 
 | Level | Korean Name | Type | Count | Source Field |
 |-------|-------------|------|-------|--------------|
 | **Admin 1** | Metropolitan City / Province | 광역자치단체 | 17 | `sidonm` |
-| **Admin 2** | City / District / County | 기초자치단체 | ~250 | `sggnm` |
-| **Admin 3** | Dong / Eup / Myeon | 행정동/법정동 | ~3,500 | Parsed from `adm_nm` |
-| **Admin 4** | Original Admin 3 | - | Only when a city-district split occurs | Stored for provenance |
+| **Admin 2** | City / District / County | 기초자치단체 | 252 (231 distinct translations) | `sggnm` |
+| **Admin 3** | Dong / Eup / Myeon | 행정동/법정동 | 3,534 rows (2,802 distinct names) | Parsed from `adm_nm` |
+| **Admin 4** | Original Admin 3 | - | Only when a city-district split occurs (492 rows) | Preserves the original value |
 
-> **Note**: Admin 4 is only used while splitting combined city-district names (for example, `성남시분당구` becomes `성남시` + `분당구`). Immich ignores this column; it is preserved for auditing and debugging.
+> **Statistical baseline**: `meta_data/kr_geodata.csv` generated from the `HangJeongDong_ver20260401` boundary data (3,558 rows in total).
+
+> **Note**: Admin 4 is used only when a city-district split occurs (for example, `성남시분당구` splits into `성남시` + `분당구`), preserving the original Admin 3 value. Immich's reverse geocoding ignores this column; it exists for data completeness and debugging.
 
 ### Admin 1 Typology
 
-The 17 metropolitan cities and provinces fall into the following categories:
+The 17 metropolitan cities and provinces fall into these categories:
 
 - **Special City** (특별시): 1 – Seoul
 - **Metropolitan City** (광역시): 6 – Busan, Daegu, Incheon, Gwangju, Daejeon, Ulsan
 - **Special Self-Governing City** (특별자치시): 1 – Sejong
 - **Province** (도): 6 – Gyeonggi-do, Chungcheongbuk-do, Chungcheongnam-do, Gyeongsangbuk-do, Gyeongsangnam-do, Jeollanam-do
-- **Special Self-Governing Province** (특별자치도): 3 – Gangwon Special Self-Governing Province, Jeonbuk Special Self-Governing Province, Jeju Special Self-Governing Province
+- **Special Self-Governing Province** (특별자치도): 3 – Gangwon, Jeonbuk, Jeju
 
 ### Admin 2 Types
 
-Basic local governments (기초자치단체) mainly consist of:
+Basic local governments (기초자치단체) fall into three kinds:
 
-- **City (시)**: urban areas
-- **District (구)**: subdivisions inside metropolitan cities
-- **County (군)**: rural regions
+- **City** (시): major urban areas
+- **District** (구): subdivisions inside metropolitan cities
+- **County** (군): rural areas
 
 ### Admin 3 Types
 
-- **Dong (동)**: base units within cities
-- **Eup (읍)**: township-level units
-- **Myeon (면)**: rural townships
+- **Dong** (동): base-level units in urban areas
+- **Eup** (읍): town-level units
+- **Myeon** (면): rural townships
 
 ---
 
 ## Metropolitan City and Province Types
 
-The 17 metropolitan cities and provinces follow different naming conventions that must align with Taiwanese usage.
+The 17 metropolitan cities and provinces follow different naming conventions, and the translations must match what users in Taiwan expect.
 
 ### Naming Rules
 
-1. **Special/Metropolitan/Special Self-Governing Cities**: drop the suffix and use the short form.
-   - Example: `서울특별시` → Seoul, `부산광역시` → Busan.
-2. **Provinces and Special Self-Governing Provinces**: keep or drop "-do" depending on user familiarity.
-   - Traditional provinces keep the suffix: `경기도` → Gyeonggi-do.
-   - Special self-governing provinces drop it: `제주특별자치도` → Jeju.
+1. **Special City / Metropolitan City / Special Self-Governing City**: always output as "X市".
+   - Examples: 서울특별시 → 首爾市, 부산광역시 → 釜山市, 세종특별자치시 → 世宗市
+
+2. **Province / Special Self-Governing Province**: always output as "X道", and special self-governing provinces revert to the traditional province names familiar in Taiwan.
+   - Examples: 경기도 → 京畿道, 강원특별자치도 → 江原道, 전북특별자치도 → 全羅北道, 제주특별자치도 → 濟州道
 
 ---
 
@@ -75,218 +80,242 @@ The 17 metropolitan cities and provinces follow different naming conventions tha
 
 ### Challenge and Solution
 
-South Korea spans UTM zones 51N and 52N (longitudes 124°–132°). Fixing the projection to a single zone causes severe centroid errors near zone boundaries.
+South Korea spans UTM zones 51N and 52N (longitudes 124°–132°), so a fixed UTM zone introduces severe errors for administrative divisions near the zone boundary.
 
-**Adopt a dynamic UTM selection combined with an Albers projection:**
+**The solution combines dynamic UTM zone selection with an Albers projection:**
 
-1. **Albers equal-area projection**: compute accurate polygon centroid longitude.
-2. **Dynamic UTM choice**: select UTM 51N or 52N based on that longitude.
-3. **UTM centroid computation**: compute the final centroid within the chosen UTM zone.
-4. **Vectorized batches**: process geometries in bulk per zone for performance.
+1. **Albers equal-area projection**: compute an accurate geometric centroid longitude for the polygon (parameters `lat_1=33`, `lat_2=43`, `lat_0=37`, `lon_0=127.5`).
+2. **Dynamic UTM zone selection**: pick UTM 51N or 52N based on that centroid longitude.
+3. **UTM centroid computation**: compute the final centroid inside the selected UTM zone.
+4. **Projection transform caching**: features are processed one by one, and transform objects are cached and reused per UTM zone. Multithreading only kicks in at 10,000 features or more, so South Korea's 3,558 rows run single-threaded.
 
 ---
 
 ## Traditional Chinese Translation Strategy
 
-### Priority per Level
+### Translation Levels and Priority
 
-The translation pipeline balances quality against API usage by applying different strategies per level:
+Translation of South Korean geographic data is layered, balancing translation quality against API request efficiency:
 
-| Level | Method | Count | API Calls |
-|-------|--------|-------|-----------|
-| **Admin 1** | Built-in mapping + Wikidata QID lookup | 17 | ~17 |
-| **Admin 2** | Wikidata batch translation | ~250 | ~250 |
-| **Admin 2 (Sejong)** | **Manual mapping** | 24 | **0** |
-| **Admin 3** | Retain Korean source | ~3,500 | 0 |
+| Level | Method | Count | Wikidata Lookups |
+|-------|--------|-------|------------------|
+| **Admin 1** | Built-in mapping + Wikidata QID | 17 | 17 items |
+| **Admin 2** | Wikidata batch translation | 228 | 228 items |
+| **Admin 2 (Sejong)** | **Manual mapping** | 24 | **None** |
+| **Admin 3** | Korean source text retained | 3,534 | None |
 
 > [!NOTE]
-> Sejong's Admin 2 values use only the manual mapping, skipping Wikidata entirely. See [Manual Mapping for Sejong](#2-manual-mapping).
+> The number of lookup items is not the number of HTTP requests. Every item that misses the cache triggers one entity search, labels are fetched in batches of 32, and candidate entities get an extra P131 validation query. A fully warm cache issues no requests at all.
+
+> [!NOTE]
+> Admin 2 values for Sejong Special Self-Governing City come from a manual mapping and skip Wikidata entirely. See [Manual Mapping Translation](#2-manual-mapping-translation) for the reasoning.
 
 **Design rationale:**
 
-1. **Admin 1**: a built-in lookup returns concise Taiwanese names ("Seoul" instead of "Seoul Special City"), while storing the QID for Admin 2 validation.
-2. **Admin 2**: Wikidata delivers ~250 translations with acceptable latency.
+1. **Admin 1**: the built-in mapping supplies the concise names used in Taiwan (「首爾市」 rather than 「首爾特別市」), while still fetching the QID for Admin 2 validation.
+2. **Admin 2**: Wikidata translation, at a manageable volume (228 items).
 3. **Admin 2 (Sejong)**: the manual mapping guarantees 100% Traditional Chinese coverage.
-4. **Admin 3**: Korean labels avoid 3,500+ API calls with minimal UX impact.
+4. **Admin 3**: keeping the Korean source text avoids 3,500+ API requests and barely affects the user experience.
 
-### Admin 1 Translation
+### Admin 1 Translation Method
 
-Use a **built-in table** with Taiwanese short names (not the canonical Wikidata labels) for all 17 metropolitan cities/provinces:
+A **built-in mapping** supplies the names customary in Taiwan (not the official Wikidata labels) for all 17 metropolitan cities and provinces. The full table lives in `src/pipeline/extract/handlers.rs`:
 
-- `서울특별시` → Seoul (not "Seoul Special City")
-- `부산광역시` → Busan (not "Busan Metropolitan City")
-- `경기도` → Gyeonggi-do (retain "-do")
-- `제주특별자치도` → Jeju (drop the suffix)
+| Official Name | Project Output | Official Name | Project Output |
+| :--- | :--- | :--- | :--- |
+| 서울특별시 | 首爾市 | 강원특별자치도 | 江原道 |
+| 부산광역시 | 釜山市 | 충청북도 | 忠清北道 |
+| 대구광역시 | 大邱市 | 충청남도 | 忠清南道 |
+| 인천광역시 | 仁川市 | 전북특별자치도 | 全羅北道 |
+| 광주광역시 | 光州市 | 전라남도 | 全羅南道 |
+| 대전광역시 | 大田市 | 경상북도 | 慶尚北道 |
+| 울산광역시 | 蔚山市 | 경상남도 | 慶尚南道 |
+| 세종특별자치시 | 世宗市 | 제주특별자치도 | 濟州道 |
+| 경기도 | 京畿道 | | |
 
 ### Rust Wikidata Translation Source and Cache
 
-The Rust production handler uses the shared Wikidata translation cache pipeline
-to read and update the local `geoname_data/KR_wikidata_cache.json` file. If the
-cache is missing or incomplete, production extract queries Wikidata, fills the
-context-aware cache, then applies the built-in Admin 1 and Sejong mappings.
-Automated fixture validation still uses the supplied `KR_wikidata_stub.json`
-without calling the live Wikidata service, keeping release gates independent
-from API quota, upstream data drift, and network availability.
+The Rust production handler uses the shared Wikidata translation cache pipeline to read and
+update the local `geoname_data/KR_wikidata_cache.json`. When the cache is missing or lacks
+entries, production extract queries Wikidata, fills in the context-aware cache, then applies
+the built-in Admin 1 and Sejong mappings. Automated fixture validation still uses the supplied
+`KR_wikidata_stub.json` and never calls the live Wikidata service, keeping release gates
+independent of API quota, upstream data drift, and network conditions.
 
-When South Korea translations need updates, rerun production extract with the
-real KR GeoJSON source to update the cache. Fixture and parity validation should
-continue using the matching stub/cache when deterministic output is required.
+To refresh the South Korean translation source, rerun production extract against the real KR
+GeoJSON. Fixture and parity validation that requires deterministic output should keep using the
+matching stub or cache.
 
-**Fallback order**:
+**Fallback chain**: translation tries these label sources in order.
 
-1. zh-TW (Traditional Chinese - Taiwan)
+1. zh-TW (Traditional Chinese – Taiwan)
 2. zh-Hant (Traditional Chinese)
 3. zh (Simplified Chinese, converted to Traditional via OpenCC)
 4. en (English)
-5. ko (Korean)
-6. Original name (if everything fails)
+5. ko (Korean label)
+6. Chinese Wikipedia article title (converted to Traditional)
+7. Original Korean name (all sources failed)
+
+> [!NOTE]
+> English or Korean labels matched at steps 4 and 5 are rejected by the South Korea handler's
+> `is_valid_chinese_translation` and fall back to the original Korean name, so they never reach
+> the output. And because Wikidata entities almost always carry an `en` label, step 6's Chinese
+> Wikipedia title is never reached in practice. Across the 245 translations currently in
+> `geoname_data/KR_wikidata_cache.json`, only three sources appear: zh-TW (180), OpenCC
+> conversion (46), and zh-Hant (19).
 
 #### Candidate Filtering
 
-While translating Admin 2 names, candidate filtering removes government institutions to avoid confusing them with geographic entities.
+When translating Admin 2 (city / district / county), candidate filtering removes government
+institutions so the result is a real administrative division name.
 
-**Exclusion keywords** (matched as whole terms):
+**Filter rules:**
+
+Wikidata candidate labels are checked and dropped when they contain any of these keywords:
 
 - **Legislative bodies**: 의회, 議會, council, assembly, 委員會, legislature
 - **Executive agencies**: 시청, 구청, 군청, 도청, 교육청, 廳, government
 
-**Why this matters**:
+**Design considerations:**
 
-- Prevents government offices (e.g., `세종특별자치시청`) from being returned as administrative units.
-- Avoids false positives from partial matches ("청" in valid names).
-- Keeps legitimate regions such as Cheongdo County untouched.
+- Match whole terms (`시청`, `도청`, `군청`) instead of single characters, avoiding false positives.
+- Prevent government offices from being taken for administrative divisions (`세종특별자치시청` must not become one).
+- Keep legitimate divisions intact (Cheongdo County is not dropped because of the character 「청」).
 
 > [!NOTE]
-> This filter applies only to standard Admin 2 translations. Sejong records bypass Wikidata entirely and therefore skip the filter.
+> This filter applies only to Admin 2 translation for ordinary regions. Sejong Special Self-Governing City uses the manual mapping exclusively, never enters the Wikidata flow, and therefore never touches this filter.
 
 ---
 
 ## Data Normalization
 
-These routines apply to most regions nationwide.
+This section covers the general normalization applied to South Korean geographic data, which holds for most of the country.
 
-### Split City-District Composite Names
+### Splitting Combined City-District Names
 
-Some records store `sggnm` as a concatenated city + district string (`<city>시<district>구`, e.g., `성남시분당구`). These cause two issues:
+Some cities store `sggnm` as a combined string, `<city>시<district>구` (for example `성남시분당구`), which causes two problems:
 
-1. **Translation failures**: Wikidata expects standalone district names (e.g., `분당구`).
-2. **Messy display**: Immich would flatten city-district names into the same level as dong/eup/myeon.
+1. **Translation failures**: the Wikidata entity is the standalone district name (`분당구`), so lookups on the combined name fail.
+2. **Confusing display**: Immich puts the combined city-district name at the same level as dong / eup / myeon.
 
-**Processing steps**:
+**Processing logic:**
 
-1. **Detection**: regex `^(?P<city>.+?시)(?P<district>.+?(?:구|군))$` catches composite patterns.
+1. **Detection**: when the name ends with `구` or `군`, split it after the first `시` into a city name and a district/county name (see `split_korea_city_district` in `src/pipeline/extract/handlers.rs`).
 2. **Split**:
-   - `sggnm` → city name (`성남시`).
-   - `admin_3` → district/county (`분당구`).
-   - `admin_4` → original Admin 3 (`태평3동`).
-3. **Logging**: record how many rows were split for auditing.
+   - `sggnm` → city-level name (`성남시`)
+   - `admin_3` → district/county name (`분당구`)
+   - `admin_4` → original Admin 3 (`태평3동`)
 
-**Impact**:
+**Effect:**
+- Admin 2 now maps to the city-level name, raising the Wikidata match rate.
+- Hierarchy: 京畿道 → 城南市 (`admin_2`, translated) → 분당구 (`admin_3`, Korean retained) → 태평3동 (`admin_4`, original value)
+- The original value is preserved in `admin_4`.
 
-- Higher Wikidata match rate.
-- Clear hierarchy: Gyeonggi-do → Bundang District → Tae-pyeong 3-dong.
-- Original data preserved in `admin_4`.
+### Handling Duplicate Place Names
 
-### Handling Duplicate Names
-
-Many administrative units share the same Korean names. P131 validation ensures the correct entity is selected.
+South Korea has many repeated administrative division names, so P131 validation is required to pick the right entity.
 
 #### Admin 2 Level
 
-Seven names repeat yet remain unique within their Admin 1 parent:
+Seven names repeat, yet each is unique within its own Admin 1:
 
-| Name | Occurrences | Example |
-|------|-------------|---------|
-| 중구 (Jung District) | 2 | Jung-gu, Seoul; Jung-gu, Incheon |
-| 남구 (Nam District) | 3 | Nam-gu, Busan; Nam-gu, Daegu; Nam-gu, Gwangju |
-| 북구 (Buk District) | 3 | Buk-gu, Daegu; Buk-gu, Gwangju; Buk-gu, Ulsan |
+| Name | Occurrences | Parent Admin 1 |
+|------|-------------|----------------|
+| 중구 (中區) | 6 | 首爾市, 釜山市, 大邱市, 仁川市, 大田市, 蔚山市 |
+| 동구 (東區) | 6 | 釜山市, 大邱市, 仁川市, 光州市, 大田市, 蔚山市 |
+| 서구 (西區) | 5 | 釜山市, 大邱市, 仁川市, 光州市, 大田市 |
+| 남구 (南區) | 4 | 釜山市, 大邱市, 光州市, 蔚山市 |
+| 북구 (北區) | 4 | 釜山市, 大邱市, 光州市, 蔚山市 |
+| 강서구 (江西區) | 2 | 首爾市, 釜山市 |
+| 고성군 | 2 | 江原道, 慶尚南道 |
 
-**Approach**: enforce P131 validation so "Jung District" under Seoul cannot be mistaken for the one in Incheon.
+**Handling**: P131 validation ensures the correct Admin 2 is chosen (「中區」 must sit inside 「首爾」).
+
+> **Exception**: the two 고성군 translate differently (高城郡 in 江原道, 固城郡 in 慶尚南道), so they do not collide at the Traditional Chinese layer.
 
 #### Admin 3 Level
 
-Roughly 239 duplicates exist, but Immich usually displays up to Admin 2.
+About 229 duplicate names (counted from the `HangJeongDong_ver20260401` boundary data). They do not affect what Immich shows, which normally stops at Admin 2.
 
-**Strategy**: keep the Korean labels.
+**Strategy**: keep the Korean source text untranslated.
 
 ### Disambiguation Parentheses Removal
 
-Some place names in Wikidata include disambiguation parentheses (e.g., "東區 (光州)"). In this project's data structure, `admin_1` already identifies the parent region, so `admin_2` does not need to repeat this information.
+Some place names carry disambiguation parentheses in Wikidata (「東區 (光州)」). In this project's data structure `admin_1` already names the parent region, so `admin_2` does not need to repeat it.
 
 #### Gwangju-Specific Processing
 
-Gwangju's Dong-gu (East District) and Seo-gu (West District) have disambiguation markers in their Traditional Chinese Wikidata labels:
+Gwangju's Dong-gu and Seo-gu carry disambiguation markers in their Traditional Chinese Wikidata labels:
 
 - `동구` → 東區 (光州)
 - `서구` → 西區 (光州)
 
-**Issue**:
-- Other cities (Busan, Daegu, Incheon, Daejeon, Ulsan) with identically-named districts do not have parentheses
-- Creates naming inconsistencies
-- Immich displays redundant information: "Gwangju > Dong District (Gwangju)"
+**Problems:**
+- The same-named districts in other cities (Busan, Daegu, Incheon, Daejeon, Ulsan) have no parentheses.
+- Naming becomes inconsistent.
+- Immich displays redundant information: 「光州 > 東區 (光州)」.
 
-**Processing logic**:
+**Processing logic:**
 
-After translation completes, the Rust handler removes trailing disambiguation
-parentheses only when `sidonm == "광주광역시"`. The implementation lives in
-`src/pipeline/extract/handlers.rs` and is controlled by
-`strip_trailing_parenthetical`.
+After translation completes, the Rust handler strips trailing disambiguation parentheses only from Admin 2 records where `sidonm == "광주광역시"`. The implementation lives in `src/pipeline/extract/handlers.rs`, controlled by `strip_trailing_parenthetical`.
 
-**Impact**:
+**Effect:**
 
 | Before | After |
 |--------|-------|
-| Gwangju > Dong District (Gwangju) | Gwangju > Dong District ✅ |
-| Gwangju > Seo District (Gwangju) | Gwangju > Seo District ✅ |
-| Busan > Dong District | Busan > Dong District (unchanged) |
+| 光州 > 東區 (光州) | 光州 > 東區 ✅ |
+| 光州 > 西區 (光州) | 光州 > 西區 ✅ |
+| 釜山 > 東區 | 釜山 > 東區 (unaffected) |
 
 > [!NOTE]
-> This processing targets only Gwangju for precise control. If similar issues are discovered in other cities, the logic can be extended.
+> This rule targets Gwangju alone, keeping control precise. If other cities turn out to have the same problem, the logic can be extended.
 
 ---
 
 ## Special Handling for Sejong Special Self-Governing City
 
-Sejong (세종특별자치시) is the only **single-tier special self-governing city**. Its structure differs from other metropolitan cities and needs a bespoke workflow that can serve as a template for similar cases elsewhere.
+Sejong Special Self-Governing City (세종특별자치시) is South Korea's only **single-tier special self-governing city**. Its administrative structure differs from every other metropolitan city and needs a dedicated workflow, which can serve as a reference for similar structures in other countries.
 
-**Structural difference**:
+**Structural difference:**
 
 ```
-Standard: Metropolitan/Province → City/District/County → Dong/Eup/Myeon
-Sejong: Sejong Special Self-Governing City → Dong/Eup/Myeon (no middle tier)
+Standard structure: Metropolitan City/Province → City/District/County → Dong/Eup/Myeon
+Sejong structure:   Sejong Special Self-Governing City → Dong/Eup/Myeon ← no middle level!
 ```
 
-### Data Issues
+### Data Problem
 
-The shapefile incorrectly fills `sggnm` (Admin 2) with government agencies:
+In the source GeoJSON, the `sggnm` field (Admin 2) is always `세종시` for Sejong; earlier versions filled it with government institution names instead:
 
-- `세종특별자치시광역자치의회` (city council)
+- `세종특별자치시광역자치의회` (the council)
 - `세종특별자치시청` (city hall)
 
-If left untouched, Immich would display "Sejong > City Hall" instead of "Sejong > Jochiwon-eup".
+Neither is a real Admin 2. Used as-is, Immich would show 「世宗 > 世宗市」 or 「世宗 > 議會」 instead of 「世宗 > 鳥致院邑」.
 
-### Two-Phase Solution
+### Processing
 
-1. **Normalize the hierarchy**: promote Sejong's dong/eup/myeon records from Admin 3 to Admin 2 and clear Admin 3.
-2. **Manual translation table**: translate all Admin 2 names via the Rust `sejong_admin2` mapping rather than Wikidata.
+A **two-phase mechanism** resolves both Sejong's structure and its translation problem.
 
-#### 1. Hierarchy Normalization
+#### 1. Administrative Level Normalization
 
-- **Detection**: if `sggnm` does not end with 읍/면/동, treat it as a mislabeled agency.
-- **Normalization**: move `adm_nm` into Admin 2, empty Admin 3, keep Admin 4 blank.
+Promote Sejong's dong / eup / myeon records from Admin 3 to Admin 2, matching its single-tier structure:
 
-**Example**:
+- **Detection**: `sggnm` does not end with 읍/면/동 (which would indicate a real administrative division).
+- **Normalization**: Admin 3 → Admin 2, then clear Admin 3.
+
+**Example:**
 ```
-Before: Sejong → Sejong City Hall → 대평동
-After:  Sejong → 대평동 → (empty)
+Before: 세종특별자치시 → 세종시 → 대평동
+After:  세종특별자치시 → 대평동 → (empty)
 ```
 
-#### 2. Manual Mapping
+#### 2. Manual Mapping Translation
 
-**Problem**: founded in 2012, Sejong's new neighborhoods often lack Traditional Chinese labels on Wikidata, forcing fallbacks to romanization ("Boram-dong") or Korean.
+**Problem**: Sejong was founded in 2012, and most of its new dong have no Chinese label on Wikidata, so the early implementation fell back to romanization (`Boram-dong`) or even the Korean source text.
 
-**Solution**: the Rust handler's `sejong_admin2` mapping in
-`src/pipeline/extract/handlers.rs` covers all 24 Admin 2 names.
+**Solution**: the Rust handler ships a 25-entry manual mapping (`sejong_admin2` in `src/pipeline/extract/handlers.rs`) covering all 24 Admin 2 names in the current boundary data, plus `합강동` (合江洞), which has not yet appeared in it.
+
+**Mapping samples:**
 
 | Korean | Traditional Chinese |
 |--------|---------------------|
@@ -299,53 +328,56 @@ After:  Sejong → 대평동 → (empty)
 | 부강면 | 芙江面 |
 | 장군면 | 將軍面 |
 
-**Translation flow**:
+**Translation flow:**
 
 ```
-1. Detect Sejong → 2. Lookup in map → 3. Return Traditional Chinese
-                                (skip Wikidata)
+1. Detect Sejong → 2. Look up the mapping → 3. Return Traditional Chinese
+                                              (Wikidata skipped)
 Example: 보람동 → 寶藍洞
 ```
 
-**Results**:
+**Results:**
 
-| Korean | Wikidata Result | Manual Result |
-|--------|-----------------|---------------|
+| Original Korean | Wikidata Translation | Manual Mapping |
+|-----------------|----------------------|----------------|
 | 보람동 | Boram-dong ❌ | 寶藍洞 ✅ |
 | 대평동 | Daepyeong-dong ❌ | 大平洞 ✅ |
 | 어진동 | 어진동 ❌ | 汝珍洞 ✅ |
 | 조치원읍 | 鳥致院邑 ✅ | 鳥致院邑 ✅ |
 
 > [!NOTE]
-> After both steps, Sejong Admin 2 fields display the Traditional Chinese dong/eup/myeon names (e.g., "鳥致院邑", "燕岐面", "寶藍洞"), while Admin 3 remains empty. Immich can then show "Sejong > 鳥致院邑" correctly.
+> The "Wikidata Translation" column shows the historical behavior from before the manual mapping was introduced. The current Rust implementation rejects romanized and mixed Chinese-English results through `is_valid_chinese_translation` and falls back to the original Korean name, and Sejong never enters the Wikidata flow at all.
+
+> [!NOTE]
+> After both phases, Sejong records carry the Traditional Chinese dong / eup / myeon name in Admin 2 (「鳥致院邑」, 「燕岐面」, 「寶藍洞」) with Admin 3 left blank, so Immich correctly shows 「世宗 > 鳥致院邑」.
 
 ---
 
 ## Data Sources
 
-### Primary Dataset
+### Primary Data Source
 
 **admdongkor**
 - Repository: https://github.com/vuski/admdongkor
-- Description: South Korean administrative boundaries (GeoJSON)
-- License: MIT
-- Usage: provides polygons and names for all three administrative levels
+- Description: South Korean administrative boundary data (GeoJSON)
+- License: the boundary data is CC BY 4.0; the underlying source data is released under South Korea's KOGL Type 1 (공공누리 제1유형) and requires attribution (see [NOTICE.md](../../NOTICE.md))
+- Usage: supplies boundaries and names for all three South Korean administrative levels
 
-### Translation Data
+### Translation Data Sources
 
 **Wikidata**
 - API: https://www.wikidata.org/w/api.php
 - SPARQL: https://query.wikidata.org/sparql
 - License: CC0 1.0 Universal (Public Domain)
-- Usage: multi-language translations and P131 validation
+- Usage: multilingual place name translations and P131 relation validation
 
 **Chinese Wikipedia**
 - API: https://zh.wikipedia.org/w/api.php
-- Usage: title conversion for simplified ↔ traditional
+- Usage: Simplified-to-Traditional conversion (converttitles API)
 
 **OpenCC (Open Chinese Convert)**
 - Repository: https://github.com/BYVoid/OpenCC
-- Usage: automatic simplified-to-traditional conversion
+- Usage: Simplified Chinese to Traditional Chinese conversion
 
 ---
 

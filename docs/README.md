@@ -40,6 +40,6 @@
 | [印尼投影與座標實驗](research/idn-handler-projection-coordinate-experiment.md) | 投影法與代表座標策略的實驗數據 |
 | [Python 至 Rust 遷移](history/python-to-rust-migration.md) | 資料處理工具鏈的遷移過程紀錄 |
 
-## 英文文件
+## 語言版本
 
-文件預計同步維護繁體中文與英文版本。目前英文文件仍在補齊與改版，缺少部分頁面；兩種語言內容不一致時，暫以繁體中文版為準。
+文件同步維護繁體中文與英文兩個版本，本索引的英文版為 [docs/en/README.md](en/README.md)。研究與歷史紀錄僅有繁體中文版。兩種語言內容不一致時，以繁體中文版為準。

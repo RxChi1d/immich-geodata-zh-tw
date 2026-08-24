@@ -361,12 +361,12 @@ impl Country {
 
     /// 是否在 centroid 計算前把 MultiPolygon 拆成每 part 一筆 feature。
     ///
-    /// Reason: CLAUDE.md 與 TH 文件記載「multipart polygon 每個部分各出一列」
-    /// 為預期行為——同一行政區若由多個不相連的 polygon 組成，每個 polygon 各取
-    /// 中心點輸出一列，避免群島合併 centroid 落海。印尼 BIG desa 圖資含大量散島
-    /// multipart，故啟用；階段二命中率實驗（96.99%）即建立在「每 part 一列、共
-    /// 104,470 候選點」之上（見 docs/research）。其餘國家維持既有 per-feature
-    /// 合併 centroid 行為，避免回退既有輸出。
+    /// Reason: 印尼 BIG desa 圖資含大量散島 multipart，若以合併 centroid 取單點，
+    /// 該點可能落在所有 part 之外（落海），降低最近鄰匹配準確度。逐 part 拆列可
+    /// 讓代表點留在陸地上；階段二命中率實驗（96.99%）即建立在「每 part 一列、共
+    /// 104,470 候選點」之上，見
+    /// docs/research/idn-handler-projection-coordinate-experiment.md。其餘國家維持
+    /// 既有的 per-feature 合併 centroid 行為，避免回退既有輸出。
     pub(super) fn splits_multipolygon_parts(self) -> bool {
         matches!(self, Self::Indonesia)
     }

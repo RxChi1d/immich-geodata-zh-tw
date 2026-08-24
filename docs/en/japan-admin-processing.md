@@ -1,116 +1,141 @@
 # Japan Administrative Division Processing
 
-> This document describes how the project handles geographic data for Japan. It expands on the Japan optimization section in the README.
+> This document explains how the project processes geographic data for Japan. It is the detailed version of [Supported Regions and Language Strategy](../../README.en.md#supported-regions-and-language-strategy) in the README.
 
 ## Data Sources
 
-The pipeline relies on official datasets published via the **National Land Numerical Information download service (国土数値情報ダウンロードサービス)**:
+Processing for Japan is built on the official boundary data published by the **国土数値情報ダウンロードサイト** (National Land Numerical Information download site):
 
-- **Provider**: [National Land Numerical Information Download Service](https://nlftp.mlit.go.jp/ksj/)
-- **Dataset**: Administrative boundary data (world geodetic system)
-- **Purpose**: Supplies authoritative polygons and official place names so the output matches common usage in Taiwan (漢字 + かな)
+- **Source**: [国土数値情報ダウンロードサービス](https://nlftp.mlit.go.jp/ksj/)
+- **Dataset**: 行政区域データ（世界測地系）N03-2025 (`N03-20250101.shp`)
+- **Fields used**: `N03_001`, `N03_003`, `N03_004`, `N03_005` (`N03_002`, the subprefecture name, is not used)
+- **Purpose**: Serves as the primary source of administrative boundaries and names for Japan, keeping the data accurate and authoritative
 
-Processing this dataset ensures Immich shows Japanese place names in their native form, which is widely understood by Taiwanese users.
+Processing the 国土数値情報 administrative data keeps Japanese place names in Immich in their original Japanese form (kanji + kana), which matches the reading habits of Taiwanese users.
 
-## Administrative Hierarchy Mapping
+## Administrative Level Definitions
 
-The project again follows the GeoNames administrative schema and maps it to Japan as follows:
+> [!NOTE]
+> `admin_3` and `admin_4` exist only in this project's intermediate CSV. They preserve the source administrative levels for traceability and debugging, and are not written to the cities500 file that Immich consumes. The finest level Immich displays is `admin_2`. Representative point density depends on the granularity of the source features used during extract (municipalities for Japan) and is unrelated to these two fields.
 
-- **Admin1**: All 47 prefectures (e.g., 東京都, 北海道, 神奈川県)
-- **Admin2**: Cities, wards, towns, and villages under each prefecture (e.g., 横浜市, 渋谷区, 鎌倉市)
-- **Admin3**: Ward names for designated cities only
-  - When `SEIREI_SHI_CITY_NAME_ONLY = True`, admin_2 shows only the city name (e.g., "横浜市") and admin_3 contains the ward name (e.g., "中区")
-  - For all other administrative types, admin_3 remains empty
-- **Admin4**: Not used (no corresponding data available)
+The project follows the GeoNames administrative level system, mapped to Japan as follows:
 
-## Column Mapping to GeoNames
+- **Admin 1**: The **47 prefectures**
+  - Examples: 東京都, 北海道, 神奈川県
 
-When extracting the shapefile, the following columns are used:
+- **Admin 2**: The **cities, wards, towns, and villages** under each prefecture
+  - Examples: 横浜市, 渋谷区, 鎌倉市
+  - The displayed value depends on the administrative type (see the rules below)
 
-- **country**: "日本"
+- **Admin 3**: Used only for **ward names of designated cities**
+  - For a designated city, `admin_2` holds the city name only (such as 「横浜市」) and `admin_3` holds the ward name (such as 「中区」)
+  - `admin_3` is empty for every other administrative type
+
+- **Admin 4**: Always empty (no corresponding data)
+
+## GeoNames Column Mapping
+
+Extraction from the 国土数値情報 dataset uses the following column mapping:
+
+- **Country**: 「日本」
 - **admin_1**: `N03_001` (prefecture name)
-- **admin_2**: Derived from `N03_003`, `N03_004`, and `N03_005` following the rules below
-- **admin_3**: Ward name (`N03_005`) for designated cities when `SEIREI_SHI_CITY_NAME_ONLY = True`
+- **admin_2**: Depends on the administrative type (see the rules below)
+- **admin_3**: `N03_005` (ward name), for designated cities only
 - **admin_4**: Left empty
 
 ## Display Rules
 
-Different administrative categories have distinct display rules to balance readability and ambiguity:
+Each type of Japanese administrative division gets the display form that suits it best:
 
-### 1. Standard Cities
+### 1. Ordinary Cities
 
-- **Condition**: `N03_003` is empty, `N03_004` ends with 「市」, `N03_005` is empty
-- **Display**: Show the city name only (e.g., 北海道 → 釧路市)
+- **Applies when**: The city is not governed by a district (`N03_003` and `N03_005` are both empty, and `N03_004` ends with 「市」)
+- **Display**: City name only
+- **Example**:
+  - 北海道 → 釧路市
 
-### 2. Towns, Villages, and Special Wards Directly Governed by the Prefecture
+### 2. Prefecture-Governed Towns, Villages, and Special Wards
 
-- **Condition**: `N03_003` is empty, `N03_004` does not end with 「市」, `N03_005` is empty
-- **Display**: Show the town, village, or ward name (e.g., 東京都 → 小笠原村, 東京都 → 渋谷区)
-- **Context**: Tokyo’s 23 special wards belong here; they are directly administered by the Tokyo Metropolitan Government
+- **Applies when**: The town, village, or special ward reports directly to the prefecture (`N03_003` and `N03_005` are both empty, and `N03_004` has a value that does not end with 「市」)
+- **Display**: Town, village, or ward name only
+- **Examples**:
+  - 東京都 → 小笠原村 (remote island)
+  - 東京都 → 渋谷区 (special ward)
 
-### 3. Designated Cities (政令指定都市)
+> [!NOTE]
+> The 23 special wards of Tokyo (千代田区, 港区, and so on) report directly to the Tokyo Metropolitan Government and are not governed by any other administrative division.
 
-- **Condition**: `N03_005` has a value (ward name)
-- **Display**: admin_2 shows only the city name, admin_3 contains the ward name (e.g., 神奈川県, 横浜市, 中区 → admin_2="横浜市", admin_3="中区")
+### 3. Designated Cities
+
+- **Applies when**: The record is a ward of a designated city (`N03_005` has a value; a non-empty `N03_005` alone triggers this rule, regardless of the other fields)
+- **Display**: `admin_2` holds the city name only, `admin_3` holds the ward name
 - **Rationale**:
-  - Matches common behavior on services such as Google Maps and OpenStreetMap, which show prefecture + city
-  - Avoids misclassification when district centroids lie close together
-  - Preserves complete information: individual ward records, centroids, and ward names (admin_3) are all retained in the dataset
-- **Configuration**: The Rust production handler currently fixes this behavior to "city in admin_2, ward in admin_3". If the project needs to revert to "city + ward" in admin_2, update the Japan handler in `src/pipeline/extract/handlers.rs` and refresh the parity fixtures and real-data validation.
+  - **More consistent display**: Matches mainstream map services (Google Maps, OpenStreetMap), which also return only the prefecture plus the designated city name
+  - **Fewer misclassifications**: Centroids of adjacent wards in a designated city sit close together, so lookups easily land on the wrong ward
+  - **No information loss**: Each ward keeps its own record, centroid, and ward name (`admin_3`) in the dataset
+- **Example**:
+  - 神奈川県, 横浜市, 中区 → `admin_2` = 「横浜市」, `admin_3` = 「中区」
 
-### 4. District-Governed Towns and Villages (郡轄町村)
+> [!NOTE]
+> The Rust production handler currently hard-codes the "city in `admin_2`, ward in `admin_3`" strategy. To restore a combined "city + ward" value in `admin_2` (such as 「横浜市中区」), adjust the Japan handler in `src/pipeline/extract/handlers.rs` and update the parity fixtures and real-data validation along with it.
 
-- **Condition**: `N03_003` ends with 「郡」 and `N03_004` holds a town or village name
-- **Display**:
-  - If the same town/village name is unique within the prefecture, show the name only
-  - If multiple districts share the same name within the prefecture, prefix the district (e.g., 北海道, 古宇郡, 泊村 → 古宇郡泊村)
-- **Collision Detection**: The implementation checks for duplicates on "prefecture + town/village"; district prefixes are added only when needed to resolve ambiguity
+### 4. District-Governed Towns and Villages
 
-### 5. District Records Without Subdivisions
+- **Applies when**: The town or village is governed by a district (`N03_003` ends with 「郡」)
+- **Display**: Depends on whether the name collides
+  - **No collision**: Town or village name only (concise form)
+  - **Collision**: District name followed by the town or village name
+- **Examples**:
+  - 新潟県, 岩船郡, 関川村 → 「関川村」 (concise form)
+  - 北海道, 古宇郡, 泊村 → 「古宇郡泊村」 (avoids confusion with 国後郡泊村)
 
-- **Condition**: `N03_003` has a value while `N03_004` and `N03_005` are empty
-- **Display**: Use the district name as-is
-- **Usage**: A fallback for rare polygons that do not include lower administrative levels
+> [!NOTE]
+> The project automatically detects whether several districts within the same prefecture share a town or village name. The district prefix is added only when such a collision exists.
+
+**How collisions are judged**:
+- 「釧路市」 and 「釧路町」 do **not** count as a collision (one is a city, the other a town)
+- 「古宇郡泊村」 and 「国後郡泊村」 **do** count as a collision (both are 泊村)
+
+### 5. Upper-Level Division Name Only (Fallback Rule)
+
+- **Applies when**: The record provides only an upper-level division name other than a district, with no municipality (`N03_004` and `N03_005` are both empty, and `N03_003` has a value that does not end with 「郡」)
+- **Display**: The upper-level division name
+- **Note**: This is a fallback for incomplete data. The current N03 dataset contains no such records (zero rows in `meta_data/jp_geodata.csv`)
+
+> [!NOTE]
+> If the upper-level name ends with 「郡」 and the municipality is empty, the record falls into the district-governed rule (rule 4) first. `admin_2` is then empty, so the translation stage drops the record and it never reaches Immich.
 
 ## Processing Details
 
-### Centroid Calculation
+### Coordinate Calculation
 
-- Uses adaptive UTM zones combined with an Albers projection to compute centroids
-- Coordinates are converted back to WGS84 and rounded to eight decimal places
+- Compute an approximate centroid in the Japan Albers equal-area projection (`+proj=aea +lat_1=30 +lat_2=45 +lat_0=37.5 +lon_0=138`) to pick the applicable UTM zone
+- Compute the polygon centroid in that UTM zone, then convert back to WGS84 for the output latitude and longitude
+- A MultiPolygon yields a single merged centroid; no per-part splitting
+- Coordinates are rounded to 8 decimal places, and trailing zeros are stripped in the CSV, so a value may show fewer than 8 digits
 
 ### Data Cleaning and Output
 
-- Trims empty strings and `None` values from `N03_003`, `N03_004`, and `N03_005` before applying the rules
-- Uses the shared Rust output path for sorting and standardized columns
+- Empty strings, `None`, and `nan` in `N03_003`, `N03_004`, and `N03_005` are all treated as empty, keeping the rule conditions consistent
+- Features with all three fields empty are dropped and produce no output row
+- Sorting and standardized columns come from the shared Rust output path
 
-## Processing Workflow
-
-```bash
-# 1. Download the dataset
-#    Visit https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2025.html
-#    and download the "Administrative boundary data (world geodetic system)" package.
-
-# 2. Run the extraction script
-cargo run --release -- extract --country JP \
-  --shapefile geoname_data/N03-20250101_GML/N03-20250101.shp \
-  --output meta_data/jp_geodata.csv
-```
-
-Refer to the [developer workflow](../../README.en.md#developer-local-data-processing) for end-to-end guidance.
+For the commands that reproduce this workflow locally, see [Local Data Processing](development.md#2-extract-raw-geographic-data).
 
 ## Reference Examples
 
-| Category | N03_001 | N03_003 | N03_004 | N03_005 | admin_2 | admin_3 | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Standard city | 北海道 |  | 釧路市 |  | 釧路市 |  | City not governed by a district |
-| Direct-controlled village | 東京都 |  | 小笠原村 |  | 小笠原村 |  | Island directly managed by 東京都 |
-| Special ward | 東京都 |  | 渋谷区 |  | 渋谷区 |  | Tokyo special ward |
-| Designated city ward | 神奈川県 | 横浜市 | 横浜市 | 中区 | 横浜市 | 中区 | admin_2 shows city name, admin_3 preserves ward name |
-| District town (unique) | 新潟県 | 岩船郡 | 関川村 |  | 関川村 |  | Name is unique, no district prefix |
-| District village (duplicate) | 北海道 | 古宇郡 | 泊村 |  | 古宇郡泊村 |  | Prefix resolves duplicate with 国後郡泊村 |
+The table below shows real processing results for each administrative type:
+
+| Administrative type | N03_001 | N03_003 | N03_004 | N03_005 | admin_2 | admin_3 | Notes |
+|---------------------|---------|---------|---------|---------|---------|---------|-------|
+| Ordinary city | 北海道 | (empty) | 釧路市 | (empty) | 釧路市 | (empty) | City not governed by a district, so the city name is used directly |
+| Prefecture-governed village | 東京都 | (empty) | 小笠原村 | (empty) | 小笠原村 | (empty) | Remote island administered directly by the metropolis |
+| Special ward | 東京都 | (empty) | 渋谷区 | (empty) | 渋谷区 | (empty) | One of Tokyo's 23 special wards |
+| Designated city ward | 神奈川県 | (empty) | 横浜市 | 中区 | 横浜市 | 中区 | `N03_003` plays no part in the decision; `admin_2` holds the city name, `admin_3` keeps the ward name |
+| District-governed village (no collision) | 新潟県 | 岩船郡 | 関川村 | (empty) | 関川村 | (empty) | Concise form |
+| District-governed village (collision) | 北海道 | 古宇郡 | 泊村 | (empty) | 古宇郡泊村 | (empty) | District prefix added automatically when districts share a name |
 
 ## References
 
-- [National Land Numerical Information Download Service](https://nlftp.mlit.go.jp/ksj/)
+- [国土数値情報ダウンロードサービス](https://nlftp.mlit.go.jp/ksj/)
 - [GeoNames Administrative Division Codes](https://www.geonames.org/export/codes.html)

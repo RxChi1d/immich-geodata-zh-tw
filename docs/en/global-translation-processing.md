@@ -1,60 +1,64 @@
 # Global (Non-Handler Region) Translation Processing
 
 > This document explains how the project translates place names for
-> "non-handler countries" (every region except Taiwan, Japan, South Korea,
-> Thailand, and Indonesia). It is the detailed version of the "Other
-> regions" section in the README.
+> "non-handler countries" — every region except Taiwan, Japan, South Korea,
+> Thailand, and Indonesia. It is the detailed version of the "Other regions"
+> optimization section in the README.
 
 ## Background: Two Translation Paths
 
-Place-name translation is split into two independent paths based on the data
+Place-name translation splits into two independent paths based on the data
 source:
 
-- **Handler countries (TW / JP / KR / TH / ID; the list is derived from the
-  extract handlers as the single source of truth)**: Built around official
-  boundary handlers and the Wikidata translator (name search → zh / zh-tw /
-  zh-hant labels → P131 administrative-parent chain validation for
-  disambiguation → OpenCC simplified-to-traditional and Taiwan-usage
-  conversion). This path is out of scope for this document.
+- **Handler countries (TW / JP / KR / TH / ID; the extract handlers are the
+  single source of truth for this list)**: Built around official boundary
+  data handlers, with the Wikidata translator (name search → zh / zh-tw /
+  zh-hant label → P131 administrative-parent chain validation for
+  disambiguation → OpenCC character-level simplified-to-traditional
+  conversion) producing high-quality Traditional Chinese translations.
+  Taiwan usage comes from Wikidata zh-tw labels and the handler's built-in
+  mapping tables; OpenCC only handles character-level conversion. This path
+  is out of scope for this document.
 - **Global non-handler regions (translate stage)**: The production release
-  only runs the handler countries above; the **LocationIQ flow is not
-  part of the production release**. As a result, the cities500 and admin1
-  records for every other country derive their Chinese names solely from the
-  zh-family language rows in GeoNames alternateNames and the embedded
-  Chinese names in cities500, converted with OpenCC. **Wikidata is not
-  involved at all.**
+  runs only the handler countries above — the **LocationIQ flow is not part
+  of the production release**. As a result, the cities500 and admin1 records
+  for every other country originally derive their Chinese names solely from
+  the zh-family language rows in GeoNames alternateNames and the embedded
+  Chinese names in cities500, converted with OpenCC. **Wikidata plays no
+  part at all.**
 
 ### The Actual Baseline for Non-Handler Regions
 
 Because of the above, translation coverage for non-handler regions is far
-lower than intuition suggests. The full (non-sampled) measurements taken in
-2026-06 are:
+lower than intuition suggests. Full (non-sampled) measurements from 2026-06:
 
-| Level | Records | Currently has Chinese name (baseline) |
+| Level | Records | Currently has a Chinese name (baseline) |
 |---|---:|---:|
 | cities500 (non-handler, global) | 229,760 | 46,290 (20.1%) |
 | admin1 (non-handler, global) | 3,720 | 2,211 (59.4%) |
 
 This means the vast majority of global city records fall back to English
-without an additional translation source. That is exactly why this project
-introduces the NAER official translations as a reinforcement layer. See the
-full research and measurements in
+without an additional translation source, which is exactly why this project
+introduces the official NAER translations as a reinforcement layer. The
+table records an offline measurement and is not verified automatically by
+the code; recomputing it requires re-running the prepare and translate
+stages. For the full research and measurement process, see
 [Evaluation of Alternative Chinese Place-Name Translation Sources](../research/chinese-translation-sources.md)
-(in Traditional Chinese).
+(Chinese).
 
 ## Translation Priority
 
-For non-handler regions, the translate stage decides the translation source
-by the priority below. NAER's insertion point depends on its **confidence
-tier**: high confidence may overwrite existing translations, medium
-confidence only fills gaps when no other source yields a result, and low
-confidence is not used at all.
+For non-handler regions, the translate stage picks a translation source by
+the priority below. NAER enters at a different point depending on its
+**confidence tier**: high confidence may override an existing translation,
+medium confidence only fills gaps when no other source yields a result, and
+low confidence is not used at all.
 
 ### cities500 (City Level)
 
 1. **NAER official translation (high confidence)**: inserted at the head of
-   the priority chain as an overwrite layer
-2. meta_data metadata (existing; the production `meta_data/` only contains
+   the priority chain as an override layer
+2. meta_data metadata (existing; the production `meta_data/` contains only
    handler-country files, so this is a no-op for non-handler records)
 3. GeoNames alternateNames zh-family + OpenCC (existing)
 4. Embedded Chinese alternatenames (existing)
@@ -64,30 +68,46 @@ confidence is not used at all.
 
 ### admin1 (First-Level Administrative Division)
 
-The first version takes a conservative approach: NAER **only fills gaps and
-never overwrites**:
+The first version of admin1 takes a conservative approach: NAER **only fills
+gaps and never overrides**:
 
 1. GeoNames alternateNames (existing; priority unchanged)
 2. **NAER lookup**: used only when no existing source provides a Chinese name
 3. Fallback (existing)
 
+admin1 matching conditions differ from the city path, and the confidence
+tier table below does not apply here:
+
+- A candidate's country code must exactly match the country prefix of the
+  admin1 code; candidates with an empty country code are not accepted.
+- The average coordinates of the cities500 records under the admin1 serve as
+  an approximate centroid, and the distance threshold is relaxed to 300 km.
+- Within tolerance, if the second-nearest candidate carries a different
+  translation than the nearest one and their distances to the query point
+  differ by less than 5 km, the
+  gap-fill is abandoned outright.
+- `feature_hint` is not read and no confidence tier is computed — this path
+  only ever fills gaps, so down-weighting would make no difference to the
+  result.
+- Finding no country-matching candidate is normal (most admin1 units are
+  absent from the NAER dictionary) and is not counted as a rejection.
+
 ### Confidence Tiers
 
-After a NAER hit, the confidence tier is determined by the table below
-(transcribed from design spec section 4.3):
+After a NAER hit on cities500, the confidence tier is determined by the
+table below (implemented in `src/pipeline/naer_lookup.rs`):
 
 | Tier | Conditions (all must hold) | Permission |
 |---|---|---|
-| High | Matching country code, distance ≤ 15 km, `feature_hint=false`, no ambiguity (unique translation within tolerance, or nearest vs. second-nearest differ by ≥ 5 km) | Overwrite existing translation + fill gaps |
-| Medium | A hit with any weakening signal: empty country code, `feature_hint=true`, near-distance ambiguity | Fill gaps only (used only when no existing source has a Chinese name) |
-| Low | Mismatching country code, distance > 15 km, malformed input | Reject |
+| High | Matching country code, distance ≤ 15 km, `feature_hint=false`, no ambiguity (a unique translation within tolerance, or the nearest and second-nearest distances differ by at least 5 km) | Override an existing translation + fill gaps |
+| Medium | A hit with any weakening signal: no country-matching candidate so an empty-country candidate was used instead, `feature_hint=true`, near-distance ambiguity | Fill gaps only (used only when no existing source has a Chinese name) |
+| Low | Country code mismatch with no empty-country candidate to demote to, no candidate within tolerance (distance > 15 km), or malformed unparseable coordinates | Reject |
 
-- For the first version, admin1 is always capped at "medium" (fill gaps
-  only); overwrite will be reconsidered once the quality report quantifies
-  the mismatch rate.
+- The first version of admin1 always fills gaps only; overriding will be
+  reconsidered once a quality report quantifies the mismatch rate.
 - Rationale for the tolerance constant `NAER_CITY_DISTANCE_KM = 15.0`: NAER
   coordinate precision is ±1 arc-minute (about 2 km), plus a buffer for
-  city-centroid offset; in measurements the U.S. mismatch rate approaches
+  city-centroid offset; measurements show the U.S. mismatch rate approaching
   zero under this tolerance.
 
 ## NAER Data Source and License
@@ -98,93 +118,99 @@ After a NAER hit, the confidence tier is determined by the table below
 - **License**: Open Government Data License, Version 1.0 (OGDL 1.0),
   compatible with CC BY 4.0; distributions must retain attribution (see
   [NOTICE.md](../../NOTICE.md))
-- **Data scale**: 64,487 records covering 700 countries/regions
-- **Vendored file**: the cleaned 6-column CSV is stored at
-  `naer/naer_place_names.csv`; field descriptions are in
+- **Data scale**: the raw dataset holds 64,487 records covering 700
+  countries/regions (offline measurement; see the
+  [research document](../research/chinese-translation-sources.md)
+  (Chinese)); after `naer-prepare` cleanup, the vendored file holds 64,075
+  records. The 412-record difference consists of rows dropped for
+  unparseable coordinates, an empty coordinate column, or an unusable name
+- **Vendored file**: the cleaned 6-column CSV lives at
+  `naer/naer_place_names.csv`, covering 192 ISO 3166-1 alpha-2 country
+  codes, plus 1,798 records whose country name could not be mapped
+  (`country_code` left empty); field descriptions are in
   [`naer/README.md`](../../naer/README.md)
 
-## Why NAER
+## Why NAER (Research Summary)
 
-For non-handler regions (the majority of release records), NAER is the
+For non-handler regions — the vast majority of release records — NAER is the
 reinforcement source with the largest benefit. Relative to the GeoNames
-alternateNames baseline, NAER provides:
+alternateNames baseline, NAER provides (2026-06 offline measurement, not
+verified by the code):
 
 - **cities500**: +16,380 gap fills (+7.1 pp, +35% relative), raising
   coverage from 20.1% to 27.3%
 - **admin1**: +494 gap fills (+13.3 pp), raising coverage from 59.4% to
   72.7%; recoveries include high-visibility entries such as
   `Dubai → 杜拜` and `Andorra la Vella → 老安道爾`
-- **Quality-overwrite potential**: another 9,415 cities500 records already
+- **Quality-override potential**: another 9,415 cities500 records already
   have a Chinese name (mostly from `zh` simplified rows mechanically
   converted by OpenCC) for which NAER also has an official Taiwan
-  translation, available as a quality overwrite
+  translation, available as a quality override
 
 Reasons for choosing NAER over the other candidate sources:
 
-- **GeoNames `zh-Hant` is insufficient as a traditional-Chinese gap-fill
+- **GeoNames `zh-Hant` is insufficient as a Traditional Chinese gap-fill
   source**: within global cities500 there are only 1,338 `zh-Hant` rows and
-  283 `zh-TW` rows; even the best-filled country (the U.S.) reaches only
+  283 `zh-TW` rows; even the best-filled country, the U.S., reaches only
   3.3%.
-- **OSM `name:zh-Hant` excluded for licensing**: the ODbL share-alike
-  clause would make bulk-extracted translations a Derivative Database,
-  forcing the same license on distribution, which conflicts with this
-  project's distribution model; furthermore, its `name:zh-Hant` fill rate
-  for foreign place names is sparse.
-- **Unicode CLDR excluded for scope**: it only covers country/region-level
-  display names with no city-level gazetteer.
+- **OSM `name:zh-Hant` excluded for licensing**: the ODbL share-alike clause
+  would make bulk-extracted translations a Derivative Database, forcing the
+  same license on distribution, which conflicts with this project's
+  distribution model; its `name:zh-Hant` fill rate for foreign place names
+  is also sparse.
+- **Unicode CLDR excluded for scope**: it covers only country/region-level
+  display names, with no city-level gazetteer.
 - **NAER Terminology Net (樂詞網) excluded for licensing**: all rights
   reserved, not open.
 
-NAER's core advantage is that it is an official, peer-reviewed translation
-standard (vetted by the former National Institute for Compilation and
-Translation across more than 220 review meetings), with quality superior to
+NAER's core advantage is that it is an official reviewed translation
+standard — vetted by the former National Institute for Compilation and
+Translation across more than 220 review meetings — and its quality beats
 GeoNames' mechanical simplified-to-traditional conversion: suspected
 simplified characters account for only 0.03%, and the Chinese-name column
-has no empty values. See the full evaluation in the
-[research document](../research/chinese-translation-sources.md) (in
-Traditional Chinese).
+has no empty values. For the full evaluation, see the
+[research document](../research/chinese-translation-sources.md) (Chinese).
 
-## Why Runtime Join Instead of a Precomputed Crosswalk
+## Why a Runtime Join Instead of a Precomputed Crosswalk
 
-NAER translations are joined at the translate stage via a **runtime dynamic
+NAER translations join in at the translate stage through a **runtime dynamic
 join** (name normalization + coordinate disambiguation), rather than a
 precomputed NAER ↔ GeoNames geonameid crosswalk file. Reasons:
 
 - Under this project's nightly auto-update, GeoNames cities500 can change
-  daily; a precomputed crosswalk would continuously go stale and require an
-  extra synchronization mechanism.
+  daily; a precomputed crosswalk would go stale continuously and would need
+  an extra synchronization mechanism.
 - A runtime join re-matches against the current cities500 on every release,
-  automatically adapting to newly added or changed cities.
+  adapting automatically to new or changed cities.
 - The vendored `naer_place_names.csv` is zero-coupled to GeoNames (it
-  contains no GeoNames data), is reviewable via git diff, and requires no
+  contains no GeoNames data), is reviewable via git diff, and needs no
   GeoNames-version dependency when updated.
 
 ## Why admin1 Only Fills Gaps
 
-admin1 is a high-visibility level (every photo's administrative-region
-display relies on it), and the project has **not yet quantified** NAER's
-overwrite mismatch rate at admin1. Enabling overwrite without a measured
-mismatch rate carries more risk than benefit: if NAER overwrites a correct
+admin1 is a high-visibility level — every photo's administrative division
+display uses it — and this project has **not yet quantified** NAER's
+override mismatch rate at admin1. Enabling overrides without a measured
+mismatch rate carries more risk than benefit: if NAER overrides a correct
 GeoNames translation and causes a regression, the impact is broad and hard
 to notice.
 
-In addition, admin1 coordinate disambiguation can only approximate a
+Furthermore, admin1 coordinate disambiguation can only approximate a
 centroid from the average coordinates of the cities500 cities under that
-admin1 (`admin1CodesASCII.txt` itself has no coordinates), and this
-approximation is affected by uneven city distribution (islands, crossing
-the date line). In gap-fill mode, even a failed disambiguation merely skips
-the fill and never corrupts an existing translation, so the mismatch cost is
-limited.
+admin1 (`admin1CodesASCII.txt` itself carries no coordinates), and that
+approximation suffers from uneven city distribution (outlying islands,
+crossing the date line). In gap-fill mode, a failed disambiguation merely
+abandons the fill and never damages an existing translation, so the cost of
+a mismatch is limited.
 
-For these reasons the first version always fills gaps only and never
-overwrites; high-confidence overwrite will be reconsidered after the first
-quality report quantifies the mismatch rate.
+The first version therefore always fills gaps and never overrides;
+high-confidence override will be reconsidered after the first quality report
+quantifies the mismatch rate.
 
 ## Vendored File Update Flow
 
-Downloading and cleaning the raw NAER data is an **offline path** that is
-not on the release path; it is run manually only when the data source is
-updated:
+Downloading and cleaning the raw NAER data is an **offline path**, not part
+of the release path; run it manually only when the data source is updated:
 
 ```bash
 # 1. Manually download the latest CSV for dataset 15211 from
@@ -203,46 +229,58 @@ cargo run --release -- naer-prepare \
 - **Coordinate parsing chain**: HTML entity decoding → tag removal →
   apostrophe unification → degree-minute to decimal → range validation
   (|lat| ≤ 90, |lon| ≤ 180). Measured success rate is about 99.4%.
-- **Name normalization** (`name_norm`, the match key): strip `[...]` /
-  `(...)` annotations, take the segment before the comma, NFKD diacritic
-  folding, lowercase.
-- **Chinese-name cleanup** (`name_zh`): strip parenthetical annotations
-  (`科魯涅(科倫納)` → `科魯涅`).
+- **Name normalization** (`name_norm`, the match key): strip parenthetical
+  annotations (round brackets, full-width brackets, and square brackets
+  including `〔〕`), take the segment before the comma, NFKD diacritic
+  folding, lowercase, collapse runs of whitespace.
+- **Chinese-name cleanup** (`name_zh`): strip the same set of parenthetical
+  annotations (`科魯涅(科倫納)` → `科魯涅`).
 - **Country-code mapping** (`country_code`): mapped to ISO 3166-1 alpha-2
   via the i18n-iso-countries zh-tw table plus an alias table (e.g.
-  `韓國→KR`, `剛果{金夏沙}→CD`); unmapped values are left empty (downgraded
-  to medium confidence per the tiers, gap-fill only).
+  `韓國→KR`, `剛果{金夏沙}→CD`); unmapped values are left empty (demoted to
+  medium confidence per the tiers, gap-fill only).
 - **Natural-feature heuristic** (`feature_hint`): set to `true` when the
   English name contains a feature marker (`R.`, `Bay`, `Mt.`, `Cape`,
   `Island`, etc.) or the Chinese translation ends with a landform suffix
-  (river / bay / island / mountain / lake / cape / strait, etc.). It is a
-  down-weighting signal only and never drops a row, to avoid mistakenly
-  killing suffix-collision cities such as `San Francisco → 舊金山`.
+  (river / bay / island / mountain / lake / cape / strait, etc.). It only
+  drives down-weighting and never drops a row: a city whose suffix collides
+  with a landform, such as `San Francisco → 舊金山`, is still marked `true`
+  but is merely demoted to medium confidence (gap-fill only) rather than
+  disappearing from the dictionary.
 
-Failed-row handling: rows with unparseable coordinates are **dropped** (a
-row that cannot take part in coordinate disambiguation cannot be used
-safely); rows with an unmapped country are **kept** (country_code left
-empty).
+Failed-row handling:
+
+- **Dropped**: unparseable coordinates (`coordinate_failures`), an empty
+  coordinate column (`coordinate_empty`), and unusable names — `name_norm`
+  or `name_zh` empty after normalization, or `name_zh` containing a comma
+  (both count toward `name_failures`).
+- **Kept**: rows whose country name could not be mapped (`country_code` left
+  empty); rows whose coordinates parsed successfully but resolve to (0,0)
+  only count toward `suspicious_zero_coordinates` and are not dropped.
+
+Output is sorted by column to ease git diff review, and rows sharing a
+`(name_norm, country_code)` that sit less than 5 km apart yet carry
+different translations are detected and counted in the report's `conflicts`.
 
 ## Reading the Quality Report
 
-The translate stage emits a single-line NAER statistics log (one of the
-acceptance gates), rendered as space-separated `key=value` pairs for easy
-grep/awk parsing. The full set of fields:
+The translate stage emits a single-line NAER statistics log — one of the
+acceptance gates — as space-separated `key=value` pairs for easy grep/awk
+parsing. The full set of fields:
 
 **Adoption counts**
 
 - `city_fill`: cities with no existing Chinese name, filled by NAER.
-- `city_override`: cities with an existing name, overwritten by a
+- `city_override`: cities with an existing Chinese name, overridden by a
   high-confidence NAER match.
-- `city_demoted_kept_existing`: cities with an existing name where the NAER
-  match was medium-confidence, so the existing name was kept.
+- `city_demoted_kept_existing`: cities with an existing Chinese name where
+  the NAER match was medium confidence, so the existing name was kept.
 - `admin1_fill`: admin1 units with no existing Chinese name, filled by NAER.
 
 **Rejection counts (categorized by reason)**
 
-- `city_rejected_distance`: candidates existed but all exceeded the 15 km
-  tolerance.
+- `city_rejected_distance`: candidates existed but all fell outside the
+  15 km tolerance.
 - `city_rejected_country`: candidates existed but none matched the country
   code, and no empty-country candidate was available to demote to.
 - `admin1_rejected_no_centroid`: candidates existed but the admin1 has no
@@ -250,7 +288,7 @@ grep/awk parsing. The full set of fields:
 - `admin1_rejected_distance`: candidates existed but centroid validation
   exceeded the 300 km threshold for all of them.
 - `admin1_rejected_ambiguous`: distance passed, but a near-distance
-  candidate carried a distinct translation, so the centroid could not
+  candidate carried a different translation and the centroid could not
   disambiguate.
 
 > Note: handler-country skips and "name with no candidate at all" are
@@ -262,21 +300,23 @@ matches, in km)**
 - city: `city_dist_0_1km` ([0,1)), `city_dist_1_5km` ([1,5)),
   `city_dist_5_15km` ([5,15]).
 - admin1: `admin1_dist_0_1km` ([0,1)), `admin1_dist_1_5km` ([1,5)),
-  `admin1_dist_5km_plus` (>=5; admin1 centroids are approximations with a
+  `admin1_dist_5km_plus` (≥5; admin1 centroids are approximations with a
   wider tolerance, so anything beyond 5 km falls into this bucket to share
   the same summary structure).
 
-During acceptance, compare against the expected order of magnitude from
-measurements:
+For acceptance, compare against the expected order of magnitude from the
+offline measurements (same source as the section above; not yet calibrated
+against a quality report log — switch to actual values once the first report
+exists):
 
 - cities gap fills ≈ 16,380
-- cities overwrites, upper bound ≈ 9,415 (the actual value after
-  confidence-tier downgrades is lower; the first quality report establishes
-  the baseline)
+- cities overrides, upper bound ≈ 9,415 (the actual value after
+  confidence-tier demotion is lower; the first quality report establishes the
+  baseline)
 - admin1 gap fills ≤ 494 (name-matching estimate; lower after country-code
   and centroid validation)
 
-If the actual numbers deviate from the orders of magnitude above (for
-example, gap fills far below expectation or overwrites exploding), that is a
-quality warning. Inspect the vendored file, normalization logic, or
-confidence-tier conditions for anomalies instead of passing it through.
+If the actual numbers deviate from these magnitudes — gap fills far below
+expectation, or overrides exploding — treat it as a quality warning and
+inspect the vendored file, the normalization logic, or the confidence-tier
+conditions for anomalies instead of passing the release through.
