@@ -1,14 +1,14 @@
 # 中文地名翻譯來源替代方案評估
 
-> **文件定位**：本文件為翻譯來源強化**前**的研究與實測紀錄（snapshot），記錄
-> 成文時（2026-06）的評估數據與決策依據，不隨後續實作同步更新。現行翻譯邏輯
-> 請以 `src/pipeline/translate.rs` 與 `src/wikidata/` 實作為準。
+> **文件狀態：歷史紀錄**
+> 本文記錄當時的研究與決策，不保證與目前實作同步。現行行為請參閱[全球翻譯處理](../zh-tw/global-translation-processing.md)。
+> 成文時間為 2026-06，記錄的是翻譯來源強化前的評估數據。
 
 ## 研究背景
 
 現行翻譯分兩條路徑：
 
-- **handler 國家（TW/JP/KR/TH）**：以 Wikidata translator 為核心——以
+- **handler 國家**：KR/TH（現另有 ID）以 Wikidata translator 翻譯；TW 直接使用 NLSC 官方中文名、JP 保留日文原名，兩者不經翻譯。Wikidata 路徑以
   名稱搜尋 Wikidata（`wbsearchentities`）、取得 zh / zh-tw / zh-hant
   label（`wbgetentities`）、以 P131 上級行政區鏈驗證消歧，再經 OpenCC
   做簡繁與臺灣用語轉換。
@@ -155,7 +155,7 @@ cities500 救回幅度最大的國家：英國 +18.2 pp、荷蘭 +14.0 pp、西�
 
 依資料路徑分別評估：
 
-1. **handler 國家（TW/JP/KR/TH）**：Wikidata translator 不可取代
+1. **使用 Wikidata 的 handler 國家（KR/TH，現另有 ID）**：Wikidata translator 不可取代
    （實證確認），且 NAER 對細層級行政區無效（泰國 tambon 救回僅
    1.0%）。**此路徑維持現狀。**
 2. **全球非 handler 資料（release 絕大多數記錄）**：這是 NAER 價值

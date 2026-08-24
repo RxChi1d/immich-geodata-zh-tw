@@ -97,7 +97,7 @@ cargo run --release -- extract --country JP \
   --output meta_data/jp_geodata.csv
 ```
 
-Refer to the [developer workflow](../../README.md#開發者本地資料處理) for end-to-end guidance.
+Refer to the [developer workflow](../../README.en.md#developer-local-data-processing) for end-to-end guidance.
 
 ## Reference Examples
 

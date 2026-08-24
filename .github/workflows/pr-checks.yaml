@@ -88,6 +88,27 @@ jobs:
           echo "::error::meta_data/*_geodata.csv changed without the 'data-update' label. Add the label if this is a deliberate data refresh, otherwise revert these files."
           exit 1
 
+      # Reason: A missing link reference does not fail the release. The
+      # extract-release-notes.sh script silently falls back to a git-derived
+      # compare link, so the mistake only surfaces as a wrong link in the
+      # published notes. CI is the only thing that catches it.
+      - name: CHANGELOG link references are complete
+        run: |
+          fail=0
+          versions="$(sed -n 's/^## \[\([^]]*\)\].*/\1/p' CHANGELOG.md | grep -v '^未發佈版本$')"
+          while read -r v; do
+            [ -n "$v" ] || continue
+            grep -q "^\[${v}\]: " CHANGELOG.md \
+              || { echo "::error::CHANGELOG.md is missing the link reference for [${v}]"; fail=1; }
+          done <<< "$versions"
+
+          latest="$(head -1 <<< "$versions")"
+          grep -q "^\[未發佈版本\]: .*/compare/v${latest}\.\.\.HEAD$" CHANGELOG.md \
+            || { echo "::error::[未發佈版本] should compare against v${latest}...HEAD"; fail=1; }
+
+          [ "$fail" -eq 0 ] && echo "All CHANGELOG link references are present."
+          exit "$fail"
+
       # Reason: Code comments are being migrated to English. Warn instead of
       # failing while the existing Chinese comments are still being converted;
       # tighten this to an error once the migration is complete.

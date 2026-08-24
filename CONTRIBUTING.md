@@ -26,7 +26,7 @@ cargo test
 - **Commit 訊息**：遵循 [Conventional Commits](https://www.conventionalcommits.org/)，第一行 50–72 字元。描述可使用繁體中文、簡體中文或英文。
 - **Pull Request**：標題同樣使用 Conventional Commits 格式，內容依 [PR 模板](.github/pull_request_template.md)填寫。
 
-PR 標題會用於自動分類與產生發布說明，CI 會檢查它是否符合 Conventional Commits 格式。第一行請盡量控制在 72 字元內。
+PR 標題會用於自動分類與產生發布說明，格式不符合 Conventional Commits 時 CI 會擋下合併。第一行請盡量控制在 72 字元內。
 
 ## 撰寫規範
 
@@ -49,7 +49,7 @@ PR 標題會用於自動分類與產生發布說明，CI 會檢查它是否符�
 
 `meta_data/*_geodata.csv` 是由各國官方圖資產生、並由 release workflow 驗證的正式資料，不是可重新產生的建置產物。除了明確的資料更新任務外，請勿刪除、重新產生或正規化這些檔案。
 
-PR 變更到這些檔案時，CI 會檢查是否加上 `data-update` 標籤，以確認這是刻意的資料更新。
+PR 變更到這些檔案時，需加上 `data-update` 標籤以確認這是刻意的資料更新，否則 CI 會擋下合併。
 
 ## 新增支援的國家
 

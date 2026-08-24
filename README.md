@@ -1,568 +1,283 @@
-# Immich 反向地理編碼 - 臺灣特化  
+# Immich 反向地理編碼 - 臺灣特化
 
-> [!IMPORTANT]
-> - 升級提醒：v3.1.0 整合國教院官方譯名優化全球地名翻譯，並新增印尼圖資（繁體中文在地化）；v3.0.0 新增泰國圖資。若您已部署本專案，請在更新後執行「[重新擷取照片中繼資料](#整合式部署推薦方便後續更新)」，以套用最新資料。
+**讓 Immich 的相片地點，用臺灣人習慣的方式顯示。**
 
-> [!NOTE]
-> 支援 Immich v2 與 v3。
+[![最新版本](https://img.shields.io/github/v/release/RxChi1d/immich-geodata-zh-tw?label=最新版本)](https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest)
+[![下載次數](https://img.shields.io/github/downloads/RxChi1d/immich-geodata-zh-tw/release.tar.gz?label=下載次數)](https://github.com/RxChi1d/immich-geodata-zh-tw/releases)
+[![支援版本](https://img.shields.io/badge/Immich-v2%20%7C%20v3-4250af)](https://immich.app/)
+[![授權](https://img.shields.io/badge/授權-GPL--3.0-blue)](LICENSE)
 
 [繁體中文](README.md) | [English](README.en.md)
 
-本專案為 Immich 提供專為臺灣使用者設計的反向地理編碼優化，根據使用者習慣提供自然且準確的地理資訊顯示。
+[Immich](https://immich.app/) 會依照 GPS 座標標示相片的拍攝地點，但它預設的地理資料對臺灣使用者有幾個落差：地名多半是英文或當地拼音，中文搜尋派不上用場；臺灣的部分更是多數縣市名稱從缺，行政區的寫法也和日常慣用的不同；地名的點位稀疏，相片還常被標到鄰近、甚至隔壁的行政區。
 
-目前支援：🇹🇼 **臺灣** | 🇯🇵 **日本** | 🇰🇷 **南韓** | 🇹🇭 **泰國** | 🇮🇩 **印尼** | 🌏 **其他地區中文化**
+本專案重新整理 Immich 使用的地理資料：臺灣、日本、南韓、泰國、印尼改用當地公開的行政區圖資重建地點，其餘地區則補上臺灣慣用的中文譯名。若使用 Docker Compose，安裝只需要在 `docker-compose.yml` 加一行設定。
 
-## 設計理念
-
-本專案以「臺灣使用者體驗」為核心，針對不同地區採用最適合的語言策略：
-
-- **臺灣地區**：使用 NLSC 圖資，解決國家與行政區名稱顯示問題
-- **日本地區**：使用国土数値情報ダウンロードサイト資料，保留日文原名（漢字+假名），符合臺灣使用者閱讀習慣
-- **南韓地區**：使用 admdongkor 專案資料，提供繁體中文翻譯，符合臺灣使用者閱讀習慣
-- **泰國地區**：使用 COD-AB 官方邊界資料，提供 Admin1/Admin2 繁中翻譯，並以官方英文與泰文作為 fallback
-- **印尼地區**：使用 BIG（印尼地理空間資訊局）官方村級圖資，提供 Admin1/Admin2 繁中翻譯，缺中文標籤時回退 BIG 官方印尼文
-- **其他地區**：優先採用國家教育研究院《外國地名譯名》的官方臺灣譯名補洞與升級，其次使用 GeoNames 翻譯，確保資訊可讀性（無對照譯名則回退至英文）
-
-### 使用前後對比
-![使用前後對比](./image/example.png) 
+![使用前後對比](./image/example.png)
 
 ## 目錄
 
-- [Immich 反向地理編碼 - 臺灣特化](#immich-反向地理編碼---臺灣特化)
-  - [設計理念](#設計理念)
-    - [使用前後對比](#使用前後對比)
-  - [目錄](#目錄)
-  - [支援地區與語言策略](#支援地區與語言策略)
-  - [資料來源](#資料來源)
-  - [使用方式](#使用方式)
-    - [整合式部署（推薦，方便後續更新）](#整合式部署推薦方便後續更新)
-    - [手動部署](#手動部署)
-    - [macOS 原生 worker（immich-accelerator）](#macos-原生-workerimmich-accelerator)
-    - [LXC 與裸機](#lxc-與裸機)
-  - [指定特定版本](#指定特定版本)
-  - [行政區優化策略](#行政區優化策略)
-    - [🇹🇼 臺灣地區優化](#-臺灣地區優化)
-    - [🇯🇵 日本地區優化](#-日本地區優化)
-    - [🇰🇷 南韓地區優化](#-南韓地區優化)
-    - [🇹🇭 泰國地區優化](#-泰國地區優化)
-    - [🇮🇩 印尼地區優化](#-印尼地區優化)
-    - [🌏 其他地區優化](#-其他地區優化)
-  - [更新地理資料](#更新地理資料)
-    - [整合式部署](#整合式部署)
-    - [手動部署](#手動部署-1)
-    - [macOS 原生 worker 與其他非容器部署](#macos-原生-worker-與其他非容器部署)
-  - [開發者：本地資料處理](#開發者本地資料處理)
-    - [1. 安裝依賴](#1-安裝依賴)
-    - [官方預編譯 Binary](#官方預編譯-binary)
-    - [本地編譯 Rust CLI](#本地編譯-rust-cli)
-    - [2. 提取原始地理資料](#2-提取原始地理資料)
-      - [臺灣資料提取](#臺灣資料提取)
-      - [日本資料提取](#日本資料提取)
-      - [南韓資料提取](#南韓資料提取)
-      - [泰國資料提取](#泰國資料提取)
-      - [印尼資料提取](#印尼資料提取)
-    - [3. 完整資料處理流程](#3-完整資料處理流程)
-      - [註冊 LocationIQ API](#註冊-locationiq-api)
-      - [執行資料處理](#執行資料處理)
-    - [4. Rust 驗證](#4-rust-驗證)
-  - [致謝](#致謝)
-  - [授權條款](#授權條款)
-  
+- [特色](#特色)
+- [支援地區與語言策略](#支援地區與語言策略)
+- [安裝](#安裝)
+- [更新資料](#更新資料)
+- [常見問題](#常見問題)
+- [資料來源](#資料來源)
+- [延伸閱讀](#延伸閱讀)
+- [問題回報與參與](#問題回報與參與)
+- [致謝](#致謝)
+- [授權條款](#授權條款)
+
+## 特色
+
+- **臺灣採用官方圖資**：以國土測繪中心（NLSC）的村里界圖資重建地名，縣市、鄉鎮市區到村里都依官方資料呈現，並重新計算每個地名的代表座標。
+- **部分國家採用當地圖資**：日本、南韓、泰國、印尼已接入各國公開的行政區邊界資料，同樣重建地名與代表座標，減少相片被標到鄰近行政區。
+- **其他地區補上臺灣譯名**：導入國家教育研究院《外國地名譯名》，讓收錄的地點顯示臺灣慣用的中文名；沒有官方譯名時使用 GeoNames 的中文資料，兩者都沒有時保留原文，因此冷門地點仍可能是英文。
+- **更新只需重啟**：採用自動安裝方式（見[安裝](#安裝)）時，容器每次啟動都會自動取得最新資料，不必手動下載或搬移檔案。
+- **安裝可以還原**：以安裝模式執行腳本時，會在覆寫前備份現有資料，中途失敗會還原成安裝前的狀態；手動下載檔案自行覆蓋則沒有這層保護。
+- **支援多種部署環境**：Docker Compose、macOS 原生 worker、LXC 與裸機皆可安裝。
+
 ## 支援地區與語言策略
 
-本專案根據臺灣使用者的閱讀習慣，對不同地區採用最合適的語言處理策略：
+不同地區採用最適合臺灣使用者閱讀的語言策略：
 
-| 地區 | 語言策略 | 資料來源 | 說明 |
-|------|----------|----------|------|
-| 🇹🇼 臺灣 | 繁體中文（官方名稱） | NLSC 國土測繪中心 | 優化地理資料；解決國家與行政區顯示名稱錯誤的問題 |
-| 🇯🇵 日本 | 日文原名（漢字+假名） | 国土数値情報ダウンロードサイト | 優化地理資料；以日文原名顯示 |
-| 🇰🇷 南韓 | 繁體中文翻譯 | admdongkor（官方行政區邊界） | 優化地理資料；提供繁體中文翻譯 |
-| 🇹🇭 泰國 | 繁體中文翻譯（官方英文 / 泰文 fallback） | COD-AB Thailand | 優化地理資料；以官方行政區邊界計算行政區中心點 |
-| 🇮🇩 印尼 | 繁體中文翻譯（BIG 官方印尼文 fallback） | BIG（Badan Informasi Geospasial） | 優化地理資料；以村級邊界計算行政區中心點，涵蓋 38 省 |
-| 🌏 其他 | 繁體中文翻譯 | 國教院官方譯名 → GeoNames 翻譯 → GeoNames 英文 | 優先使用國教院官方臺灣譯名，若無則使用 GeoNames 資料 |
+| 地區 | 顯示語言 | 地名資料來源 | 詳細說明 |
+| :--- | :--- | :--- | :--- |
+| 🇹🇼 臺灣 | 繁體中文官方名稱 | 內政部國土測繪中心（NLSC） | [詳細說明](docs/zh-tw/taiwan-admin-processing.md) |
+| 🇯🇵 日本 | 日文原名（漢字與假名） | 国土数値情報（日本國土交通省） | [詳細說明](docs/zh-tw/japan-admin-processing.md) |
+| 🇰🇷 南韓 | 繁體中文翻譯 | admdongkor（開源專案，整理南韓行政洞界資料） | [詳細說明](docs/zh-tw/south-korea-admin-processing.md) |
+| 🇹🇭 泰國 | 繁體中文翻譯（官方英文、泰文備用） | COD-AB 泰國行政區邊界（聯合國 OCHA） | [詳細說明](docs/zh-tw/thailand-admin-processing.md) |
+| 🇮🇩 印尼 | 繁體中文翻譯（官方印尼文備用） | 印尼地理空間資訊局（BIG） | [詳細說明](docs/zh-tw/indonesia-admin-processing.md) |
+| 🌏 其他地區 | 繁體中文翻譯（無譯名時保留原文） | 國教院《外國地名譯名》、GeoNames | [詳細說明](docs/zh-tw/global-translation-processing.md) |
 
-> **為什麼日本保留日文？**
-> 臺灣使用者普遍熟悉日文漢字與假名的組合，「横浜市」與「橫濱市」相比不容易造成辨識困難，「うるま市」亦不會影響普遍臺灣用戶的理解。
+日本地區直接使用官方圖資的日文原名，不另做中文轉寫。日文漢字地名與中文寫法多半只差字形，例如「横浜市」與「橫濱市」。
 
-## 資料來源
+## 安裝
 
-本專案使用的地理數據主要來自以下來源：
+本專案支援 Immich v2 與 v3。請先確認 Immich 的部署方式，再選擇對應的安裝方法：
 
-1.  **GeoNames** ([geonames.org](https://www.geonames.org/))
-    - **授權**: Creative Commons Attribution 4.0 International (CC-BY 4.0)
-    - **用途**: 作為全球地理位置的基礎數據庫
-2.  **OpenStreetMap** (透過 LocationIQ)
-    - **授權**: Open Database License (ODbL) 1.0
-    - **用途**: 透過 LocationIQ API 取得臺灣、日本、南韓、泰國、印尼以外地區的反向地理編碼資料
-    - **聲明**: Data © OpenStreetMap contributors, ODbL 1.0
-3.  **中華民國國土測繪中心 (NLSC)**
-    - **來源**: [國土測繪中心開放資料平台](https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx)
-    - **資料集**: 村(里)界 (TWD97經緯度), 版本 1140620
-    - **授權**: 政府資料開放授權條款-第1版
-    - **用途**: 作為臺灣地區村里界線及行政區名稱的主要數據源，確保資料的準確性與權威性
-4.  **国土数値情報ダウンロードサイト**
-    - **來源**: [国土数値情報ダウンロードサービス](https://nlftp.mlit.go.jp/ksj/)
-    - **資料集**: 行政区域データ（世界測地系）
-    - **授權**: 日本政府公開資料
-    - **用途**: 作為日本地區行政區邊界與名稱的主要數據源
-5.  **admdongkor**
-    - **來源**: [admdongkor](https://github.com/vuski/admdongkor)
-    - **資料集**: 南韓官方行政區邊界資料（GeoJSON 格式）
-    - **授權**: 無額外限制（作者建議標示出處，詳見 [NOTICE.md](NOTICE.md)）
-    - **用途**: 作為南韓地區行政區邊界與名稱的主要數據源
-6.  **Thailand COD-AB**
-    - **來源**: [HDX Thailand Subnational Administrative Boundaries](https://data.humdata.org/dataset/cod-ab-tha)
-    - **資料集**: Thailand administrative level 0-3 boundaries (COD-AB)
-    - **授權**: Creative Commons Attribution for Intergovernmental Organisations (CC BY-IGO)
-    - **用途**: 作為泰國地區行政區邊界與名稱的主要數據源
-7.  **印尼地理空間資訊局（BIG，Badan Informasi Geospasial）**
-    - **來源**: BIG 官方 ArcGIS REST FeatureServer（desa 村級圖徵服務）
-    - **資料集**: 印尼行政區 desa（村級）邊界，版本 TASWIL20230928，含 38 省全量資料
-    - **授權**: 印尼官方公開地理資料（本專案僅作衍生加工輸入，不散布原始向量圖資）
-    - **用途**: 作為印尼地區行政區邊界與名稱的主要數據源
-8.  **國家教育研究院《外國地名譯名》**
-    - **來源**: [政府資料開放平臺 dataset 15211](https://data.gov.tw/dataset/15211)
-    - **授權**: 政府資料開放授權條款-第1版
-    - **用途**: 全球非 handler 地區的官方臺灣譯名補洞與覆寫
-9.  **其他參考資料**
-    - **中華民國經濟部國際貿易署 & 中華民國外交部**: 作為部分國家/地區中文譯名的參考來源
+| 部署方式 | 安裝方法 |
+| :--- | :--- |
+| Docker Compose（含 Portainer、UnRAID 等） | [整合式部署](#整合式部署) 或[手動部署](#手動部署) |
+| macOS 原生 worker（immich-accelerator） | [非容器部署](#非容器部署) |
+| LXC、裸機等自行安裝的環境 | [非容器部署](#非容器部署) |
 
-> [!NOTE]
-> 完整的資料來源聲明與授權資訊請參閱 [NOTICE.md](NOTICE.md)。
+### 整合式部署
 
-> [!NOTE]
-> 由於 Immich 的反向地理解析功能基於其載入的資料庫，並採用最近距離原則匹配地名，部分結果可能無法完全精確，或與預期不同。例如：
-> - 邊界附近的座標可能被判定為鄰近的行政區
-> - 某些小型島嶼或特殊地理位置可能無法精確對應
+容器每次啟動時自動下載並安裝最新資料，後續更新只需重啟容器，適合多數使用者。
 
-## 使用方式
+1. **修改 `docker-compose.yml`**
 
-本專案支援以下兩種部署方式：  
+   在 `immich_server` 服務內新增 `entrypoint` 設定：
 
-1. 整合式部署（適用於 Immich 的 docker-compose 部署，可確保容器啟動時自動載入最新的臺灣特化資料）。
-
-2. 手動部署（適用於自訂部署環境，可手動下載並配置特化資料）。
-
-### 整合式部署（推薦，方便後續更新）
-
-1. **修改 `docker-compose.yml` 配置**  
-   在 `immich_server` 服務內新增 `entrypoint` 設定，使容器啟動時自動下載最新地理資料：  
-   ```yaml  
+   ```yaml
    services:
-     immich_server:
-      container_name: immich_server
+     immich-server:
+       container_name: immich_server
 
-      # 其他配置省略
+       # 其他設定省略
 
-      entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install && exec start.sh" ]
-   ```  
-   > [!NOTE]
-   > - `entrypoint` 會在容器啟動時先執行本專案的 `update_data.sh` 腳本，自動下載並配置臺灣特化資料，隨後執行 Immich 伺服器的 `start.sh` 啟動服務。
-   > - 整合式部署也支援指定特定版本下載，詳情請參考 [指定特定版本](#指定特定版本) 章節。
+       entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install && exec start.sh" ]
+   ```
 
-2. **重啟 Immich**  
-   執行以下命令以重啟 Immich： 
-   ```bash  
-   # 如果使用 docker-compose 部署
-   docker compose down && docker compose up
-   ```  
-   - 啟動後，檢查日誌中是否顯示 `10000 geodata records imported` 等類似訊息，確認 geodata 已成功更新。  
-   - 若未更新，請修改 `geodata/geodata-date.txt` 為一個更新的時間戳，確保其晚於 Immich 上次加載的時間。 
-  
-3. **重新提取照片元數據**  
-   登錄 Immich 管理後台，前往 **系統管理 > 任務**，點擊 **提取元數據 > 全部**，以觸發照片元數據的重新提取。完成後，所有照片的地理資訊將顯示為中文。  
-   新上傳的照片無需額外操作，即可直接支援中文搜尋。  
+   請把 `entrypoint` 這一行加進**既有的** `immich-server` 服務底下，不要新增一個服務。
+
+   容器啟動時會先執行本專案的 `update_data.sh` 下載並安裝臺灣特化資料，接著執行 Immich 的 `start.sh` 啟動服務。
+
+   > [!IMPORTANT]
+   > 指令結尾必須是 `exec start.sh`。寫成 `exec /bin/bash start.sh` 會使 Immich v1.142.0 以後的版本無法判斷自身路徑，導致容器不斷重啟。
+
+2. **重啟 Immich**
+
+   ```bash
+   docker compose down && docker compose up -d
+   ```
+
+   啟動後檢查日誌是否出現 `10000 geodata records imported` 之類的訊息，確認資料已匯入。
+
+3. **重新擷取照片中繼資料**
+
+   登入 Immich 後前往 **系統管理 > 任務**，點擊 **提取中繼資料 > 全部**。完成後既有相片會套用新的地理資訊，之後新上傳的相片不需要再執行這個步驟。
 
 ### 手動部署
 
-1. **修改 `docker-compose.yml` 配置**  
-   在 `volumes` 內新增以下映射（請依據實際環境調整路徑）：  
+自行下載資料並掛載到容器，適合需要固定資料版本或無法在啟動時連線的環境。
+
+1. **修改 `docker-compose.yml`**
+
+   在 `volumes` 內新增以下映射，路徑請依實際環境調整：
+
    ```yaml
    volumes:
      - /mnt/user/appdata/immich/geodata:/build/geodata:ro
      - /mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/server/node_modules/i18n-iso-countries/langs:ro
    ```
+
    > [!NOTE]
-   > 若使用 Immich < 1.136.0 版本，請將第二行改為：  
-   > `/mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs:ro`
-  
-2. **下載臺灣特化資料**  
-   提供以下兩種下載方式：  
-       
-   (1) **自動下載**  
-      參考本專案中的 `update_data.sh` 腳本，修改 `DOWNLOAD_DIR` 為存放 geodata 和 i18n-iso-countries 的資料夾路徑，並執行腳本：  
-      ```bash
-      bash update_data.sh
-      ```  
-      > [!NOTE] 
-      > - 手動部署也支援指定特定版本下載，詳情請參考 [指定特定版本](#指定特定版本) 章節。
-      > - UnRAID 使用者可以通過 User Scripts 插件執行腳本。
-     
-   (2) **手動下載**  
-      前往 [Release 頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases) 查找所需的版本，下載對應的 `release.tar.gz` 或 `release.zip`，並將其解壓縮至指定位置。
-  
-3. **重啟 Immich 和重新提取照片元數據**  
-   與[**整合式部署**](#整合式部署)的步驟 2、3 相同。
+   > 舊版 Immich（1.136.0 以前）請將第二行改為 `/mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs:ro`。
 
-### macOS 原生 worker（immich-accelerator）
+2. **下載資料**
 
-[epheterson/immich-apple-silicon](https://github.com/epheterson/immich-apple-silicon) 可將 Immich 的 microservices worker 與機器學習服務以原生行程跑在 Apple Silicon 上，資料庫與 API 仍留在 Docker。這種部署下，臺灣特化資料要裝在**執行 microservices worker 的那一台**：反向地理編碼的資料匯入只在 microservices worker 啟動時執行。
+   先取得更新腳本：
 
-| 加速器模式 | 安裝位置 |
-| :--- | :--- |
-| `--ml-only`（Mac 只跑機器學習） | Docker 主機，照[整合式部署](#整合式部署推薦方便後續更新)即可 |
-| 分離式部署（Mac 跑 worker + 機器學習） | **Mac** |
+   ```bash
+   curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh -o update_data.sh
+   ```
 
-分離式部署的安裝步驟：
+   接著編輯腳本開頭的 `DOWNLOAD_DIR`（約第 25 行），填入兩個掛載路徑的**共同上層目錄**（以上方範例而言是 `/mnt/user/appdata/immich`），然後執行：
 
-1. **確認安裝位置**。加速器會建立 `/build` 的 synthetic link，因此 geodata 路徑與容器一致，不需要額外設定；`i18n-iso-countries` 則位於依 Immich 版本區分的 server 目錄下，先確認輸出的版本與目前執行的 Immich 相符。
+   ```bash
+   bash update_data.sh
+   ```
+
+   完成後應該會得到這樣的結構：
+
+   ```text
+   /mnt/user/appdata/immich/geodata/
+   /mnt/user/appdata/immich/i18n-iso-countries/langs/
+   ```
+
+   也可以直接從 [Releases 頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases)下載 `release.tar.gz` 或 `release.zip`，解壓縮後把 `geodata` 與 `i18n-iso-countries` 兩個資料夾放到相同位置。
+
+   > [!NOTE]
+   > UnRAID 使用者可透過 User Scripts 外掛執行腳本。
+
+3. **重啟 Immich 並重新擷取照片中繼資料**，步驟與[整合式部署](#整合式部署)的第 2、3 步相同。
+
+指定資料版本、離線安裝等其他參數請參閱 [update_data.sh 使用說明](docs/zh-tw/update-script.md)。
+
+### 非容器部署
+
+Immich 沒有跑在 Docker 容器裡時（macOS 原生 worker、LXC、裸機）適用。
+
+指令請在**執行 Immich microservices worker 的那台機器**上操作，因為地理資料只在該服務啟動時匯入。LXC 與裸機就是 Immich 本機；macOS 加速器若使用 `--ml-only`（Mac 只跑機器學習），worker 仍在 Docker 端，請改用[整合式部署](#整合式部署)。
+
+1. **確認安裝位置**
+
+   先讓腳本印出它打算安裝的位置，這個參數不會寫入任何檔案：
 
    ```bash
    bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --print-paths
-   # geodata: /build/geodata
-   # i18n-iso-countries: /Users/you/.immich-accelerator/server/3.1.0/node_modules/i18n-iso-countries
    ```
+
+   輸出會像這樣：
+
+   ```text
+   geodata: /build/geodata
+   i18n-iso-countries: /Users/you/.immich-accelerator/server/3.1.0/node_modules/i18n-iso-countries
+   ```
+
+   兩個路徑的來源不同，請分別確認：
+
+   | 路徑 | 來源 | 不正確時 |
+   | :--- | :--- | :--- |
+   | `i18n-iso-countries` | 掃描系統得到，應位於 Immich 的安裝目錄下；路徑含版本號時（macOS 加速器）需與目前執行的 Immich 版本相同 | 以 `IMMICH_SERVER_ROOT` 指定 Immich server 根目錄（其下應有 `node_modules/`） |
+   | `geodata` | 沿用 Immich 自己的 `IMMICH_BUILD_DATA` 設定，預設為 `/build` | Immich 有自訂這個變數時（LXC、裸機常見），這裡要一併帶上 |
+
+   ```bash
+   IMMICH_SERVER_ROOT=/path/to/immich IMMICH_BUILD_DATA=/var/lib/immich \
+     bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --print-paths
+   ```
+
+   > [!IMPORTANT]
+   > 腳本不會驗證這兩個路徑是否為 Immich 實際讀取的位置。裝到錯誤的目錄一樣會顯示安裝成功，只是 Immich 讀不到，因此請務必在這一步確認清楚。
 
 2. **安裝資料**
 
+   沿用上一步確認過的**同一條指令**，把 `--print-paths` 換成 `--install`。上一步若帶了環境變數，這裡也要一併帶上：
+
    ```bash
    bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install
    ```
 
-3. **重啟 worker**，讓 Immich 重新匯入地理資料。以 Homebrew services 管理時，必須使用 `brew services restart`：
+   看到 `驗證通過` 即為安裝成功；中途失敗會自動還原成安裝前的狀態。
 
-   ```bash
-   brew services restart immich-accelerator
-   ```
+   > [!NOTE]
+   > LXC 與裸機的 Immich 目錄通常屬於 root，需要 `sudo`。由於 `sudo` 不會帶入環境變數，請先下載腳本再執行，並把變數寫在 `sudo` 之後：
+   >
+   > ```bash
+   > curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh -o update_data.sh
+   > sudo IMMICH_SERVER_ROOT=/path/to/immich bash update_data.sh --install
+   > ```
 
-   未使用 Homebrew services 時，改用：
+3. **重啟 Immich 並重新擷取照片中繼資料**
 
-   ```bash
-   immich-accelerator stop && immich-accelerator start
-   ```
+   重啟執行 microservices worker 的服務，讓 Immich 重新匯入地理資料：
 
-4. 於 Immich 執行**重新擷取照片中繼資料**，套用到既有照片。
+   - macOS 加速器：`brew services restart immich-accelerator`。請勿改用 `stop` 再 `start`，原因見[加速器環境的注意事項](docs/zh-tw/deployment-macos-accelerator.md)。
+   - LXC 與裸機：重啟 Immich 的 systemd 服務（服務名稱依安裝方式而定）。
 
-> [!NOTE]
-> - Immich 會比對 `geodata-date.txt` 與資料庫中的紀錄，只有不同時才會重新匯入，重啟本身不會造成重複匯入。
-> - Docker 端若仍在執行 microservices worker，兩台都會嘗試匯入，資料版本不一致時會互相覆蓋。分離式部署建議在 Docker 端設定 `IMMICH_WORKERS_INCLUDE=api`；設定後該端不會讀取地理資料，可一併從其 `entrypoint` 移除更新指令，避免每次啟動重複下載。
-> - 以 Homebrew services 管理時，`immich-accelerator stop` 會觸發 launchd 依 `KeepAlive` 立即重啟服務，隨後的 `start` 會因連接埠已被佔用而失敗。請改用 `brew services restart`。
+   接著依[整合式部署](#整合式部署)的第 3 步重新擷取照片中繼資料。
 
-與容器不同，加速器的資料是持久的：`stop` / `start` 或重新開機都不需要重新安裝。只有在 `immich-accelerator update` 切換 Immich 版本時才需要，詳見[更新地理資料](#macos-原生-worker-與其他非容器部署)。
+LXC 與裸機沒有其他專屬步驟，完成本節即可。macOS 加速器的資料匯入位置、雙端同時匯入的衝突處理，以及需要重新安裝的時機，請參閱[加速器環境的注意事項](docs/zh-tw/deployment-macos-accelerator.md)。
 
-### LXC 與裸機
+## 更新資料
 
-自行安裝的 Immich 若不在預設位置，以 `IMMICH_SERVER_ROOT` 指向 Immich server 根目錄（其下應有 `node_modules/`）：
+本專案會定期發布新的地理資料。更新方式依部署方式而定：
 
-```bash
-IMMICH_SERVER_ROOT=/path/to/immich/server bash update_data.sh --install
-```
-
-一旦設定此變數即為唯一搜尋範圍，指定錯誤時會直接失敗，不會改裝到其他位置。
-
-> [!NOTE]
-> 以上兩種非容器部署的安裝位置由腳本自動偵測。偵測規則與設計原因請參閱[安裝路徑偵測文檔](docs/zh-tw/install-path-detection.md)。
-
-## 指定特定版本
-
-在某些情況下（例如最新的 release 出現問題），你可能需要下載或回滾到特定的 release 版本。本專案的更新腳本支援透過 `--tag` 參數來指定要下載的 release tag。
-
-**如何找到可用的 Tag？**
-請前往本專案的 [Releases 頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases) 查看所有可用的 release tag 名稱（例如  `v2.2.4`, `nightly` 等）。
-
-**使用範例：**
-
-1.  **整合式部署 (`docker-compose.yml` 中的 `entrypoint`)**
-    在 `entrypoint` 的指令後面加上 `--tag <tag_name>`：
-    ```yaml
-    entrypoint: [ "tini", "--", "/bin/bash", "-c", "bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/download/<tag_name>/update_data.sh) --install --tag <tag_name> && exec start.sh" ] 
-    ```
-    將 `<tag_name>` 分別替換為你想要下載的具體 tag 名稱。如果省略 `--tag`，則預設下載最新的 release (`latest`)。
-
-2.  **手動部署 (`update_data.sh`)**
-    執行腳本時加上 `--tag <tag_name>`：
-    ```bash
-    bash update_data.sh --tag <tag_name>
-    ```
-    將 `<tag_name>` 替換為你想要下載的具體 tag 名稱。如果省略 `--tag`，則預設下載最新的 release (`latest`)。
-
-### 使用已下載的壓縮檔
-
-已經有 `release.tar.gz`（例如離線環境或想重複安裝同一份）時，可用 `--archive` 直接安裝，不再連線下載：
-
-```bash
-bash update_data.sh --install --archive /path/to/release.tar.gz
-```
-
-> [!NOTE]
-> 腳本會先驗證指定的 tag 是否存在於 GitHub Releases，如果 tag 無效則會提示錯誤並終止執行，因此請在執行前確保 tag 有效。
-  
-## 行政區優化策略
-
-### 🇹🇼 臺灣地區優化
-
-- **官方圖資為核心**：使用 NLSC 村(里)界圖資，確保資料權威性
-- **優化國家與行政區名稱**：解決 Immich 原生資料中「臺灣」顯示為「中國臺灣省」且缺失多數縣市名稱的問題
-- **行政區層級優化**：優化 Admin1（直轄市/省轄縣市）與 cities500（地名資料）
-
-> 📖 詳細的臺灣資料處理邏輯請參閱 [臺灣行政區處理文檔](docs/zh-tw/taiwan-admin-processing.md)
-
-### 🇯🇵 日本地區優化
-
-- **保留日文原名**：維持漢字+假名組合（如「静岡県」而非「靜岡縣」）
-- **行政區細分處理**：普通市、特別區、政令指定都市、東京都特別區部等均有適當處理
-- **郡轄町村智慧處理**：自動判斷是否需要郡名前綴，避免同名衝突
-
-> 📖 詳細的日本行政區處理邏輯請參閱 [日本行政區處理文檔](docs/zh-tw/japan-admin-processing.md)
-
-### 🇰🇷 南韓地區優化
-
-- **繁體中文翻譯**：從 admdongkor 專案提取官方行政區邊界並自動翻譯為繁體中文
-- **行政區命名優化**：廣域市統一加「市」字（首爾市、釜山市、大邱市等）
-- **特殊行政區處理**：濟州道與濟州市區分、世宗市採用業界通用譯名
-- **行政層級處理**：自動拆分「市＋區/郡」結構，支援特殊行政結構
-
-> 📖 詳細的南韓行政區處理邏輯請參閱 [南韓行政區處理文檔](docs/zh-tw/south-korea-admin-processing.md)
-
-### 🇹🇭 泰國地區優化
-
-- **官方邊界資料**：使用 COD-AB `tha_admin3` sub-district / tambon 邊界資料
-- **繁體中文翻譯**：Admin1/Admin2 使用 Wikidata translator，缺少中文結果時回退 COD-AB 官方英文與官方泰文
-- **最近距離最佳化**：使用 Thailand Albers 投影計算幾何中心點，提升 Immich 最近點反向地理解析命中率
-- **座標策略驗證**：不使用 COD-AB 內建 `center_lat` / `center_lon` 作為預設，因其較接近官方代表點而非最近點模型下的最佳單點
-
-> 📖 詳細的泰國行政區處理邏輯請參閱 [泰國行政區處理文檔](docs/zh-tw/thailand-admin-processing.md)
-
-### 🇮🇩 印尼地區優化
-
-- **官方村級圖資**：使用 BIG（Badan Informasi Geospasial，印尼地理空間資訊局）官方 ArcGIS REST 服務發布的 desa（村級）邊界資料（版本 TASWIL20230928，含 38 省全量 83,461 筆可用 feature）
-- **繁體中文翻譯**：Admin1（省）與 Admin2（縣／市）使用 Wikidata translator 並以 P131 行政隸屬逐級驗證；缺少可靠中文標籤時回退 BIG 官方印尼文原文，Admin3（郡）/ Admin4（村）則保留印尼文原文
-- **三時區解析**：依 38 省 per-province 對照表解析印尼三時區（WIB `Asia/Jakarta`、WITA `Asia/Makassar`、WIT `Asia/Jayapura`）
-- **最近距離最佳化**：使用印尼 Albers 等積投影（`+lat_1=1 +lat_2=-8 +lon_0=118`）計算幾何中心點；multipart polygon 每個 part 各出一列，提升群島地形的最近鄰命中率（admin2 命中率 96.99%）
-
-> 📖 詳細的印尼行政區處理邏輯請參閱 [印尼行政區處理文檔](docs/zh-tw/indonesia-admin-processing.md)
-
-### 🌏 其他地區優化
-
-- **國教院官方譯名**：整合國家教育研究院《外國地名譯名》（64,000+ 筆官方臺灣譯名），以名稱正規化匹配搭配座標驗證，為全球地名補洞並升級為官方譯名
-- **信心分級保護**：高信心（國碼一致＋距離合格＋無歧義）才覆寫既有譯名；具弱化訊號（地物標記、近距歧義等）僅補洞；無法消歧時保守放棄，杜絕同名錯配
-- **GeoNames 後備**：無官方譯名時使用 GeoNames 中文資料（經 OpenCC 轉換為臺灣正體），再無則回退英文
-
-> 📖 詳細的全球翻譯處理邏輯請參閱 [全球翻譯處理文檔](docs/zh-tw/global-translation-processing.md)
-
-## 更新地理資料
-
-### 整合式部署
-  
-只需重新啟動 Immich 容器，即可自動更新地理資料。  
-
-### 手動部署
-  
-1. 下載最新 release.zip，並解壓至指定位置。
-
-2. 重新提取照片元數據（與「使用方式-[手動部署](#手動部署)」相同）。
-
-### macOS 原生 worker 與其他非容器部署
-
-加速器的資料是持久的，不像容器那樣每次啟動都會重新安裝：
-
-| 動作 | 是否需要重新安裝 |
+| 部署方式 | 更新方式 |
 | :--- | :--- |
-| `immich-accelerator stop` / `start`、重新開機 | 否 |
-| `immich-accelerator update`（切換 Immich 版本） | **是** |
-| 本專案發布新版資料 | **是** |
+| [整合式部署](#整合式部署) | 重啟 Immich 容器即可，資料會自動更新 |
+| [手動部署](#手動部署) | 重新執行 `bash update_data.sh`（`DOWNLOAD_DIR` 沿用安裝時的設定），再重啟容器 |
+| [非容器部署](#非容器部署) | 重新執行同一條 `--install` 指令後重啟 Immich 服務。macOS 加速器另有需要重新安裝的時機，見[加速器環境的注意事項](docs/zh-tw/deployment-macos-accelerator.md#更新資料) |
 
-切換 Immich 版本時，加速器會重建 `build-data`（geodata 隨之移除），並改用新版本號的 server 目錄（語系檔隨之失效），因此兩份資料都會回到上游狀態。
+資料更新後，Immich 會在下次啟動時匯入新資料，新上傳的相片直接套用。既有相片則要重新執行**提取中繼資料**才會更新。
 
-更新步驟：
+日常的維護性更新（例如個別行政區的邊界微調）影響的相片有限，通常不需要為此重跑全部相片。以下三種情況才建議重新執行一次：
 
-1. 重新執行安裝。
+- 新增支援的國家或地區
+- 地理資料的處理方式有大幅調整
+- 上游官方圖資有大規模變動
 
-   ```bash
-   bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install
-   ```
+這類變更會在該版本的 [release notes](https://github.com/RxChi1d/immich-geodata-zh-tw/releases) 中標註。
 
-2. 重啟 worker。以 Homebrew services 管理時使用 `brew services restart immich-accelerator`，否則使用 `immich-accelerator stop && immich-accelerator start`。
+需要固定使用特定版本、離線安裝，或調整安裝路徑時，請參閱 [update_data.sh 使用說明](docs/zh-tw/update-script.md)。
 
-3. 於 Immich 執行**重新提取照片元數據**。
+## 常見問題
 
-上述步驟可以合併成一個腳本，需要更新時執行一次即可：
+**執行提取中繼資料後，地名沒有變成中文。**
 
-```bash
-#!/bin/bash
-# ~/.local/bin/immich-geodata-update
-set -e
-bash <(curl -sSL https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest/download/update_data.sh) --install
-brew services restart immich-accelerator
-```
+Immich 會比對 `geodata/geodata-date.txt` 與資料庫中的紀錄，兩者**內容不同**時才重新匯入資料，因此重啟本身不會造成重複匯入。請先看啟動日誌有沒有出現 `geodata records imported`：
 
-安裝流程本身是冪等的，資料已是最新時重跑不會有副作用。
+- **有出現**：資料已匯入，請確認「提取中繼資料」選的是**全部**，並確認該相片本身含有 GPS 資訊。
+- **沒有出現**：代表 Immich 認為資料沒變。手動部署與非容器部署可將 `geodata/geodata-date.txt` 改成與現值不同的內容（例如今天日期）後重啟；整合式部署每次啟動都會重新安裝資料，手動修改會被覆蓋，日期沒變即表示已匯入過同一份資料，請改從上一點檢查。
 
-## 開發者：本地資料處理
+**行政區名稱已是中文，但國家名稱仍顯示英文。**
 
-### 1. 安裝依賴
+這是 Immich 1.136.0 以後的版本搭配本專案 v1.2.0 以前的資料造成的。安裝最新版本即可解決，相關討論見 [issue #8](https://github.com/RxChi1d/immich-geodata-zh-tw/issues/8)。
 
-本機 production 資料處理預設使用 Rust CLI。請先安裝 Rust toolchain，並確認系統可使用
-`unzip`、`pkg-config` 與 PROJ development library（例如 Ubuntu 的 `libproj-dev`）。
+**容器不斷重啟，日誌顯示 `main.js not found`。**
 
-#### 官方預編譯 Binary
+`entrypoint` 的結尾寫成 `exec /bin/bash start.sh` 時會發生，請改為 `exec start.sh`。Immich v1.142.0 起的啟動腳本會依自身路徑推算安裝位置，多包一層 `/bin/bash` 會使推算結果錯誤。相關討論見 [issue #13](https://github.com/RxChi1d/immich-geodata-zh-tw/issues/13)。
 
-GitHub Releases 目前只提供 Linux x86_64 的預編譯 Rust CLI binary，主要供
-GitHub Actions、Linux server 與 Immich container 類環境使用。macOS 與 Windows
-目前請使用本地編譯方式。
+**部分相片的地點與實際位置有落差。**
 
-#### 本地編譯 Rust CLI
+Immich 依照最近距離原則比對地名，靠近行政區邊界的座標可能被歸到鄰近行政區，小型島嶼或特殊地形也可能無法精確對應。這是 Immich 的解析方式所致，不是資料錯誤。
 
-如需在非 Linux 環境或自訂 Linux 環境執行資料處理，請先安裝 Rust toolchain 與
-PROJ development library，再執行：
+## 資料來源
 
-```bash
-cargo build --release
-```
+本專案使用的所有第三方資料來源、授權條款與使用聲明，請參閱 [NOTICE.md](NOTICE.md)。各地區採用的資料來源見上方[支援地區與語言策略](#支援地區與語言策略)表格。
 
-編譯完成後，binary 會位於：
+## 延伸閱讀
 
-```bash
-target/release/immich-geodata
-```
+- [圖文安裝教學](https://inktrace.rxchi1d.me/posts/container-platform/immich-geodata-zh-tw/)：從零開始的完整步驟與截圖。
+- [文件索引](docs/README.md)：各地區處理方式、腳本說明與開發文件。
+- [安裝路徑偵測](docs/zh-tw/install-path-detection.md)（維護者向）：腳本決定安裝位置的規則與設計考量。
 
-也可以直接用 `cargo run` 執行：
+## 問題回報與參與
 
-```bash
-cargo run --release -- help
-```
+使用上遇到問題、發現地名有誤，或希望支援其他國家，歡迎到 [Issues](https://github.com/RxChi1d/immich-geodata-zh-tw/issues) 回報與討論。回報時附上 Immich 版本、部署方式與相關日誌，會更容易釐清問題。
 
-### 2. 提取原始地理資料
+想參與開發請先看 [CONTRIBUTING.md](CONTRIBUTING.md)，資料處理流程的操作說明則見[本地資料處理](docs/zh-tw/development.md)。
 
-如果你需要處理新的國家或更新現有的地理資料來源，可以使用 `extract` 命令從 Shapefile 或 GeoJSON 提取資料。此步驟是選用的，僅在需要更新資料來源時執行。
+安全性問題請依 [SECURITY.md](SECURITY.md) 的方式私下回報，不要開公開 issue。
 
-#### 臺灣資料提取
+## 致謝
 
-資料來源：[國土測繪中心（NLSC）](https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx)
+本專案基於 [immich-geodata-cn](https://github.com/ZingLix/immich-geodata-cn) 修改，感謝原作者 [ZingLix](https://github.com/ZingLix) 的貢獻。
 
-```bash
-# 1. 下載「村(里)界（TWD97經緯度）」資料並解壓縮
-# 2. 執行提取命令
-cargo run --release -- extract --country TW \
-  --shapefile geoname_data/VILLAGE_NLSC_1140825/VILLAGE_NLSC_1140825.shp \
-  --output meta_data/tw_geodata.csv
-```
+## 授權條款
 
-#### 日本資料提取
+本專案的程式碼採用 [GNU General Public License v3.0](LICENSE)。
 
-資料來源：[国土数値情報](https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2025.html)
-
-```bash
-# 1. 下載「行政区域データ（世界測地系）」並解壓縮
-# 2. 執行提取命令
-cargo run --release -- extract --country JP \
-  --shapefile geoname_data/N03-20250101_GML/N03-20250101.shp \
-  --output meta_data/jp_geodata.csv
-```
-
-#### 南韓資料提取
-
-資料來源：[admdongkor](https://github.com/vuski/admdongkor)
-
-```bash
-# 1. 從 admdongkor 專案下載官方行政區邊界資料並解壓縮
-# 2. 執行提取命令
-cargo run --release -- extract --country KR \
-  --shapefile geoname_data/HangJeongDong_verYYYYMMDD.geojson \
-  --output meta_data/kr_geodata.csv
-```
-
-#### 泰國資料提取
-
-資料來源：[Thailand COD-AB](https://data.humdata.org/dataset/cod-ab-tha)
-
-```bash
-# 1. 下載 tha_admin_boundaries.shp.zip 並解壓縮
-# 2. 使用 tha_admin3.shp 提取 Admin 3 / Tambon 邊界資料
-cargo run --release -- extract --country TH \
-  --shapefile geoname_data/tha_admin_boundaries/tha_admin3.shp \
-  --output meta_data/th_geodata.csv
-```
-
-泰國提取會讀取或建立 `geoname_data/TH_wikidata_cache.json`，用於 Admin1/Admin2 繁中翻譯；Admin3 目前保留 COD-AB 官方英文。
-
-提取完成後，執行 Rust `release` 時會自動整合這些資料。
-
-#### 印尼資料提取
-
-資料來源：BIG（Badan Informasi Geospasial）官方 ArcGIS REST FeatureServer
-
-```bash
-# 1. 從 BIG 官方 REST 服務以分頁方式下載 desa 村級圖資（geometryPrecision=6，版本 TASWIL20230928）
-#    下載方式與固定參數請參閱 docs/research/indonesia-handler.md
-# 2. 執行提取命令
-cargo run --release -- extract --country ID \
-  --shapefile <path_to_BIG_desa_geojson> \
-  --output meta_data/id_geodata.csv
-```
-
-印尼提取會讀取或建立 `geoname_data/ID_wikidata_cache.json`，用於 Admin1（省）/ Admin2（縣市）繁中翻譯；Admin3（郡）/ Admin4（村）保留 BIG 官方印尼文。詳細下載流程與固定參數請參閱 [印尼 handler 研究文件](docs/research/indonesia-handler.md)。
-
-提取完成後，執行 Rust `release` 時會自動整合這些資料。
-
-### 3. 完整資料處理流程
-
-完成資料提取（或使用現有的資料）後，可以執行完整的資料處理流程來生成 release。
-
-#### 註冊 LocationIQ API
-
-至 [LocationIQ](https://locationiq.com/) 註冊帳號，並取得 API Key。
-
-#### 執行資料處理
-
-```bash
-cargo run --release -- release \
-  --locationiq-api-key "YOUR_API_KEY" \
-  --country-code "US"
-```
-
-> [!NOTE]
-> - 可以通過 `cargo run -- help` 查看更多選項。
-> - `--country-code` 參數可指定需要處理的國家代碼，多個代碼之間使用空格分隔。
-> - 臺、日、韓、泰、印（TW/JP/KR/TH/ID）已改由官方圖資 handler 產生，無需也不應以 LocationIQ 處理；此流程僅用於為其他國家產生 metadata。
-
-> [!WARNING]
-> - 由於 LocationIQ 的 API 有請求次數限制 (可登入後於後台查看)，因此請注意要處理的國家的地名數量，以免超出限制。
-> - 本專案允許 LocationIQ 反向地理編碼查詢的進度恢復，若超過當日請求限制，可於更換 api 金鑰或次日繼續執行。
->   - 需加上 `--pass-cleanup` 參數，以取消重設資料夾功能： `cargo run --release -- release --locationiq-api-key "YOUR_API_KEY" --country-code "US" --pass-cleanup`。
-
-### 4. Rust 驗證
-
-Rust CLI 提供 dry-run contract，可在不呼叫外部 API 或下載網路的情況下驗證
-release orchestration：
-
-```bash
-cargo run -- release \
-  --dry-run \
-  --locationiq-api-key "fixture" \
-  --country-code "KR" "TH" \
-  --batch-size 100 \
-  --locationiq-qps 2
-```
-
-需要驗證 release archive 與 `update_data.sh` 所需目錄結構時，可使用 fixture mode
-產生本地 smoke artifact：
-
-```bash
-cargo run -- release \
-  --fixture-mode \
-  --pass-locationiq \
-  --output-folder /tmp/rust-release-smoke
-```
-
-目前 release 與 nightly production workflow 已切換為 Rust production path，並保留
-Rust fixture release smoke 作為前置檢查。真實 GeoNames/Natural Earth 下載與
-LocationIQ quota path 的自動測試仍需使用 fixture、stub 或明確 dry-run gate。
-
-## 致謝  
-  
-本專案基於 [immich-geodata-cn](https://github.com/ZingLix/immich-geodata-cn) 修改，特別感謝原作者 [ZingLix](https://github.com/ZingLix) 的貢獻。  
-  
-## 授權條款  
-  
-本專案採用 GPL 授權。
+發布的地理資料依各原始來源的授權條款提供，詳見 [NOTICE.md](NOTICE.md)。

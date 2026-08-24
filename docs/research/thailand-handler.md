@@ -1,6 +1,8 @@
 # 泰國 COD-AB 圖資 handler 評估
 
-> **文件定位**：本文件為泰國 handler 實作**前**的研究與決策紀錄（snapshot），記錄當時的評估數據與設計選項，內容反映成文時的狀態，不隨後續實作同步更新。**現行處理邏輯請以 [`docs/zh-tw/thailand-admin-processing.md`](../zh-tw/thailand-admin-processing.md) 為準**（例如 Admin 2 的 P131 行政隸屬驗證為實作後新增，本文件未涵蓋）。
+> **文件狀態：歷史紀錄**
+> 本文記錄當時的研究與決策，不保證與目前實作同步。現行行為請參閱[泰國行政區處理](../zh-tw/thailand-admin-processing.md)。
+> 部分實作後的變更未涵蓋於本文，例如 Admin 2 的 P131 行政隸屬驗證。
 
 ## 資料來源
 
