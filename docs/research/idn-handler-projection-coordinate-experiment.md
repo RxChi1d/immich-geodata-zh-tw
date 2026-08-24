@@ -1,5 +1,8 @@
 # 印尼 handler 階段二實驗：投影法與座標策略決策
 
+> **文件狀態：歷史紀錄**
+> 本文記錄當時的研究與決策，不保證與目前實作同步。現行行為請參閱[印尼行政區處理](../zh-tw/indonesia-admin-processing.md)。
+
 本報告記錄印尼（IDN）handler 在新增前的階段二正式實驗結果，用以決定
 extract pipeline 的「投影法」與「代表座標策略」。所有實驗為純本地計算，
 未呼叫任何 Wikidata / 網路 API。

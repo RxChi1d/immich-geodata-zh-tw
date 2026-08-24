@@ -5,33 +5,23 @@
 格式基於 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
 專案遵循 [語義版本控制](https://semver.org/spec/v2.0.0.html)。
 
-## 關於此專案
-
-本專案為 Immich 提供反向地理編碼功能的臺灣特化優化，旨在透過中文在地化、行政區劃最佳化，以及使用國土測繪中心 (NLSC) 官方資料提升臺灣資料準確性，改善地理資訊準確度與使用體驗。
-
-## 版本類型
-
-- **穩定版本** (v1.x.x)：經過完整測試的手動發佈版本
-- **夜間建構**：包含最新地理資料更新的自動建構，標記為 `nightly`
-- **預發佈版本**：歷史開發快照 (release-YYYY-MM-DD 格式)
-
 安裝說明與使用方式請參閱 [README](README.md)。
-
-## 發佈連結
-
-- [最新版本](https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest)
-- [所有版本](https://github.com/RxChi1d/immich-geodata-zh-tw/releases)
-- [版本比較](https://github.com/RxChi1d/immich-geodata-zh-tw/compare)
 
 ---
 
 ## [未發佈版本]
 
 ### Changed
-- **非容器部署說明**：補充 Homebrew services 環境下的重啟方式（`immich-accelerator stop` 會因 `KeepAlive` 立即被 launchd 拉回，隨後的 `start` 會因連接埠被佔用而失敗），並說明分離式部署下 Docker 端設定 `IMMICH_WORKERS_INCLUDE=api` 後可自 `entrypoint` 移除更新指令。
+- **文件重整**：README 聚焦安裝流程，腳本參數、非容器部署與開發說明移至 `docs/`，並新增文件索引、貢獻指南與安全性回報方式。
+- **macOS 加速器說明**：補充 Homebrew services 環境下的正確重啟方式，以及分離式部署時 Docker 端的設定調整。
+- **資料來源聲明**：`NOTICE.md` 補上 Natural Earth、Wikidata、中文維基百科與 i18n-iso-countries 的授權聲明，並更正南韓行政區資料的授權敘述。
+
+### Fixed
+- **安裝說明錯誤**：更正手動部署的下載目錄設定、指定版本時的腳本取得網址，以及 `docker-compose.yml` 的服務名稱。舊寫法會讓資料解壓到錯誤層級，或使容器因取不到安裝腳本而無法啟動。
+- **安裝失敗提示**：安裝位置有誤時，一併提示可用 `IMMICH_BUILD_DATA` 指定 geodata 目錄。原本只提示 `IMMICH_SERVER_ROOT`，但該變數不影響 geodata 的安裝位置。
 
 ### Security
-- **相依套件安全性更新**：將 `quinn-proto` 更新至 0.11.17，解除 GHSA 對 QUIC 亂序封包重組可造成記憶體耗盡的警示。該套件為 `reqwest` 的選用相依，本專案未啟用 HTTP/3，實際上未編譯進產物，因此無使用者可感知的行為變更。
+- **相依套件更新**：`quinn-proto` 更新至 0.11.17，解除 QUIC 封包重組可造成記憶體耗盡的警示。本專案未啟用 HTTP/3，該套件未編譯進產物，行為不變。
 
 ---
 
@@ -286,20 +276,18 @@
 - **發佈系統**：重構並簡化發佈自動化流程
 - **腳本強化**：改善更新腳本的標籤驗證與錯誤處理
 
-## 預發佈版本
-
-### [release-2025-04-05] - 2025-04-05
+## [release-2025-04-05] - 2025-04-05
 
 ### Added
 - **泰國支援**：泰國 (TH) 地區地理資料處理
 - **國際擴展**：將在地化功能擴展至臺灣以外地區
 
-### [release-2025-02-06] - 2025-02-06
+## [release-2025-02-06] - 2025-02-06
 
 ### Changed
 - **翻譯改善**：強化翻譯處理與準確度
 
-### [release-2025-02-05] - 2025-02-05  
+## [release-2025-02-05] - 2025-02-05
 
 ### Added
 - **韓國中繼資料**：支援韓國地區地理資料處理
@@ -307,31 +295,12 @@
 ### Fixed
 - **翻譯處理**：解決翻譯腳本問題並改善可靠性
 
-## 夜間建構
-
-`nightly` 標籤提供包含最新地理資料的持續更新建構。這些自動化發佈包含：
-
-- **自動化資料更新**：定期提取最新的反向地理編碼資料
-- **最新改善**：最近的錯誤修正與功能增強
-- **開發功能**：搶先使用穩定版本前的新功能
-
-**注意**：建議希望取得最新地理資料的使用者使用夜間建構，但可能包含實驗性功能。生產環境建議使用穩定版本 (v1.x.x)。
-
-## 歷史開發
-
-### 早期開發 (2025-01-01 至 2025-03-31)
-
-- **專案初始化**：首次提交與專案結構建立
-- **核心開發**：實作臺灣在地化演算法
-- **CI/CD 設定**：自動化發佈與資料更新工作流程
-- **文件撰寫**：初始 README 與使用說明
-- **測試**：品質保證與功能驗證
-
 ---
 
 特定變更的詳細資訊請參閱 [提交歷史](https://github.com/RxChi1d/immich-geodata-zh-tw/commits/main) 或 [發佈頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases)。
 
-[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v3.1.0...HEAD
+[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.4...v3.0.0
 [2.2.4]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v2.2.3...v2.2.4

@@ -221,7 +221,7 @@ verify_installation() {
 
   if [ "$failed" -ne 0 ]; then
     echo "安裝結果驗證失敗，將復原為安裝前的狀態。" >&2
-    echo "若安裝位置有誤，請以 IMMICH_SERVER_ROOT 指定正確的 Immich server 根目錄後重試。" >&2
+    echo "若安裝位置有誤，請以 IMMICH_SERVER_ROOT 指定 Immich server 根目錄、以 IMMICH_BUILD_DATA 指定 Immich 的 build data 目錄後重試。" >&2
     exit 1
   fi
 

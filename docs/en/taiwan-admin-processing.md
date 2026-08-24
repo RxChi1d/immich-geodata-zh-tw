@@ -75,7 +75,7 @@ cargo run --release -- extract --country TW \
   --output meta_data/tw_geodata.csv
 ```
 
-Refer to the [developer workflow](../../README.md#開發者本地資料處理) for additional context and integration steps.
+Refer to the [developer workflow](../../README.en.md#developer-local-data-processing) for additional context and integration steps.
 
 ## Reference Examples
 
