@@ -1,6 +1,6 @@
 # 泰國行政區處理邏輯
 
-> 本文件說明本專案如何處理泰國地區的地理資訊，是 README 中泰國優化章節的詳細版本。
+> 本文件說明本專案如何處理泰國地區的地理資訊，是 [README 支援地區與語言策略](../../README.md#支援地區與語言策略) 的詳細版本。
 
 ## 資料來源
 
@@ -13,6 +13,10 @@
 - **用途**：作為泰國地區行政區邊界與名稱的主要資料來源
 
 ## 行政區層級
+
+> [!NOTE]
+> `admin_3` 與 `admin_4` 只存在於本專案的中介 CSV，用於保留來源行政層級供追溯與除錯，不會輸出到 Immich 使用的 cities500。Immich 顯示的最細層級是 `admin_2`。代表點密度取決於 extract 的來源 feature 顆粒度（泰國為 tambon），與這兩個欄位無關。
+
 
 COD-AB Thailand 提供下列行政層級：
 
@@ -30,7 +34,7 @@ COD-AB Thailand 提供下列行政層級：
 | `admin_3` | `adm3_name` / `adm3_name1` | Sub-district / Tambon 官方英文；英文缺少時回退官方泰文 |
 | `admin_4` | 空值 | COD-AB 此資料集未提供 admin4 |
 
-> **筆數說明**：`tha_admin3` 約有 7425 筆 sub-district / tambon，但 extract 輸出的列數通常更多。原因是同一個 tambon 若由多個不相連的 polygon 組成（multipart 邊界），每個 polygon 會各自計算中心點並輸出成獨立的一列。因此「輸出列數」與「行政區數」不會一致，這是預期行為。
+> **筆數說明**：泰國 extract 為每個 feature 輸出一列，`meta_data/th_geodata.csv` 的列數與 `tha_admin3` 的 tambon 數一致。multipart polygon 會合併計算單一中心點，不會拆成多列（逐 part 拆列只在印尼啟用，詳見[印尼行政區處理](indonesia-admin-processing.md)）。
 
 ## 名稱策略
 
@@ -51,6 +55,7 @@ Admin 2 的 parent QID 來自第一層 Admin 1 翻譯所解析出的 Province QI
 
 - **沒有任何候選通過驗證** → 不採用任何 Wikidata 候選（不存在「退而求其次拿第一個候選」的路徑），改走泰文後備搜尋或官方名稱回退。
 - **快取中的舊結果** → 僅在「parent QID 與本次一致且已驗證（或當時已放棄）」時沿用；parent 上下文變更（例如修正了上層 QID）會觸發重新查詢，避免錯誤翻譯被快取固化。
+- **上層 QID 未解析** → 該府底下的 Admin 2 第一輪改以泰國 `Q869` 作為驗證樓地板，並且不進入泰文後備搜尋，直接回退官方名稱，避免跨府同名縣誤配。以目前資料，77 個府全數解析出 QID，此路徑不會被觸發。
 
 > [!NOTE]
 > 此驗證避免了同名或近似名的錯配。例如英文搜尋 `Nan` 的前 7 名候選全是無關實體（南特、南錫、閩南語等），P131 驗證會全數拒絕而非盲選第一名；Chiang Mai 府下的 `Fang` 也不會被誤接到無關實體而翻成「方」。當驗證無法確認隸屬關係時，保守回退，寧可顯示英文也不顯示錯誤中文。
@@ -68,8 +73,9 @@ Admin 2 的 parent QID 來自第一層 Admin 1 翻譯所解析出的 Province QI
 > 搜尋僅 4%（75 個 เมืองX 首府縣）至 12%（50 個隨機縣）——泰國縣級實體的
 > 英文標籤（`X District` 形式）在 Wikidata 上的鑑別度遠高於泰文裸名稱。
 > 反之，府級的泰文搜尋鑑別度極佳（5/5 歧義府名均以第一名命中正確實體），
-> 因此泰文適合作為驗證後備而非主要語言。新增國家時應比照此方法實測後決定
-> 搜尋語言，參見 `CLAUDE.md` 擴充新國家章節。
+> 因此泰文適合作為驗證後備而非主要語言。上述數字取自開發期間的離線對照實
+> 驗，樣本與腳本未隨程式碼保存（`docs/research/thailand-handler.md` 只收錄
+> 座標與投影實驗）。
 
 ### 第二層：語言 label 優先序
 
@@ -83,6 +89,8 @@ Admin 2 的 parent QID 來自第一層 Admin 1 翻譯所解析出的 Province QI
 6. COD-AB 官方泰文欄位：`adm1_name1` 或 `adm2_name1`
 
 此順序刻意不把 Wikidata 英文或泰文 label 放入 fallback。原因是 COD-AB 已提供官方英文與泰文，若中文資料不存在，應優先回到官方來源，而不是使用 Wikidata 上可能不一致的英文或泰文別名。
+
+採用譯名前另有形態守門：若 Wikidata 譯名為中英夾雜的半翻譯（同時含漢字與拉丁字母，例如「西Kutai區」形式），視為髒資料而不採用，直接回退 COD-AB 官方英文。純英文譯名則是泰國設計內的合法輸出，不受此規則影響。
 
 ### Admin 3 名稱
 
@@ -128,27 +136,10 @@ Fixture 測試會使用 `TH_wikidata_stub.json`，避免測試依賴即時網路
 
 兩種 centroid 本身的中位差約 0.064 公尺，95 百分位約 0.425 公尺，最大差約 4.941 公尺。基於準確度、效能與實作簡潔性，泰國採用 Thailand Albers 直接計算 centroid。
 
-## 資料提取流程
-
-```bash
-# 1. 從 HDX 下載 tha_admin_boundaries.shp.zip
-# 2. 解壓縮並使用 tha_admin3.shp
-cargo run --release -- extract --country TH \
-  --shapefile path/to/tha_admin3.shp \
-  --output meta_data/th_geodata.csv
-```
-
-GeoJSON 格式也可使用（`--shapefile` 同時支援 `.shp` 與 `.geojson` / `.json`）：
-
-```bash
-cargo run --release -- extract --country TH \
-  --shapefile path/to/tha_admin3.geojson \
-  --output meta_data/th_geodata.csv
-```
-
 ## 注意事項
 
 - `center_lat` / `center_lon`（官方代表點）保留為資料來源參考，不作為預設座標來源。
 - 若未來需要改成行政代表點模式，應新增明確的座標策略選項，而不是覆蓋目前的最近距離最佳化策略。
 - 泰國 Admin 1 / Admin 2 會使用 Wikidata 繁中翻譯；兩級都須通過 P131 行政隸屬驗證（Admin 1 對泰國 `Q869`、Admin 2 對所屬府的 QID），驗證失敗會先嘗試泰文後備搜尋，仍失敗或 Wikidata 沒有可靠中文結果時，回退至 COD-AB 官方英文與官方泰文。
 - 泰國 Admin 3 目前保留 COD-AB 官方英文，避免大量低層級地名在 Wikidata 中出現錯配或不穩定翻譯。
+- 在本機重現提取流程的指令請見[本地資料處理](development.md#2-提取原始地理資料)；`--shapefile` 同時支援 `.shp` 與 `.geojson` / `.json`。

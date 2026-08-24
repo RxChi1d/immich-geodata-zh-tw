@@ -2,10 +2,10 @@
 
 > This document records the rules `update_data.sh --install` uses to choose an
 > install location, how the result is verified, and how the design evolved. It is
-> intended for maintenance and troubleshooting. For deployment steps, see the
-> README.
+> written for maintenance and troubleshooting. For the actual steps, see the
+> [installation section of the README](../../README.en.md#installation).
 
-## What gets installed
+## Install targets
 
 The script installs two sets of files:
 
@@ -16,8 +16,8 @@ The script installs two sets of files:
 
 ## Detection rules
 
-The script checks candidate roots in order and takes the first one that contains
-an installed `i18n-iso-countries`:
+The script checks candidate roots in order and takes the first one that actually
+contains an installed `i18n-iso-countries`:
 
 1. The `IMMICH_SERVER_ROOT` environment variable, which accepts both the app root
    and its `server/` subdirectory.
@@ -32,19 +32,20 @@ Additional rules:
 - Candidates are de-duplicated by canonical path, so several sources pointing at
   one directory are not counted as multiple results. De-duplication applies only
   to the comparison; the install uses the original path, because in pnpm layouts
-  the canonical path lies inside `.pnpm` and would change how later resolution
-  behaves.
+  the canonical path lies inside `.pnpm` and using it as the install location
+  would change how later resolution behaves.
 - If no candidate matches, the script scans the candidate roots with
-  `find -maxdepth 5 -type d -name node_modules -prune`.
+  `find -maxdepth 5 -type d -name node_modules -prune` to locate where the
+  package actually lives.
 - If several distinct targets match, the script emits a warning and uses the
   first. The integrated deployment entrypoint is
   `update_data.sh --install && exec start.sh`, where a non-zero status prevents
   Immich from starting.
-- If nothing matches, the script exits non-zero and does not create the
+- If nothing matches at all, the script exits non-zero and does not create the
   directory. Creating it would write the language files to a location Immich
   never reads, without producing an error.
 
-## geodata location
+## geodata path
 
 geodata is installed under `IMMICH_BUILD_DATA` as `geodata/`, which defaults to
 `/build/geodata`. Immich defines that variable itself:
@@ -54,9 +55,9 @@ const buildFolder = dto.IMMICH_BUILD_DATA || '/build';
 geodata: join(buildFolder, 'geodata'),
 ```
 
-Reusing it avoids a second setting that could drift from Immich's. The macOS
-accelerator creates a synthetic link for `/build`, so the path is the same in
-container and native environments.
+The script reuses the same variable, so a second setting cannot drift from
+Immich's. The macOS accelerator creates a synthetic link for `/build`, so the
+path is the same in container and native environments.
 
 ## Verifying the result
 

@@ -1,94 +1,97 @@
 # Taiwan Administrative Division Processing
 
-> This document explains how the project processes geographic information for Taiwan. It expands on the Taiwan optimization section in the README.
+> This document explains how the project handles geographic information for Taiwan. It is the detailed version of [Supported Regions and Language Strategy](../../README.en.md#supported-regions-and-language-strategy) in the README.
 
 ## Data Sources
 
-The Taiwan pipeline centers on official datasets published by the **National Land Surveying and Mapping Center (NLSC)** of the Republic of China (Taiwan):
+Taiwan processing is built on the official boundary data published by the **National Land Surveying and Mapping Center (NLSC)**:
 
-- **Provider**: [NLSC Open Data Platform](https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx)
+- **Source**: [NLSC Open Data Platform](https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx)
 - **Dataset**: Village boundaries (TWD97 latitude and longitude)
-- **Purpose**: Supplies authoritative village-level polygons and official names to guarantee accuracy
+- **Purpose**: Serves as the primary source for Taiwan village boundaries and administrative division names, keeping the data accurate and authoritative
 
-By processing the NLSC village dataset, the pipeline can reverse-geocode down to the village and ensure precise township- and county-level results.
+Processing the NLSC village data lets reverse geocoding resolve coordinates down to the village level, which in turn yields more precise township and county results.
 
-## Administrative Hierarchy Mapping
+## Administrative Level Definitions
 
-The project adopts the GeoNames administrative schema and maps it to Taiwan as follows:
+> [!NOTE]
+> `admin_3` and `admin_4` exist only in this project's intermediate CSV. They preserve the source administrative levels for traceability and debugging, and are never written to the cities500 file Immich consumes. The finest level Immich displays is `admin_2`. Representative point density depends on the granularity of the source features read during extract (villages for Taiwan), not on these two columns.
 
-- **Admin1**: The 22 municipalities and counties (e.g., 臺北市, 新北市, 彰化縣, 南投縣)
-- **Admin2**: Townships, districts, and county-administered cities (e.g., 新北市板橋區, 彰化縣彰化市, 南投縣埔里鎮)
-- **Admin3**: Villages and neighborhoods (里) from the NLSC dataset (e.g., 臺北市大安區龍安里, 新北市板橋區文化里)
-- **Admin4**: Currently unused
+The project follows the GeoNames administrative level system, mapped to Taiwan as follows:
 
-## Column Mapping to GeoNames
+- **Admin 1**: The **22 special municipalities and provincial cities or counties**
+  - Examples: 臺北市, 基隆市, 彰化縣, 南投縣
 
-During extraction, the columns are mapped directly from the NLSC shapefile:
+- **Admin 2**: The **townships, urban townships, county-administered cities, and districts** within each city or county
+  - Examples: 新北市板橋區, 彰化縣彰化市, 南投縣埔里鎮
 
-- **country**: "臺灣"
-- **admin_1**: `COUNTYNAME` (municipality/county name)
-- **admin_2**: `TOWNNAME` (township, district, or county-administered city)
-- **admin_3**: `VILLNAME` (village/neighborhood)
-- **admin_4**: Empty for now
+- **Admin 3**: The **villages (村, 里)** in the NLSC data
+  - Examples: 臺北市大安區龍安里, 新北市板橋區文化里
+
+- **Admin 4**: Currently unused
+
+## GeoNames Column Mapping
+
+Extraction from the NLSC village boundary data uses this column mapping:
+
+- **country**: The intermediate CSV always writes 臺灣, for human inspection only. The column never reaches cities500; the country name Immich displays comes from the country code `TW`
+- **admin_1**: `COUNTYNAME` (city or county name)
+- **admin_2**: `TOWNNAME` (township, urban township, county-administered city, or district name)
+- **admin_3**: `VILLNAME` (village name); writes the string `None` when the source lacks the field
+- **admin_4**: Currently an empty string
 
 ## Display Rules
 
-The pipeline trusts the NLSC source without additional transformations:
+The project uses the administrative information from the official NLSC data as-is, with no extra modification or validation. During translation, Taiwan place names always keep their official names: no OpenCC conversion and no NAER official translation lookup. Only a one-off 裏 → 里 character fix and empty-value normalization remain, and neither takes effect with the current NLSC data.
 
-- **County or municipality (admin_1)**: Directly uses `COUNTYNAME`
-- **Township/district (admin_2)**: Directly uses `TOWNNAME`
-- **Village (admin_3)**: Directly uses `VILLNAME`
+### How the Data Is Handled
+
+- **City and county level (admin_1)**: Reads `COUNTYNAME` directly
+  - Examples: 臺北市, 新北市, 彰化縣
+
+- **Township and district level (admin_2)**: Reads `TOWNNAME` directly
+  - Examples: 板橋區, 彰化市, 埔里鎮
+
+- **Village level (admin_3)**: Reads `VILLNAME` directly
+  - Examples: 龍安里, 文化里
+  - When the source `VILLNAME` is empty — mostly map sheets for outlying islands with no village assigned — the intermediate CSV writes the string `None`. The current data has 206 such rows, 134 of them in 連江縣. The column never reaches cities500, so it does not affect what Immich displays
 
 > [!NOTE]
-> The NLSC dataset already contains complete administrative attributes. The implementation reuses these official values without injecting custom overrides or validation logic.
+> The project relies on the completeness and accuracy of the official NLSC data. The NLSC village boundary data already carries the full administrative division information (city or county, township or district, village), so the code uses those official values directly and needs no correction or validation logic of its own.
 
 ## Processing Details
 
-### Centroid Calculation
+### Coordinate Calculation
 
-- The source data is in TWD97 latitude and longitude (EPSG:4326)
-- To compute accurate centroids, geometries are projected to TWD97 / TM2 zone 121 (EPSG:3826)
-- Centroids are calculated in the projected system and converted back to WGS84 (EPSG:4326)
-- Coordinates are rounded to eight decimal places (roughly 1.1 mm precision)
+- The raw data is TWD97 latitude and longitude (geographic coordinates). The implementation follows the CRS declared in the source Shapefile's `.prj` instead of assuming a fixed code; extraction aborts with an error when the source declares no CRS
+- To keep centroid calculation accurate, geometries are first projected to TWD97 / TM2 zone 121 (EPSG:3826)
+- Polygon centroids are computed in the projected coordinate system. Multipart features such as outlying islands and enclaves collapse to a single representative point using the area-weighted centroid of the merged parts, with no per-part splitting (per-part splitting is currently enabled for Indonesia only), so one village is always one row
+- The centroid is converted back to WGS84 (EPSG:4326) before latitude and longitude are written out
+- Coordinates are rounded to eight decimal places (roughly 1.1 mm precision), and trailing zeros are stripped on write, so a field may hold fewer than eight
 
 > [!NOTE]
-> Working in a projected coordinate system avoids distortion that would otherwise occur when computing centroids directly in geographic coordinates.
+> Computing centroids in a projected coordinate system avoids the distance distortion of geographic coordinates and keeps centroid positions accurate.
 
-### Data Cleaning
+### Data Cleaning and Output
 
-- Rows with missing coordinates are filtered out
-- Object columns are normalized to strings to keep the CSV consistent
-- Uses the shared Rust output path for sorting and standardized columns
+- Records without geometry (Shapefile NullShape) are skipped; coordinates that cannot be parsed abort the run with an error rather than being dropped silently
+- Only `COUNTYNAME`, `TOWNNAME`, and `VILLNAME` are read, and DBF values of every type are converted to strings on output
+- Sorting and standardized columns come from the shared Rust output path
 
-## Processing Workflow
-
-The end-to-end workflow looks like this:
-
-```bash
-# 1. Download the NLSC dataset
-#    Visit https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx
-#    and download the "Village boundaries (TWD97 latitude & longitude)" package.
-
-# 2. Run the extraction script
-cargo run --release -- extract --country TW \
-  --shapefile geoname_data/VILLAGE_NLSC_XXXXXX/VILLAGE_NLSC_XXXXXX.shp \
-  --output meta_data/tw_geodata.csv
-```
-
-Refer to the [developer workflow](../../README.en.md#developer-local-data-processing) for additional context and integration steps.
+For the commands that reproduce this process locally, see [Local Data Processing](development.md#2-extract-raw-geographic-data).
 
 ## Reference Examples
 
-The table below illustrates how different administrative types map into the GeoNames schema. Original names are preserved because translating them would lose important nuance.
+The table below shows real processing examples for the different administrative types in Taiwan:
 
-| Administrative Type | COUNTYNAME | TOWNNAME | VILLNAME | admin_1 | admin_2 | admin_3 |
-| --- | --- | --- | --- | --- | --- | --- |
-| Municipality district | 臺北市 | 大安區 | 龍安里 | 臺北市 | 大安區 | 龍安里 |
-| Municipality district | 新北市 | 板橋區 | 文化里 | 新北市 | 板橋區 | 文化里 |
+| Administrative Type | COUNTYNAME | TOWNNAME | VILLNAME | admin_1 shown | admin_2 shown | admin_3 shown |
+|-----------|-----------|----------|----------|-------------|-------------|-------------|
+| Special municipality district | 臺北市 | 大安區 | 龍安里 | 臺北市 | 大安區 | 龍安里 |
+| Special municipality district | 新北市 | 板橋區 | 文化里 | 新北市 | 板橋區 | 文化里 |
 | Provincial city district | 新竹市 | 東區 | 光復里 | 新竹市 | 東區 | 光復里 |
 | County-administered city | 彰化縣 | 彰化市 | 中山里 | 彰化縣 | 彰化市 | 中山里 |
-| County township | 南投縣 | 埔里鎮 | 南村里 | 南投縣 | 埔里鎮 | 南村里 |
-| County rural township | 花蓮縣 | 壽豐鄉 | 壽豐村 | 花蓮縣 | 壽豐鄉 | 壽豐村 |
+| Urban township (鎮) | 南投縣 | 埔里鎮 | 南村里 | 南投縣 | 埔里鎮 | 南村里 |
+| Rural township (鄉) | 花蓮縣 | 壽豐鄉 | 壽豐村 | 花蓮縣 | 壽豐鄉 | 壽豐村 |
 
 ## References
 

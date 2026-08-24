@@ -26,6 +26,8 @@ cargo run --release -- help
 
 `extract` 命令從 Shapefile 或 GeoJSON 提取資料，產生標準化 CSV。此步驟是選用的，僅在需要更新資料來源或處理新國家時執行。
 
+以下指令中的 `<版本>` 請替換為實際下載到的檔名版本；目前發布資料採用的來源版本記於 [NOTICE.md](../../NOTICE.md)。
+
 ### 臺灣
 
 資料來源：[國土測繪中心（NLSC）](https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx)
@@ -34,7 +36,7 @@ cargo run --release -- help
 # 1. 下載「村(里)界（TWD97經緯度）」資料並解壓縮
 # 2. 執行提取命令
 cargo run --release -- extract --country TW \
-  --shapefile geoname_data/VILLAGE_NLSC_1140825/VILLAGE_NLSC_1140825.shp \
+  --shapefile geoname_data/VILLAGE_NLSC_<版本>/VILLAGE_NLSC_<版本>.shp \
   --output meta_data/tw_geodata.csv
 ```
 
@@ -46,7 +48,7 @@ cargo run --release -- extract --country TW \
 # 1. 下載「行政区域データ（世界測地系）」並解壓縮
 # 2. 執行提取命令
 cargo run --release -- extract --country JP \
-  --shapefile geoname_data/N03-20250101_GML/N03-20250101.shp \
+  --shapefile geoname_data/N03-<版本>_GML/N03-<版本>.shp \
   --output meta_data/jp_geodata.csv
 ```
 
@@ -58,7 +60,7 @@ cargo run --release -- extract --country JP \
 # 1. 從 admdongkor 專案下載官方行政區邊界資料並解壓縮
 # 2. 執行提取命令
 cargo run --release -- extract --country KR \
-  --shapefile geoname_data/HangJeongDong_verYYYYMMDD.geojson \
+  --shapefile geoname_data/HangJeongDong_ver<版本>.geojson \
   --output meta_data/kr_geodata.csv
 ```
 

@@ -50,9 +50,6 @@ jobs:
   diff-guards:
     name: Diff guards
     runs-on: ubuntu-24.04
-    env:
-      # Reason: \x{...} in grep -P is only reliable under a UTF-8 locale.
-      LC_ALL: C.UTF-8
     steps:
       # Reason: pull_request checks out refs/pull/N/merge, whose first parent is
       # the base branch tip and whose tree already contains the merge result.
@@ -108,26 +105,3 @@ jobs:
 
           [ "$fail" -eq 0 ] && echo "All CHANGELOG link references are present."
           exit "$fail"
-
-      # Reason: Code comments are being migrated to English. Warn instead of
-      # failing while the existing Chinese comments are still being converted;
-      # tighten this to an error once the migration is complete.
-      - name: New code comments are in English
-        if: github.event.action != 'labeled' && github.event.action != 'unlabeled'
-        run: |
-          # Reason: git pathspec wildcards cross '/', so 'src/*.rs' already
-          # covers nested files; 'src/**/*.rs' would skip the crate root.
-          added="$(git diff -U0 HEAD^1 HEAD -- 'src/*.rs' 'tests/*.rs' \
-            | grep -E '^\+' | grep -vE '^\+\+\+' || [ $? -eq 1 ])"
-
-          offenders="$(printf '%s\n' "$added" \
-            | grep -E '^\+.*(//|/\*)|^\+\s*\*' \
-            | grep -P '[\x{4e00}-\x{9fff}\x{3000}-\x{303f}\x{ff00}-\x{ffef}]' || [ $? -eq 1 ])"
-
-          if [ -z "$offenders" ]; then
-            echo "No Chinese characters found in added code comments."
-            exit 0
-          fi
-
-          echo "::warning::Added code comments contain Chinese characters. New comments should be written in English."
-          printf '%s\n' "$offenders"

@@ -1,6 +1,6 @@
 # 印尼行政區處理邏輯
 
-> 本文件說明本專案如何處理印尼地區的地理資訊，是 README 中印尼優化章節的詳細版本。
+> 本文件說明本專案如何處理印尼地區的地理資訊，是 [README 支援地區與語言策略](../../README.md#支援地區與語言策略) 的詳細版本。
 
 ## 資料來源
 
@@ -24,6 +24,10 @@ BIG 圖資為印尼官方公開地理資料。本專案**僅將其作為衍生�
 
 ## 行政區層級
 
+> [!NOTE]
+> `admin_3` 與 `admin_4` 只存在於本專案的中介 CSV，用於保留來源行政層級供追溯與除錯，不會輸出到 Immich 使用的 cities500。Immich 顯示的最細層級是 `admin_2`。代表點密度取決於 extract 的來源 feature 顆粒度（印尼為 desa，且 multipart 圖徵會逐 part 拆列），與這兩個欄位無關。
+
+
 BIG desa 圖資的屬性提供下列行政層級：
 
 - **Admin 1**：省（Provinsi，BIG 欄位 `WADMPR`）
@@ -43,6 +47,10 @@ BIG desa 圖資的屬性提供下列行政層級：
 
 比照 TH / KR handler，`admin_1` / `admin_2` 為翻譯後繁中，`admin_3` 以下沿用印尼文原文。
 
+`admin_2` 的譯名查表分三段：先以（省, 縣市）配對查詢；查不到時改用全域同名後備表
+（同一個 `WADMKK` 在各省譯名一致者才收錄，譯名不一致者剔除以免張冠李戴）；仍無結果
+才回退 BIG 原文。
+
 > **未定義行政區過濾**：BIG 圖資中 `WADMPR` 或 `WADMKK` 為空者，多為
 > 「Area tidak terdefinisi」（未定義行政區），無法對應到省／縣市，extract
 > 時直接跳過。
@@ -50,9 +58,12 @@ BIG desa 圖資的屬性提供下列行政層級：
 > **筆數說明**：本批次 desa 圖資可用 feature 共 83,461 筆（原始 83,462 筆，
 > 1 筆因缺 `WADMPR` / `WADMKK` 被過濾）。extract 輸出的列數會多於行政區數，
 > 原因是同一個 desa 若由多個不相連的 polygon 組成（multipart 邊界），**每個
-> part 各自計算 Albers centroid 並輸出成獨立的一列**。命中率實驗中，這批 desa
-> 經 multipart 分列後共產生 104,470 個候選點。因此「輸出列數」與「行政區數」
-> 不會一致，這是預期行為。
+> part 各自計算 Albers centroid 並輸出成獨立的一列**。這批 desa 經 multipart
+> 分列後共產生 104,470 個候選點，與 `meta_data/id_geodata.csv` 現有列數一致。
+> 因此「輸出列數」與「行政區數」不會一致，這是預期行為。feature 筆數為
+> 2026-06-06 下載批次的離線統計（見
+> [印尼投影與座標實驗](../research/idn-handler-projection-coordinate-experiment.md)），
+> 不隨每次 release 重新計算。
 
 ## 名稱策略
 
@@ -65,16 +76,22 @@ BIG desa 圖資的屬性提供下列行政層級：
 
 | 層級 | parent QID | P131 驗證 | 無法通過驗證時 |
 |---|---|---|---|
-| **Admin 1**（省） | 印尼（`Q252`） | 每個候選都需通過 | 回退 BIG 官方印尼文 |
-| **Admin 2**（縣／市） | 所屬省的 QID | 每個候選都需通過 | 回退 BIG 官方印尼文 |
+| **Admin 1**（省） | 印尼（`Q252`） | 取第一個通過的候選 | 回退 BIG 官方印尼文 |
+| **Admin 2**（縣／市） | 所屬省的 QID | 取第一個通過的候選 | 回退 BIG 官方印尼文 |
+
+候選依搜尋排序逐一驗證，取第一個通過 P131 的實體；全數未通過時回退 BIG 官方印尼文。
+WDQS 查詢本身失敗（逾時、回應無法解析）視同該候選未通過，且不寫入快取，因此暫時性
+網路問題只會讓該筆回退原文，不會把錯誤結論固化在 cache 中。
 
 Admin 2 的 parent QID 來自第一層 Admin 1 翻譯所解析出的省 QID。實驗以 WDQS
 全量重驗 38 省，`(wdt:P131)+ → Q252` 通過率 38/38（100%）、P31 含 `Q5098`
-通過率 38/38（100%），標準 P131 規則不會使既有正確的 admin1 翻譯回退。
+通過率 38/38（100%），標準 P131 規則不會使既有正確的 admin1 翻譯回退。此為建置
+handler 時的離線驗證結果，記錄見[印尼 handler 研究報告](../research/indonesia-handler.md)。
 
 #### P31 候選類別過濾（五個 class）
 
-實驗反查確認 admin2 候選需落在下列五個 instance-of 類別之一，方視為合法行政區：
+實驗反查確認候選需落在下列五個 instance-of 類別之一，方視為合法行政區。兩級各用一組
+允許集合：Admin 1 只允許 `Q5098`，Admin 2 允許其餘四個類別。
 
 | QID | 英文 label | 中文 | 用途 |
 |---|---|---|---|
@@ -95,10 +112,11 @@ Admin 2 的 parent QID 來自第一層 Admin 1 翻譯所解析出的省 QID。�
 印尼 Wikidata 上的「選區（daerah pemilihan / dapil）」常與行政區同名，
 含國會（DPR / DPD）與地方議會（DPR-D）選區。反查得選區類別為
 `Q56072658`（electoral district in Indonesia）與 `Q109540666`（DPR-D
-electoral district）。這些選區靠 P31=`Q5098` 等行政區類別過濾與關鍵字比對
-排除；「省名＋羅馬數字」型態的選區（如 `Jawa Barat V`、`DKI Jakarta II`、
-`Sumatera Utara II`）會與省名碰撞，但因 label 與純省名搜尋字串不完全相等，
-也會被自然排除。
+electoral district）。這兩個類別不在上述允許集合中，因此選區在候選
+過濾階段即被剔除；label 含 dapil / DPR / DPRD / DPD / pemilihan / electoral 等單詞者，
+另由關鍵字斷詞比對排除。「省名＋羅馬數字」型態的選區（如 `Jawa Barat V`、
+`DKI Jakarta II`、`Sumatera Utara II`）雖會與省名碰撞，但同樣因 P31 不在允許集合中而
+被剔除。
 
 ### 搜尋語言：印尼文（id）為主、英文為驗證後備
 
@@ -116,7 +134,8 @@ electoral district）。這些選區靠 P31=`Q5098` 等行政區類別過濾與�
 >
 > 測試集建構（`seed=42` 可重現）：結構性同名類別全取 52 筆（26 對「裸名 +
 > Kota 前綴」並存者，bare 與 Kota 各取一），加上隨機 50 筆，dedup 合併為 94 筆。
-> 新增國家時應比照此方法實測後決定搜尋語言，參見 `CLAUDE.md` 擴充新國家章節。
+> 上述命中率為建置 handler 時的離線實驗結果，不隨程式碼驗證，原始記錄見
+> [印尼 handler 研究報告](../research/indonesia-handler.md)。
 
 #### 搜尋字串正規化
 
@@ -157,8 +176,9 @@ Wikidata 主 label。因此 **admin1 搜尋字串採用 BIG 的 `WADMPR` 原值
 
 1. Wikidata `zh-tw` label
 2. Wikidata `zh-hant` label
-3. Wikidata `zh` label，並透過 OpenCC s2t（簡→繁）轉為繁體中文
-4. BIG 官方印尼文原文（`WADMPR` / `WADMKK`）
+3. Wikidata `zh` label，並透過 OpenCC 簡轉繁（`cn2t` preset）轉為繁體中文
+4. Wikidata 的中文維基百科（zhwiki）sitelink 標題，經 zh.wikipedia 繁簡轉換 API 轉為繁體
+5. BIG 官方印尼文原文（`WADMPR` / `WADMKK`）
 
 > **為何 fallback 排除英文**：handler 將 translator 的 `fallback_langs` 明確
 > 設為 `["zh-hant", "zh"]`（比照 `thailand_wikidata.rs`），排除預設鏈中的
@@ -171,17 +191,19 @@ Wikidata 主 label。因此 **admin1 搜尋字串採用 BIG 的 `WADMPR` 原值
 > label 由 translator 以 OpenCC 轉繁；`zh-hant` label 則在 handler 消費層
 > 以「安全字元級簡轉繁白名單」補正。
 
-> **為何不用完整 OpenCC s2t 後處理 `zh-hant`**：OpenCC s2t 對「本身即正體」
+> **為何不用完整 OpenCC 簡轉繁後處理 `zh-hant`**：OpenCC 的完整簡轉繁對「本身即正體」
 > 的字會過度轉換成異體（`里→裏`、`占→佔`、`岩→巖`、`干→乾`、`群→羣`）。
-> 實測對真實 ID 輸出套用完整 s2t 會改壞 24 個正確譯名（如 井里汶縣 →
+> 實測對真實 ID 輸出套用完整簡轉繁會改壞 24 個正確譯名（如 井里汶縣 →
 > 井裏汶縣、峇里巴板 → 峇裏巴板），只修好 1 個（巴布亚省 → 巴布亞省）。
 > 因此 handler 改用「簡體獨有、無正體歧義」的字元白名單（見
 > `indonesia_normalize::fix_simplified_chars`），只修真正的簡體字，對已
 > 正確的繁體專名為冪等、零回歸。
 
-admin1 的 zh 系 label 覆蓋為 38/38（100%）；新巴布亞 4 省皆為**意譯**而非音譯：
+admin1 的 zh 系 label 覆蓋為 38/38（100%）；新巴布亞 4 省皆為**意譯**而非音譯（下表為
+經消費層安全簡轉繁與補省字尾後的最終輸出，其中 Papua Barat Daya 的原始 `zh` label 為
+簡體「西南巴布亚省」）：
 
-| 省 | QID | zh label |
+| 省 | QID | 最終 admin1 輸出 |
 |---|---|---|
 | Papua Barat Daya | `Q115253263` | 西南巴布亞省 |
 | Papua Pegunungan | `Q112810104` | 高地巴布亞省 |
@@ -191,6 +213,18 @@ admin1 的 zh 系 label 覆蓋為 38/38（100%）；新巴布亞 4 省皆為**�
 少數 Wikidata 真實缺漏中文者（無任何 zh 系標籤）依 fallback 回退 BIG 官方
 印尼文原文（不回退英文）。實際回退規模與名單以 release 重新 extract 後的
 `geoname_data/ID_wikidata_cache.json` 為準。
+
+### 消費層守門
+
+handler 採用 Wikidata 譯名前，還會對字串本身做兩道檢查：
+
+- **去除消歧括號**：Wikidata 同名實體的 label 可能帶消歧後綴（如「薩米縣 (巴布亞省)」），
+  尾端括號一律移除，避免把 Wikidata 的內部消歧格式輸出給使用者。
+- **純中文檢查**：譯名含 ASCII 字母或不含漢字者視為無效，回退 BIG 官方印尼文。此判定
+  攔下的是純拉丁字串（如 `East Barito`）與中英夾雜的半翻譯（如「西Kutai區」）。
+
+兩道檢查對即時查詢、cache 與 fixture stub 一視同仁（見 `label_sanitize`），舊 cache 殘留
+的錯誤譯名不會繞過守門。
 
 ### Wikidata cache
 
@@ -224,6 +258,9 @@ centroid 整體勝出 0.19 個百分點。雖然群島國家有 2.21%（104,470 
 凹形內凹邊，降低代表性。分區域命中率 7 區中 6 區 centroid 勝出，各區穩定
 落在 96%~98%，無明顯弱區。
 
+上述命中率為建置 handler 時的離線實驗結果，不隨程式碼驗證，完整方法與數據見
+[印尼投影與座標實驗](../research/idn-handler-projection-coordinate-experiment.md)。
+
 ## 投影策略
 
 印尼 handler 使用單一 Indonesia Albers 等積投影計算 centroid：
@@ -249,7 +286,8 @@ centroid 整體勝出 0.19 個百分點。雖然群島國家有 2.21%（104,470 
 一般 desa 兩法差異為公分級（中位 0.011 m）；即使在極端跨經度散群島樣本
 （最大差異 32.98 m，出現於 Maluku 省 Maluku Tengah 縣 Nua Nea 村）也僅
 數十公尺，遠小於村級行政區的空間粒度，不影響最近鄰 admin2 歸屬。基於準確度、
-效能與實作簡潔性，印尼採用單一 Albers 直接計算 centroid。
+效能與實作簡潔性，印尼採用單一 Albers 直接計算 centroid。上表同為離線實驗結果，
+來源見[印尼投影與座標實驗](../research/idn-handler-projection-coordinate-experiment.md)。
 
 ## 時區處理
 
@@ -270,18 +308,9 @@ transform 端只拿得到 handler 的「最終省名」（Wikidata 繁中譯名�
 schema 不含 WADMPR 欄位。因此對照表另附一份「最終省名 → WADMPR 原文」對照
 （`PROVINCE_ZH_TW`）作為查詢入口；此繁中 key **必須與 handler 最終 admin1
 輸出逐字一致**，由 `indonesia_timezone` 的
-`handler_admin1_outputs_resolve_timezone` 測試斷言 38 省最終形態全部命中非
-預設時區，避免兩處漂移導致 WITA/WIT 省份靜默回退 WIB。
-
-## 資料提取流程
-
-```bash
-# 1. 從 BIG 官方 REST 服務下載 desa 圖資（geometryPrecision=6，版本 TASWIL20230928）
-# 2. 以 GeoJSON / Shapefile 餵入 extract
-cargo run --release -- extract --country ID \
-  --shapefile path/to/idn_desa.geojson \
-  --output meta_data/id_geodata.csv
-```
+`handler_admin1_outputs_resolve_timezone` 測試斷言 38 省最終形態全部命中對照表，避免
+兩處漂移。省名未命中對照表時，transform 直接回報錯誤讓 release 失敗，不會靜默套用
+WIB，確保問題在發版前暴露。
 
 ## 注意事項
 
@@ -292,3 +321,4 @@ cargo run --release -- extract --country ID \
   Wikidata 中出現錯配或不穩定翻譯。
 - BIG 原始向量圖資不在本專案散布範圍內；僅散布反向地理編碼最佳化後的衍生 metadata。
 - 所有座標決策、命中率與搜尋語言實驗皆以 `seed=42` 固定隨機種子，結果可重現。
+- 在本機重現提取流程的指令請見[本地資料處理](development.md#2-提取原始地理資料)。

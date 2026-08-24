@@ -11,13 +11,13 @@ const PARALLEL_CENTROID_MAX_THREADS: usize = 8;
 
 /// 將 MultiPolygon feature 拆成每個 part 各一筆（單一 Polygon）feature。
 ///
-/// 拆分後每個 part 會在後續 centroid 階段各自取中心點、各輸出一列，符合
-/// 「multipart polygon 每個部分各出一列」的預期行為。Point / Polygon 與
-/// 空 MultiPolygon 原樣保留；屬性與 CRS 在各 part 間複製（part 共享同一
-/// 行政區歸屬）。
+/// 拆分後每個 part 會各自計算中心點、各輸出一列。Point / Polygon 與空
+/// MultiPolygon 原樣保留；屬性與 CRS 在各 part 間複製（part 共享同一行政區
+/// 歸屬）。
 ///
 /// Reason: 群島國家（印尼）的行政區常由多個不相連島嶼組成，若以合併 centroid
-/// 取單點，該點可能落在所有 part 之外（落海），降低最近鄰匹配準確度。
+/// 取單點，該點可能落在所有 part 之外（落海），降低最近鄰匹配準確度。目前僅
+/// 印尼啟用，見 `Country::splits_multipolygon_parts`。
 pub(super) fn split_multipolygon_parts(features: Vec<Feature>) -> Vec<Feature> {
     let mut expanded = Vec::with_capacity(features.len());
     for feature in features {

@@ -1,5 +1,7 @@
 # 安全性政策
 
+繁體中文 | [English](docs/en/security.md)
+
 ## 支援的版本
 
 安全性修復僅提供給最新的 release 版本。

@@ -1,88 +1,71 @@
-# Indonesia Administrative Processing Guide
+# Indonesia Administrative Division Processing
 
-This document captures the data source, administrative hierarchy, naming strategy, and coordinate/projection details for Indonesian geospatial data. It is the detailed companion to the Indonesia optimization section in the README.
+> This document explains how the project processes geographic information for Indonesia. It is the detailed version of [Supported Regions and Language Strategy](../../README.en.md#supported-regions-and-language-strategy) in the README.
 
-## Table of Contents
+## Data Sources
 
-- [Data Source](#data-source)
-- [Administrative Levels](#administrative-levels)
-- [Naming Strategy](#naming-strategy)
-  - [Tier 1: Whether to Trust the Wikidata Result (P131 Validation)](#tier-1-whether-to-trust-the-wikidata-result-p131-validation)
-  - [Search Language: Indonesian Primary, English Verification Fallback](#search-language-indonesian-primary-english-verification-fallback)
-  - [Jakarta Special Capital Region Normalization](#jakarta-special-capital-region-normalization)
-  - [Tier 2: Language Label Priority](#tier-2-language-label-priority)
-  - [Wikidata Cache](#wikidata-cache)
-- [Coordinate Strategy](#coordinate-strategy)
-- [Projection Strategy](#projection-strategy)
-- [Time Zone Handling](#time-zone-handling)
-- [Extraction Workflow](#extraction-workflow)
-- [Notes](#notes)
+Indonesian processing is built around the official administrative boundary data published by the **Geospatial Information Agency of Indonesia (BIG)**:
 
----
-
-## Data Source
-
-Indonesian geospatial processing is built around the official **Geospatial Information Agency of Indonesia (BIG)** administrative boundaries:
-
-- **Source**: Badan Informasi Geospasial (BIG) official ArcGIS REST FeatureServer
-- **Provider**: BIG, published via the official REST service
-- **Dataset layer**: desa (village) boundaries; attributes carry province, regency/city, district, and village names
+- **Source**: official REST service of Badan Informasi Geospasial (BIG)
+- **Provider**: BIG, published through the official ArcGIS REST FeatureServer
+- **Dataset layer**: desa (village) boundaries; the attributes carry province, regency/city, district, and village names
 - **Download date**: 2026-06-06
 - **Data version**: `TASWIL20230928` (BIG administrative-division version identifier)
 - **Download precision**: `geometryPrecision=6` (six decimal places, full-precision output with no geometry simplification)
-- **Coordinate system**: attribute `SRS_ID = "SRGI 2013"`, treated as EPSG:4326 (difference from WGS84 is negligible at the meter scale)
+- **Coordinate system**: attribute `SRS_ID = "SRGI 2013"`; the difference from WGS84 (EPSG:4326) is negligible at the meter scale, so it is treated as EPSG:4326
 
 ### License Compliance Stance
 
-BIG data is official, publicly available Indonesian geospatial data. This project **uses it only as input for derivative processing**, emitting reverse-geocoding-optimized place names and representative coordinates (cities500-style single-point metadata). It **does not redistribute or re-publish BIG's original vector boundaries (polygons)**. Obtain the original boundaries directly from the BIG service. If a redistributable open-data source is needed as an alternative or for cross-validation, **GADM** and the **HDX (OCHA)** Indonesia COD-AB are known fallback sources.
-
----
+BIG boundary data is official, publicly available Indonesian geospatial data. This project **uses it only as input for derivative processing** and publishes reverse-geocoding-optimized place names and representative points (cities500-style single-point metadata). It **does not distribute or re-publish BIG's original vector boundary data (polygons)**. Obtain the original boundary data directly from the official BIG service. Should a redistributable open dataset be needed as an alternative or for cross-validation, **GADM** and the **HDX (OCHA)** Indonesia COD-AB are known fallback sources.
 
 ## Administrative Levels
 
-The BIG desa attributes provide the following levels:
+> [!NOTE]
+> `admin_3` and `admin_4` exist only in this project's intermediate CSV, where they preserve the source administrative levels for tracing and debugging; they are never written to the cities500 file Immich consumes. The finest level Immich displays is `admin_2`. Representative point density depends on the granularity of the source features read during extract (desa for Indonesia, with multipart features split per part), not on these two columns.
 
-- **Admin 1**: Province (Provinsi, BIG field `WADMPR`)
-- **Admin 2**: Regency / City (Kabupaten / Kota, BIG field `WADMKK`)
-- **Admin 3**: District (Kecamatan, BIG field `WADMKC`)
-- **Admin 4**: Village (Desa / Kelurahan, BIG field `WADMKD`)
+The BIG desa attributes provide the following administrative levels:
 
-This project uses the desa-level layer as the extract source (village polygons increase positioning density). The output columns are:
+- **Admin 1**: province (Provinsi, BIG field `WADMPR`)
+- **Admin 2**: regency / city (Kabupaten / Kota, BIG field `WADMKK`)
+- **Admin 3**: district (Kecamatan, BIG field `WADMKC`)
+- **Admin 4**: village (Desa / Kelurahan, BIG field `WADMKD`)
 
-| Output Column | Source Field | Description |
+This project extracts from the desa-level boundary data (village polygons increase positioning density) and emits the following columns:
+
+| Output column | Source field | Description |
 |---|---|---|
-| `country` | Fixed value | `印尼` (Indonesia) |
-| `admin_1` | Wikidata / `WADMPR` | Province in Traditional Chinese; falls back to official Indonesian when no Chinese is available |
-| `admin_2` | Wikidata / `WADMKK` | Regency / City in Traditional Chinese; falls back to official Indonesian when no Chinese is available |
-| `admin_3` | `WADMKC` | District (Kecamatan) official Indonesian name |
-| `admin_4` | `WADMKD` | Village (Desa / Kelurahan) official Indonesian name |
+| `country` | Fixed value | `印尼` |
+| `admin_1` | Wikidata / `WADMPR` | Province in Traditional Chinese; falls back to the official BIG Indonesian name when no Chinese exists |
+| `admin_2` | Wikidata / `WADMKK` | Regency / city in Traditional Chinese; falls back to the official BIG Indonesian name when no Chinese exists |
+| `admin_3` | `WADMKC` | District (Kecamatan), official Indonesian name |
+| `admin_4` | `WADMKD` | Village (Desa / Kelurahan), official Indonesian name |
 
-As with the TH / KR handlers, `admin_1` / `admin_2` are translated Traditional Chinese while `admin_3` and below keep the original Indonesian.
+As with the TH / KR handlers, `admin_1` / `admin_2` carry translated Traditional Chinese while `admin_3` and below keep the original Indonesian.
 
-> [!NOTE]
-> **Undefined-area filtering**: rows where `WADMPR` or `WADMKK` is empty are usually "Area tidak terdefinisi" (undefined administrative area); they cannot map to a province / regency and are skipped during extract.
+Translation lookup for `admin_2` runs in three stages: first query the (province, regency/city) pair; if that misses, fall back to a global same-name table (a given `WADMKK` is listed only when every province agrees on its translation, and inconsistent ones are dropped to avoid mismatched names); only then fall back to the BIG original.
 
-> [!NOTE]
-> **Row count**: this batch of desa data has 83,461 usable features (out of 83,462; one is filtered for a missing `WADMPR` / `WADMKK`). The extract emits more rows than administrative units because when a single desa is made up of several disjoint polygons (a multipart boundary), **each part gets its own Albers centroid and is written as a separate row**. In the hit-rate experiment, these desa expand to 104,470 candidate points after multipart splitting. The row count therefore does not equal the administrative-unit count, which is expected behavior.
+> **Undefined-area filtering**: features whose `WADMPR` or `WADMKK` is empty are mostly "Area tidak terdefinisi" (undefined administrative area). They cannot map to a province or regency/city and are skipped during extract.
 
----
+> **Row counts**: this batch of desa boundary data holds 83,461 usable features (83,462 originally; one was filtered for a missing `WADMPR` / `WADMKK`). Extract emits more rows than there are administrative divisions, because when a single desa consists of several disjoint polygons (a multipart boundary), **each part gets its own Albers centroid and becomes a separate row**. After per-part splitting, this batch of desa yields 104,470 candidate points, matching the current row count of `meta_data/id_geodata.csv`. Row count and administrative-division count therefore differ, which is expected behavior. The feature count is an offline statistic for the 2026-06-06 download batch (see [Indonesia Projection and Coordinate Experiment](../research/idn-handler-projection-coordinate-experiment.md), in Traditional Chinese) and is not recomputed on every release.
 
 ## Naming Strategy
 
-The Indonesia handler reuses the Thailand / South Korea Wikidata translator pipeline: **both Admin 1 and Admin 2 go through standard P131 chain validation with instance-of (P31) class filtering of candidates**; when no reliable Chinese exists, names fall back to BIG official Indonesian. Naming is decided in two tiers: first decide whether to trust the Wikidata result, then decide which language label to use.
+The Indonesia handler reuses the Wikidata translator pipeline from the Thailand / South Korea handlers: **Admin 1 and Admin 2 both go through standard P131 chain validation, with instance-of (P31) class filtering of candidates**; when no reliable Chinese exists, names fall back to the official BIG Indonesian. Naming is decided in two tiers: first decide whether to trust the Wikidata result, then decide which language label to use.
 
-### Tier 1: Whether to Trust the Wikidata Result (P131 Validation)
+### Tier 1: Whether to Trust the Wikidata Result (P131 Parent Validation)
 
 | Level | Parent QID | P131 validation | When validation fails |
 |---|---|---|---|
-| **Admin 1** (Province) | Indonesia (`Q252`) | Every candidate must pass | Falls back to BIG official Indonesian |
-| **Admin 2** (Regency / City) | The QID of its Province | Every candidate must pass | Falls back to BIG official Indonesian |
+| **Admin 1** (province) | Indonesia (`Q252`) | Takes the first passing candidate | Falls back to official BIG Indonesian |
+| **Admin 2** (regency / city) | QID of the parent province | Takes the first passing candidate | Falls back to official BIG Indonesian |
 
-The Admin 2 parent QID comes from the Province QID resolved during Admin 1 translation. A full WDQS re-validation over the 38 provinces showed `(wdt:P131)+ → Q252` passing 38/38 (100%) and P31 containing `Q5098` passing 38/38 (100%); the standard P131 rule does not cause correct admin1 translations to regress.
+Candidates are validated one by one in search-ranking order, and the first entity that passes P131 wins; when none pass, the name falls back to the official BIG Indonesian. A failed WDQS query (timeout, unparsable response) counts as a candidate that did not pass and is not written to the cache, so a transient network problem only makes that entry fall back to the original name instead of freezing a wrong conclusion into the cache.
+
+The Admin 2 parent QID comes from the province QID resolved by the Tier 1 Admin 1 translation. A full WDQS re-validation of all 38 provinces passed `(wdt:P131)+ → Q252` 38/38 (100%) and P31 containing `Q5098` 38/38 (100%), so the standard P131 rule does not make correct existing admin1 translations regress. This is an offline validation performed while building the handler; the record lives in the [Indonesia handler research report](../research/indonesia-handler.md) (in Traditional Chinese).
 
 #### P31 Candidate Class Filter (Five Classes)
 
-Entity lookups confirmed that admin2 candidates must fall into one of the following five instance-of classes to be accepted as a valid administrative unit:
+Entity lookups confirmed that a candidate must fall into one of the five instance-of classes below to count as a valid administrative division. Each level uses its own allow-set: Admin 1 permits only `Q5098`, Admin 2 permits the other four.
 
 | QID | English label | Chinese | Use |
 |---|---|---|---|
@@ -93,35 +76,35 @@ Entity lookups confirmed that admin2 candidates must fall into one of the follow
 | `Q11127777` | administrative regency of Indonesia | 行政縣 | Jakarta's Thousand Islands |
 
 > [!IMPORTANT]
-> The last two classes (`Q4272761` / `Q11127777`) were missed in the pilot. Jakarta's five city districts and the Thousand Islands use these special "administrative city / administrative regency" classes rather than ordinary kota / kabupaten. The initial three-class validation hit Jakarta's six districts 0/6; adding the two classes raised it to 6/6. The handler's P31 filter set **must** include all five classes.
+> The last two classes (`Q4272761` / `Q11127777`) were missed in the pilot experiment. Jakarta's five city districts and the Thousand Islands use these special "administrative city / administrative regency" classes rather than ordinary kota / kabupaten. Validating with only three classes hit Jakarta's six districts 0/6; adding the two classes raised it to 6/6. The handler's P31 filter set **must** contain all five classes.
 
 #### Excluding Electoral Districts (dapil)
 
-Indonesian electoral districts (daerah pemilihan / dapil) on Wikidata frequently share names with administrative areas, including national (DPR / DPD) and local council (DPR-D) electoral districts. Lookups returned the electoral-district classes `Q56072658` (electoral district in Indonesia) and `Q109540666` (DPR-D electoral district). These are excluded by the administrative P31 filter (e.g. requiring `Q5098`) and keyword matching. "Province name + Roman numeral" electoral districts (such as `Jawa Barat V`, `DKI Jakarta II`, `Sumatera Utara II`) collide with province names but are naturally excluded because their labels do not exactly equal the bare province search string.
+Indonesian electoral districts (daerah pemilihan / dapil) on Wikidata frequently share names with administrative divisions, covering both national (DPR / DPD) and local council (DPR-D) districts. Lookups returned the electoral-district classes `Q56072658` (electoral district in Indonesia) and `Q109540666` (DPR-D electoral district). Neither class belongs to the allow-sets above, so electoral districts are dropped during candidate filtering; labels containing tokens such as dapil / DPR / DPRD / DPD / pemilihan / electoral are additionally excluded by tokenized keyword matching. "Province name + Roman numeral" districts (such as `Jawa Barat V`, `DKI Jakarta II`, `Sumatera Utara II`) do collide with province names, but they too are dropped because their P31 is not in the allow-set.
 
-### Search Language: Indonesian Primary, English Verification Fallback
+### Search Language: Indonesian (id) Primary, English as Verification Fallback
 
-Search uses Indonesian (`id`) as the primary language; English (`en`) is only a manual verification fallback and is not used in the automated pipeline.
+Search uses Indonesian (`id`) as the primary language; English (`en`) serves only as a fallback for manual verification and never enters the automated pipeline.
 
 > [!IMPORTANT]
 > "Indonesian primary" is an experimentally validated choice.
 >
-> - **Admin 1 (all 38 provinces)**: both id and en hit 38/38 (100%) at rank-1. They tie, and id is chosen for consistency with admin2.
-> - **Admin 2 (94-item test set)**: id is **94/94 (100%)** at rank-1, while en is 90/94 (95.7%). The four en failures are all `Kota X` city-level units (Kota Tegal, Kota Kediri, Kota Madiun, Kota Probolinggo), where the en label prefers the identically named bare regency, pushing the city to rank-2; the same cases hit rank-1 with id.
+> - **Admin 1 (all 38 provinces)**: id and en both hit 38/38 (100%) at rank-1. They tie, and id is chosen to stay consistent with admin2.
+> - **Admin 2 (94-item test set)**: id hits **94/94 (100%)** at rank-1, en hits 90/94 (95.7%). All four en failures are `Kota X` city-level units (Kota Tegal, Kota Kediri, Kota Madiun, Kota Probolinggo): the en label prefers the identically named bare regency, pushing the city to rank-2. The same cases hit rank-1 with id.
 >
-> Test-set construction (`seed=42`, reproducible): all 52 structurally name-colliding entities (26 "bare name + Kota prefix" pairs, taking both bare and Kota), plus a random 50, deduped to 94. When adding a new country, run the same sampling experiment before choosing the search language; see the new-country section in `CLAUDE.md`.
+> Test-set construction (`seed=42`, reproducible): all 52 structurally colliding names (26 pairs where a bare name and a `Kota`-prefixed name coexist, taking one of each), plus 50 random entries, deduplicated to 94. These hit rates come from an offline experiment run while building the handler and are not verified by the code; the raw record lives in the [Indonesia handler research report](../research/indonesia-handler.md) (in Traditional Chinese).
 
 #### Search String Normalization
 
-BIG's `WADMKK` usually stores only the place name after "Kabupaten" for regencies, which collides with the identically named kota (city). The search string is therefore decoupled from the lookup-table key:
+For regencies, BIG's `WADMKK` mostly stores only the place name after "Kabupaten", which collides with the identically named kota (city), so searching it directly picks the wrong entity. The search string is therefore decoupled from the lookup-table key:
 
 - Entries starting with `Kota ` (city): kept as-is.
-- Others (regency): the `Kabupaten ` prefix is prepended before searching.
-- Jakarta city districts: expanded to generic names per the next section.
+- Everything else (regency): the `Kabupaten ` prefix is prepended before searching.
+- Jakarta city districts: expanded to generic names per the rules in the next section.
 
 ### Jakarta Special Capital Region Normalization
 
-BIG stores Jakarta's five city districts and the Thousand Islands under official full names, but Wikidata uses generic names as the primary label; without normalization the correct entity is not found. Expansion rules and verification results (all rank-1, all P131 to `Q3630`):
+BIG stores Jakarta's five city districts and the Thousand Islands under their official full names, but Wikidata uses generic names as the primary label, so without normalization the correct entity is never found. Expansion rules and verification results (all rank-1, all P131 to `Q3630`):
 
 | WADMKK (BIG original) | Normalized query | QID | P31 |
 |---|---|---|---|
@@ -134,29 +117,43 @@ BIG stores Jakarta's five city districts and the Thousand Islands under official
 
 #### DKI / DKJ Note
 
-Jakarta province's Wikidata entity is `Q3630`, whose primary label is still "Jakarta" (en="Jakarta", zh="雅加达", zh-tw="雅加達", id="Jakarta"), with P31 containing `Q5098` (still registered at the province level). Jakarta was recently renamed from DKI (Daerah Khusus Ibukota, Special Capital Region) to **DKJ (Daerah Khusus Jakarta, Jakarta Special Region)**, but this rename is not yet reflected in the Wikidata primary label. The **admin1 search string therefore uses BIG's `WADMPR` original value "DKI Jakarta"** (which hits `Q3630` at rank-1), not the mutable primary label. Likewise, "Daerah Istimewa Yogyakarta" (Yogyakarta Special Region) is searched using its `WADMPR` original value.
+The Wikidata entity for Jakarta province is `Q3630`, whose primary label is still "Jakarta" (en="Jakarta", zh="雅加达", zh-tw="雅加達", id="Jakarta"), with P31 containing `Q5098` (still registered at province level). Jakarta was recently renamed from DKI (Daerah Khusus Ibukota, Special Capital Region) to **DKJ (Daerah Khusus Jakarta, Jakarta Special Region)**, but the rename is not yet reflected in the Wikidata primary label. The **admin1 search string therefore uses BIG's original `WADMPR` value "DKI Jakarta"** (rank-1 hit on `Q3630`) instead of relying on a primary label that can change. For the same reason, "Daerah Istimewa Yogyakarta" (Yogyakarta Special Region) is searched with its original `WADMPR` value as well.
 
 ### Tier 2: Language Label Priority
 
-Once an item is set to adopt the Wikidata result, the name is chosen in this order:
+Once an item is set to adopt its Wikidata result, the name is chosen in this order:
 
 1. Wikidata `zh-tw` label
 2. Wikidata `zh-hant` label
-3. Wikidata `zh` label, converted to Traditional Chinese via OpenCC s2t (Simplified → Traditional)
-4. BIG official Indonesian (`WADMPR` / `WADMKK`)
+3. Wikidata `zh` label, converted to Traditional Chinese with OpenCC (`cn2t` preset)
+4. Title of the Wikidata Chinese Wikipedia (zhwiki) sitelink, converted to Traditional Chinese through the zh.wikipedia conversion API
+5. Official BIG Indonesian original (`WADMPR` / `WADMKK`)
 
-> **Why OpenCC s2t is needed**: experiments show Traditional Chinese labels for Indonesian place names barely exist on Wikidata. Of 10 sampled verified regencies/cities, `zh` had a value 10/10 while `zh-tw` had only 1/10, and the `zh` labels mix Simplified and Traditional (e.g. "下罗干县", "双木丹县", "北鲁乌县" are Simplified). Across the 94-item admin2 hit set, coverage is: `zh` 89/94 (94.7%), `zh-hant` 56/94 (59.6%), `zh-tw` 4/94 (4.3%), any zh-family 90/94 (95.7%). The handler therefore mirrors `thailand_wikidata.rs`: the translator's primary language is `zh-tw` with fallback `["zh-hant", "zh"]`, and `translate.rs` applies OpenCC s2t to fill in Traditional.
+> **Why the fallback chain excludes English**: the handler sets the translator's `fallback_langs` explicitly to `["zh-hant", "zh"]` (mirroring `thailand_wikidata.rs`), excluding `en` and the source language (`id`) from the default chain. The BIG source has no official English field, so leaving `en` in would make regencies/cities without a Chinese label fall back to Wikidata English (for example Aceh Tengah → Central Aceh), contradicting the design rule of keeping the official Indonesian original when Chinese is missing.
+>
+> **Why simplified-to-traditional conversion is needed**: Traditional Chinese labels for Indonesian place names are scarce on Wikidata, and `zh` plus some `zh-hant` labels mix in Simplified characters (Papua's `zh-hant` label, for instance, is 巴布亚省). The translator converts `zh` labels with OpenCC; `zh-hant` labels are corrected in the handler's consumer layer using a safe character-level simplified-to-traditional whitelist.
 
-Admin1 zh coverage is 38/38 (100%); the four new Papua provinces are all **semantic translations** rather than transliterations:
+> **Why not run full OpenCC conversion over `zh-hant`**: OpenCC's full simplified-to-traditional conversion over-converts characters that are already Traditional into variant forms (`里→裏`, `占→佔`, `岩→巖`, `干→乾`, `群→羣`). Applying the full conversion to real ID output broke 24 correct translations (for example 井里汶縣 → 井裏汶縣, 峇里巴板 → 峇裏巴板) while fixing only one (巴布亚省 → 巴布亞省). The handler therefore uses a whitelist of characters that are Simplified-only and unambiguous in Traditional (see `indonesia_normalize::fix_simplified_chars`), fixing genuine Simplified characters only and staying idempotent and regression-free for already-correct Traditional proper names.
 
-| Province | QID | zh label |
+Coverage of zh-family labels for admin1 is 38/38 (100%), and the four new Papua provinces are all **semantic translations** rather than transliterations. The table shows the final output after the consumer layer's safe simplified-to-traditional conversion and province-suffix completion; the raw `zh` label for Papua Barat Daya is the Simplified 西南巴布亚省:
+
+| Province | QID | Final admin1 output |
 |---|---|---|
-| Papua Barat Daya | `Q115253263` | 西南巴布亚省 (Simplified, converted by s2t) |
+| Papua Barat Daya | `Q115253263` | 西南巴布亞省 |
 | Papua Pegunungan | `Q112810104` | 高地巴布亞省 |
 | Papua Selatan | `Q61439296` | 南巴布亞省 |
 | Papua Tengah | `Q12486766` | 中巴布亞省 |
 
-A few entries genuinely missing Chinese on Wikidata (4 of the 515 unique regencies/cities in the pilot full set have no zh-family label: Pekalongan `Q10623`, Solok `Q6058`, Pasaman Barat `Q6103`, Kepahiang `Q7940`) fall back to BIG official Indonesian.
+The few entries that genuinely lack Chinese on Wikidata (no zh-family label at all) follow the fallback chain to the official BIG Indonesian original, never to English. For the actual fallback count and list, read `geoname_data/ID_wikidata_cache.json` after a release re-extract.
+
+### Consumer-Layer Guarding
+
+Before the handler adopts a Wikidata translation, it runs two more checks on the string itself:
+
+- **Strip disambiguation parentheses**: labels of same-name Wikidata entities may carry a disambiguation suffix (such as 薩米縣 (巴布亞省)). Trailing parentheses are always removed, so Wikidata's internal disambiguation format never reaches users.
+- **Pure-Chinese check**: a translation containing ASCII letters, or containing no Han characters at all, is treated as invalid and falls back to the official BIG Indonesian. This check catches pure Latin strings (such as `East Barito`) and half-translated mixtures (such as 西Kutai區).
+
+Both checks treat live queries, the cache, and fixture stubs alike (see `label_sanitize`), so a wrong translation left over in an old cache cannot slip past them.
 
 ### Wikidata Cache
 
@@ -168,48 +165,44 @@ geoname_data/ID_wikidata_cache.json
 
 Fixture tests use `ID_wikidata_stub.json` to avoid depending on live network queries.
 
----
-
 ## Coordinate Strategy
 
-The BIG schema has **no official representative-point field** (attributes only carry administrative codes, names, area, etc.), so the representative coordinate must be derived from geometry. This project uses the **geometric centroid under an Albers equal-area projection**, taking one centroid per MultiPolygon part (consistent with multipart splitting), and introduces no `representative_point` fallback.
+The BIG schema has **no official representative point field** (attributes only carry administrative codes, names, area, and the like), so the representative point must be derived from the geometry. This project uses the **geometric centroid under an Albers equal-area projection**, taking one centroid per MultiPolygon part (consistent with per-part splitting), and introduces no `representative_point` fallback.
 
-Using each desa part's Albers centroid as candidate points and bbox rejection sampling inside kecamatan as simulated GPS, with BallTree haversine nearest-neighbor matching:
+The experiment used each desa part's Albers centroid as a candidate point and bbox rejection sampling inside each kecamatan as simulated GPS, matched by BallTree haversine nearest neighbor:
 
 | Coordinate strategy | admin2 hit rate |
 |---|---:|
 | Albers centroid | **96.99%** |
 | representative_point | 96.80% |
 
-The centroid wins overall by 0.19 percentage points. Although for an archipelago 2.21% of centroids (2,311 of 104,470 parts) fall outside their part geometry, **no fallback is needed**: candidate points serve only as nearest-neighbor representative coordinates (not display coordinates), so a centroid falling tens to hundreds of meters outside usually does not affect the "nearest part" decision; and `representative_point`, by guaranteeing a point inside the geometry, pushes the representative point toward concave edges, reducing representativeness. The centroid wins in 6 of 7 regions, with every region stable in the 96%–98% range and no weak region.
+The centroid wins overall by 0.19 percentage points. For an archipelago, 2.21% of centroids (2,311 of 104,470 parts) do fall outside their own part geometry, but **no fallback is needed**: candidate points serve only as representative points for nearest-neighbor matching, not as display coordinates, and a centroid landing tens to hundreds of meters outside rarely changes which part is nearest. `representative_point`, by guaranteeing a point inside the geometry, instead pushes the representative point toward concave edges and reduces representativeness. The centroid wins in 6 of the 7 regional breakdowns, with every region stable between 96% and 98% and no weak region.
 
----
+These hit rates come from an offline experiment run while building the handler and are not verified by the code; the full method and data live in [Indonesia Projection and Coordinate Experiment](../research/idn-handler-projection-coordinate-experiment.md) (in Traditional Chinese).
 
 ## Projection Strategy
 
-The Indonesia handler computes centroids using a single Indonesia Albers equal-area projection:
+The Indonesia handler computes centroids with a single Indonesia Albers equal-area projection:
 
 ```text
 +proj=aea +lat_1=1 +lat_2=-8 +lat_0=-3 +lon_0=118 +x_0=0 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs
 ```
 
-Design rationale: Indonesia spans roughly 6°N–11°S (about 17°). Standard parallels are placed about 1/6 and 5/6 inside the north/south edges to minimize areal distortion — `lat_1` = +1° (the northern landmass is sparse, so it is pulled inward), `lat_2` = −8°, `lat_0` = −3° (latitude center), `lon_0` = 118° (archipelago longitude center), GRS80 ellipsoid (consistent with SRGI 2013 / WGS84).
+Design rationale: Indonesia spans roughly 6°N–11°S (about 17°), so the standard parallels sit about 1/6 and 5/6 of the way inside the north and south edges to minimize areal distortion — `lat_1` = +1° (pulled inward because there is little landmass north of the equator), `lat_2` = −8°, `lat_0` = −3° (latitude center), `lon_0` = 118° (longitude center of the archipelago), and the GRS80 ellipsoid (consistent with SRGI 2013 / WGS84).
 
-This does not use the dynamic UTM flow from the Japan and South Korea handlers, consistent with Thailand's single-Albers precedent. Measured differences between Albers and dynamic UTM centroids are tiny:
+This strategy skips the dynamic UTM flow used by the Japan and South Korea handlers, following Thailand's single-Albers precedent. Measured differences between Albers and dynamic UTM centroids are tiny:
 
 | Sample group | n | Median | Mean | p99 | Max |
 |---|---:|---:|---:|---:|---:|
-| Full sample | 5,000 | 0.0108 m | 0.1850 m | 3.79 m | 32.98 m |
+| Full random sample | 5,000 | 0.0108 m | 0.1850 m | 3.79 m | 32.98 m |
 | Top 100 by area | 100 | 2.49 m | 3.17 m | 11.53 m | 12.12 m |
 | Top 200 by longitude span | 200 | 2.52 m | 3.25 m | 12.14 m | 32.98 m |
 
-Ordinary desa differ at the centimeter scale (median 0.011 m); even the most extreme cross-longitude scattered-island samples (max 32.98 m, occurring at Nua Nea village, Maluku Tengah Regency, Maluku Province) differ by only tens of meters — far smaller than the spatial granularity of a village-level area, with no effect on nearest-neighbor admin2 assignment. Balancing accuracy, performance, and implementation simplicity, Indonesia computes centroids directly with a single Albers projection.
-
----
+For ordinary desa the two methods differ at the centimeter scale (median 0.011 m); even the extreme scattered-island samples with a wide longitude span (max difference 32.98 m, at Nua Nea village, Maluku Tengah Regency, Maluku Province) differ by only tens of meters, far below the spatial granularity of a village-level division and with no effect on nearest-neighbor admin2 assignment. Weighing accuracy, performance, and implementation simplicity, Indonesia computes centroids directly with a single Albers projection. The table above is likewise an offline experiment result; its source is [Indonesia Projection and Coordinate Experiment](../research/idn-handler-projection-coordinate-experiment.md) (in Traditional Chinese).
 
 ## Time Zone Handling
 
-Indonesia spans three time zones, resolved via a per-province table over the 38 provinces:
+Indonesia spans three time zones, resolved through a per-province table covering all 38 provinces:
 
 | Time zone | IANA | UTC offset | Provinces | Provinces (BIG WADMPR original) |
 |---|---|---|---:|---|
@@ -217,29 +210,14 @@ Indonesia spans three time zones, resolved via a per-province table over the 38 
 | WITA (Waktu Indonesia Tengah) | `Asia/Makassar` | UTC+8 | 12 | Kalimantan Selatan, Kalimantan Timur, Kalimantan Utara, Bali, Nusa Tenggara Barat, Nusa Tenggara Timur, Sulawesi Utara, Sulawesi Tengah, Sulawesi Selatan, Sulawesi Tenggara, Gorontalo, Sulawesi Barat |
 | WIT (Waktu Indonesia Timur) | `Asia/Jayapura` | UTC+9 | 8 | Maluku, Maluku Utara, Papua, Papua Barat, Papua Selatan, Papua Tengah, Papua Pegunungan, Papua Barat Daya |
 
-Time zones are resolved during the transform stage (cities500 schema). The table provides keys for both the "BIG WADMPR original" and the "Traditional Chinese translation" and tries both: the authoritative input list is the WADMPR original spelling, so time-zone assignment is anchored to it and does not drift with translation; the transform stage receives the Traditional Chinese name, so a Chinese key is added too. Even if the Chinese key temporarily misses due to Simplified/Traditional differences, the WADMPR original key and the default-fallback time zone keep the flow uninterrupted.
+Time zones are resolved during the transform stage (cities500 schema). Assignment keys off the **original BIG WADMPR spelling** (`WIB/WITA/WIT_PROVINCES`) as the single authority: the original spelling is stable and language-independent, immune to translation forms and to future drift in Wikidata labels.
 
----
-
-## Extraction Workflow
-
-```bash
-# 1. Download the desa layer from the BIG official REST service (geometryPrecision=6, version TASWIL20230928)
-# 2. Feed GeoJSON / Shapefile into extract
-cargo run --release -- extract --country ID \
-  --shapefile path/to/idn_desa.geojson \
-  --output meta_data/id_geodata.csv
-```
-
----
+The transform stage only sees the handler's final province name (the Wikidata Traditional Chinese translation after safe simplified-to-traditional conversion and province-suffix completion, such as 中爪哇省, 巴釐省, 巴布亞省), because the canonical CSV schema carries no WADMPR column. The table therefore ships a companion "final province name → WADMPR original" mapping (`PROVINCE_ZH_TW`) as the lookup entry point. These Traditional Chinese keys **must match the handler's final admin1 output character for character**, which the `handler_admin1_outputs_resolve_timezone` test in `indonesia_timezone` asserts by checking that all 38 final province names hit the table, preventing drift between the two places. When a province name misses the table, transform reports an error and fails the release rather than silently applying WIB, so the problem surfaces before shipping.
 
 ## Notes
 
-- Indonesian Admin 1 / Admin 2 use Wikidata Traditional Chinese translations; both levels must pass P131 parent validation (Admin 1 against Indonesia `Q252`, Admin 2 against its Province QID). On validation failure or when no reliable Chinese result exists, the name falls back to BIG official Indonesian.
-- Indonesian Admin 3 (district) / Admin 4 (village) keep BIG official Indonesian to avoid mismatches or unstable translations for the large number of low-level place names on Wikidata.
-- The original BIG vector boundaries are out of scope for this project's distribution; only the reverse-geocoding-optimized derivative metadata is distributed.
-- All coordinate decisions and the hit-rate and search-language experiments use a fixed random seed of `seed=42`, making the results reproducible.
-
----
-
-**Last Updated**: 2026-06-06
+- Indonesian Admin 1 / Admin 2 use Wikidata Traditional Chinese translations, and both levels must pass P131 parent validation (Admin 1 against Indonesia `Q252`, Admin 2 against the QID of its province). On validation failure, or when Wikidata offers no reliable Chinese result, names fall back to the official BIG Indonesian.
+- Indonesian Admin 3 (district) and Admin 4 (village) keep the official BIG Indonesian, avoiding the mismatches and unstable translations that affect large numbers of low-level place names on Wikidata.
+- The original BIG vector boundary data is out of scope for this project's distribution; only the reverse-geocoding-optimized derivative metadata is distributed.
+- Every coordinate decision, hit-rate measurement, and search-language experiment fixes the random seed at `seed=42`, so the results are reproducible.
+- For the commands to reproduce the extraction locally, see [Local Data Processing](development.md#2-extract-raw-geographic-data).
