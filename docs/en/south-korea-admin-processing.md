@@ -4,17 +4,47 @@
 
 ## Table of Contents
 
+- [2026 Administrative Reorganization](#2026-administrative-reorganization)
 - [Administrative Levels](#administrative-levels)
 - [Metropolitan City and Province Types](#metropolitan-city-and-province-types)
 - [Centroid Calculation Method](#centroid-calculation-method)
 - [Traditional Chinese Translation Strategy](#traditional-chinese-translation-strategy)
   - [Translation Levels and Priority](#translation-levels-and-priority)
   - [Rust Wikidata Translation Source and Cache](#rust-wikidata-translation-source-and-cache)
+  - [Admin 2 Name Source: Korean Hanja](#admin-2-name-source-korean-hanja)
 - [Data Normalization](#data-normalization)
   - [Splitting Combined City-District Names](#splitting-combined-city-district-names)
   - [Handling Duplicate Place Names](#handling-duplicate-place-names)
+  - [Disambiguation Parentheses](#disambiguation-parentheses)
 - [Special Handling for Sejong Special Self-Governing City](#special-handling-for-sejong-special-self-governing-city)
 - [Data Sources](#data-sources)
+
+---
+
+## 2026 Administrative Reorganization
+
+`HangJeongDong_ver20260701` reflects two statutory reorganizations that took effect on 2026-07-01. Both are administrative changes the project must follow, not data errors.
+
+### Jeonnam-Gwangju Integrated Special City
+
+Under the *Special Act on the Establishment of Jeonnam-Gwangju Integrated Special City* (법률 제21446호, promulgated 2026-03-05, in force 2026-07-01), Jeollanam-do and Gwangju Metropolitan City were abolished and merged into 전남광주통합특별시, granted a legal status comparable to Seoul Special City.
+
+- 27 basic local governments: 5 cities (Mokpo, Yeosu, Suncheon, Naju, Gwangyang), the 5 former Gwangju districts (Dong, Seo, Nam, Buk, Gwangsan), and 17 counties
+- Affects 393 rows; administrative codes were renumbered wholesale (`46110` / `29110` → `12110`)
+- The project outputs 「全南光州市」, following the existing Admin 1 convention of dropping the administrative-class modifier rather than using the full official hanja 「全南光州統合特別市」
+
+### Incheon District Reorganization
+
+Under the *Act on the Establishment of Jemulpo-gu, Yeongjong-gu and Geomdan-gu in Incheon Metropolitan City* (법률 제20161호, promulgated 2024-01-30, in force 2026-07-01) and the *Act on Renaming Seo-gu of Incheon Metropolitan City* (법률 제21734호):
+
+| Before | After |
+| :--- | :--- |
+| Jung-gu (inland) + Dong-gu | 제물포구 (Jemulpo District) |
+| Jung-gu (Yeongjong Island area) | 영종구 (Yeongjong District) |
+| Seo-gu (north of the Gyeongin Ara Waterway) | 검단구 (Geomdan District) |
+| Seo-gu (remainder) | 서해구 (Seohae District) |
+
+Incheon went from 2 counties and 8 districts to 2 counties and 9 districts.
 
 ---
 
@@ -27,24 +57,28 @@ South Korea uses a three-level administrative system (excluding the country leve
 
 | Level | Korean Name | Type | Count | Source Field |
 |-------|-------------|------|-------|--------------|
-| **Admin 1** | Metropolitan City / Province | 광역자치단체 | 17 | `sidonm` |
-| **Admin 2** | City / District / County | 기초자치단체 | 252 (231 distinct translations) | `sggnm` |
+| **Admin 1** | Metropolitan City / Province / Integrated Special City | 광역자치단체 | 16 | `sidonm` |
+| **Admin 2** | City / District / County | 기초자치단체 | 253 (235 distinct translations) | `sggnm` |
 | **Admin 3** | Dong / Eup / Myeon | 행정동/법정동 | 3,534 rows (2,802 distinct names) | Parsed from `adm_nm` |
 | **Admin 4** | Original Admin 3 | - | Only when a city-district split occurs (492 rows) | Preserves the original value |
 
-> **Statistical baseline**: `meta_data/kr_geodata.csv` generated from the `HangJeongDong_ver20260401` boundary data (3,558 rows in total).
+> **Statistical baseline**: `meta_data/kr_geodata.csv` generated from the `HangJeongDong_ver20260701` boundary data (3,558 rows in total).
 
 > **Note**: Admin 4 is used only when a city-district split occurs (for example, `성남시분당구` splits into `성남시` + `분당구`), preserving the original Admin 3 value. Immich's reverse geocoding ignores this column; it exists for data completeness and debugging.
 
 ### Admin 1 Typology
 
-The 17 metropolitan cities and provinces fall into these categories:
+The 16 first-level divisions fall into these categories:
 
 - **Special City** (특별시): 1 – Seoul
-- **Metropolitan City** (광역시): 6 – Busan, Daegu, Incheon, Gwangju, Daejeon, Ulsan
+- **Metropolitan City** (광역시): 5 – Busan, Daegu, Incheon, Daejeon, Ulsan
+- **Integrated Special City** (통합특별시): 1 – Jeonnam-Gwangju
 - **Special Self-Governing City** (특별자치시): 1 – Sejong
-- **Province** (도): 6 – Gyeonggi-do, Chungcheongbuk-do, Chungcheongnam-do, Gyeongsangbuk-do, Gyeongsangnam-do, Jeollanam-do
+- **Province** (도): 5 – Gyeonggi-do, Chungcheongbuk-do, Chungcheongnam-do, Gyeongsangbuk-do, Gyeongsangnam-do
 - **Special Self-Governing Province** (특별자치도): 3 – Gangwon, Jeonbuk, Jeju
+
+> [!NOTE]
+> Since 2026-07-01, Jeollanam-do and Gwangju Metropolitan City have been merged into 전남광주통합특별시 under 법률 제21446호, reducing the number of first-level divisions from 17 to 16. See [2026 Administrative Reorganization](#2026-administrative-reorganization).
 
 ### Admin 2 Types
 
@@ -64,12 +98,12 @@ Basic local governments (기초자치단체) fall into three kinds:
 
 ## Metropolitan City and Province Types
 
-The 17 metropolitan cities and provinces follow different naming conventions, and the translations must match what users in Taiwan expect.
+The 16 first-level divisions follow different naming conventions, and the translations must match what users in Taiwan expect.
 
 ### Naming Rules
 
-1. **Special City / Metropolitan City / Special Self-Governing City**: always output as "X市".
-   - Examples: 서울특별시 → 首爾市, 부산광역시 → 釜山市, 세종특별자치시 → 世宗市
+1. **Special City / Metropolitan City / Special Self-Governing City / Integrated Special City**: always output as "X市".
+   - Examples: 서울특별시 → 首爾市, 부산광역시 → 釜山市, 세종특별자치시 → 世宗市, 전남광주통합특별시 → 全南光州市
 
 2. **Province / Special Self-Governing Province**: always output as "X道", and special self-governing provinces revert to the traditional province names familiar in Taiwan.
    - Examples: 경기도 → 京畿道, 강원특별자치도 → 江原道, 전북특별자치도 → 全羅北道, 제주특별자치도 → 濟州道
@@ -99,8 +133,8 @@ Translation of South Korean geographic data is layered, balancing translation qu
 
 | Level | Method | Count | Wikidata Lookups |
 |-------|--------|-------|------------------|
-| **Admin 1** | Built-in mapping + Wikidata QID | 17 | 17 items |
-| **Admin 2** | Wikidata batch translation | 228 | 228 items |
+| **Admin 1** | Built-in mapping + Wikidata QID | 16 | 16 items |
+| **Admin 2** | Wikidata entity lookup + Korean hanja | 229 | 229 items |
 | **Admin 2 (Sejong)** | **Manual mapping** | 24 | **None** |
 | **Admin 3** | Korean source text retained | 3,534 | None |
 
@@ -113,13 +147,13 @@ Translation of South Korean geographic data is layered, balancing translation qu
 **Design rationale:**
 
 1. **Admin 1**: the built-in mapping supplies the concise names used in Taiwan (「首爾市」 rather than 「首爾特別市」), while still fetching the QID for Admin 2 validation.
-2. **Admin 2**: Wikidata translation, at a manageable volume (228 items).
+2. **Admin 2**: Wikidata identifies the entity; the name itself comes from the Korean Wikipedia hanja (see [Admin 2 Name Source: Korean Hanja](#admin-2-name-source-korean-hanja)), at a manageable volume (229 items).
 3. **Admin 2 (Sejong)**: the manual mapping guarantees 100% Traditional Chinese coverage.
 4. **Admin 3**: keeping the Korean source text avoids 3,500+ API requests and barely affects the user experience.
 
 ### Admin 1 Translation Method
 
-A **built-in mapping** supplies the names customary in Taiwan (not the official Wikidata labels) for all 17 metropolitan cities and provinces. The full table lives in `src/pipeline/extract/handlers.rs`:
+A **built-in mapping** supplies the names customary in Taiwan (not the official Wikidata labels) for all 16 first-level divisions. The table also keeps the pre-merger `광주광역시` and `전라남도` entries so older boundary data can still be re-extracted. The full table lives in `src/pipeline/extract/handlers.rs`:
 
 | Official Name | Project Output | Official Name | Project Output |
 | :--- | :--- | :--- | :--- |
@@ -131,14 +165,15 @@ A **built-in mapping** supplies the names customary in Taiwan (not the official 
 | 대전광역시 | 大田市 | 경상북도 | 慶尚北道 |
 | 울산광역시 | 蔚山市 | 경상남도 | 慶尚南道 |
 | 세종특별자치시 | 世宗市 | 제주특별자치도 | 濟州道 |
-| 경기도 | 京畿道 | | |
+| 경기도 | 京畿道 | 전남광주통합특별시 | 全南光州市 |
 
 ### Rust Wikidata Translation Source and Cache
 
 The Rust production handler uses the shared Wikidata translation cache pipeline to read and
 update the local `geoname_data/KR_wikidata_cache.json`. When the cache is missing or lacks
 entries, production extract queries Wikidata, fills in the context-aware cache, then applies
-the built-in Admin 1 and Sejong mappings. Automated fixture validation still uses the supplied
+the built-in Admin 1 and Sejong mappings, and finally overwrites Admin 2 names with the Korean
+Wikipedia hanja (see the next section). Automated fixture validation still uses the supplied
 `KR_wikidata_stub.json` and never calls the live Wikidata service, keeping release gates
 independent of API quota, upstream data drift, and network conditions.
 
@@ -146,7 +181,34 @@ To refresh the South Korean translation source, rerun production extract against
 GeoJSON. Fixture and parity validation that requires deterministic output should keep using the
 matching stub or cache.
 
-**Fallback chain**: translation tries these label sources in order.
+### Admin 2 Name Source: Korean Hanja
+
+Admin 2 names in Chinese are **taken from the hanja spelling in the Korean Wikipedia article**, not from Wikidata's Chinese labels.
+
+Korean administrative names are hanja words to begin with, so the hanja is the *original*, not a translation — the same principle by which the Japan handler reuses the Japanese kanji straight from the source boundary data. Wikidata's Chinese labels are a second-hand product and carry three systematic error classes:
+
+| Error class | Example | Cause |
+| :--- | :--- | :--- |
+| Institution name imported by mistake | `관악구` has `zh-hant` = 「冠嶽區**廳**」 | A bot imported the `governing_body` field from the Chinese Wikipedia infobox, which names the district *office*, not the district |
+| Wrong character from script conversion | `함평군` → 「**鹹**平郡」 (should be 咸平郡); `관악구` → 「冠**嶽**區」 (should be 冠岳區) | `zh-tw` / `zh-hk` labels were generated in bulk from `zh` by a naive Simplified-to-Traditional converter that hit one-to-many mappings |
+| Stale after a level change | `여주시` → 「驪州**郡**」 (promoted to a city in 2013); `검단구` → 「黔丹**面**」 (became a district in 2026) | Upstream labels were never updated |
+
+Using the hanja eliminates all three at once and requires **no manual override table**.
+
+**Flow:**
+
+1. Wikidata identifies *which entity* this is — search, candidate filtering, and P131 containment verification.
+2. Follow the entity's `kowiki` sitelink and fetch the article's lead paragraph as plain text.
+3. Extract the hanja from the parentheses in the first sentence, e.g. `함평군(咸平郡)은 …` → `咸平郡`.
+4. Append the administrative-level suffix when the hanja lacks it (시→市, 군→郡, 구→區). A few articles open with a name that omits the level — Mokpo's lead reads `목포(木浦, Mokpo)`, which becomes `木浦市`.
+5. If no hanja can be extracted, keep the Wikidata label so the result never gets worse.
+
+Extracted hanja is stored in the cache under `labels[<QID>].kohanja`, so reruns do not call Korean Wikipedia again.
+
+> [!NOTE]
+> Korean hanja uses the older Kangxi character forms, which differ from Taiwan's standard forms — `淸州市` (not 清), `尙州市` (not 尚), `鎭川郡` (not 鎮), `靑陽郡` (not 青), `鷄龍市` (not 雞). The source country's forms are **kept deliberately**, consistent with how the Japanese data keeps shinjitai forms such as `県`, `沢`, `塩`, and `浜`.
+
+**Wikidata label fallback chain** (used only when no hanja can be extracted):
 
 1. zh-TW (Traditional Chinese – Taiwan)
 2. zh-Hant (Traditional Chinese)
@@ -157,33 +219,38 @@ matching stub or cache.
 7. Original Korean name (all sources failed)
 
 > [!NOTE]
-> English or Korean labels matched at steps 4 and 5 are rejected by the South Korea handler's
-> `is_valid_chinese_translation` and fall back to the original Korean name, so they never reach
-> the output. And because Wikidata entities almost always carry an `en` label, step 6's Chinese
-> Wikipedia title is never reached in practice. Across the 245 translations currently in
-> `geoname_data/KR_wikidata_cache.json`, only three sources appear: zh-TW (180), OpenCC
-> conversion (46), and zh-Hant (19).
+> English or Korean labels matched at steps 4 and 5 are rejected by `is_valid_chinese_translation`
+> and fall back to the original Korean name, so they never reach the output. Across the 245
+> translations currently in `geoname_data/KR_wikidata_cache.json`, all 229 Admin 2 entries come
+> from hanja (`kowiki-hanja`); the remaining 16 are Admin 1, whose output comes from the built-in
+> mapping table.
 
 #### Candidate Filtering
 
-When translating Admin 2 (city / district / county), candidate filtering removes government
-institutions so the result is a real administrative division name.
+When translating Admin 1 and Admin 2, **a candidate's Korean label must match the queried name exactly**, or it is not considered.
 
-**Filter rules:**
+**Design rationale:**
 
-Wikidata candidate labels are checked and dropped when they contain any of these keywords:
+The previous approach dropped candidates whose labels contained keywords such as 의회, 구청, 교육청, 廳, or *government*. That blacklist had two fatal problems:
 
-- **Legislative bodies**: 의회, 議會, council, assembly, 委員會, legislature
-- **Executive agencies**: 시청, 구청, 군청, 도청, 교육청, 廳, government
+- **It killed correct candidates.** It inspected *every* language label and dropped the candidate if any one of them matched. `관악구` (whose `zh-hant` had been filled in as 「冠嶽區廳」) and `송파구` (「鬆坡區廳」) were both eliminated, so the pipeline selected a dong inside the district (신림동) and a subway station (잠실역) instead — 48 rows of wrong place names in the published data.
+- **It could never be complete.** Of the seven candidates returned for 「전남광주통합특별시」, the superintendent of education (교육감), the election commission (선거관리위원회), and the city bus service (시내버스) were all absent from the blacklist.
 
-**Design considerations:**
+Exact Korean-label matching drops institutions, offices, electoral districts, and stations naturally, with zero false positives across the 245 current entries.
 
-- Match whole terms (`시청`, `도청`, `군청`) instead of single characters, avoiding false positives.
-- Prevent government offices from being taken for administrative divisions (`세종특별자치시청` must not become one).
-- Keep legitimate divisions intact (Cheongdo County is not dropped because of the character 「청」).
+> [!IMPORTANT]
+> This filter **must also be applied to Admin 1**. After the 2026 reorganization, a search for 「전남광주통합특별시」 also returns the identically prefixed office of education (`…교육청`), whose P131 chain likewise reaches South Korea and passes containment verification. Without filtering at Admin 1, the pipeline picks the institution and every one of the 27 divisions beneath it inherits the wrong parent QID.
 
 > [!NOTE]
-> This filter applies only to Admin 2 translation for ordinary regions. Sejong Special Self-Governing City uses the manual mapping exclusively, never enters the Wikidata flow, and therefore never touches this filter.
+> Sejong Special Self-Governing City uses the manual mapping exclusively, never enters the Wikidata flow, and therefore neither this filter nor the hanja override applies to it.
+
+#### Failing Loudly on Missing Containment Parents
+
+Verifying an Admin 2 entity's P131 containment requires its Admin 1 QID. **If any Admin 1 fails to resolve to a QID, extract aborts with an error** instead of falling back to the shared layer's default of using the country QID.
+
+That default is far too permissive for Admin 2: verifying against the country QID turns "is this 동구 inside *this* city?" into "is this 동구 anywhere in South Korea?", which Busan's and Daegu's Dong-gu both satisfy. During the 2026 reorganization this silent degradation is exactly what amplified a single wrong Admin 1 lookup into 393 + 27 wrong output rows, with no error message anywhere along the way.
+
+Failing outright means the next reorganization stops the pipeline during extract rather than quietly shipping bad data.
 
 ---
 
@@ -217,25 +284,24 @@ South Korea has many repeated administrative division names, so P131 validation 
 
 #### Admin 2 Level
 
-Seven names repeat, yet each is unique within its own Admin 1:
+Six names repeat, yet each is unique within its own Admin 1:
 
 | Name | Occurrences | Parent Admin 1 |
 |------|-------------|----------------|
-| 중구 (中區) | 6 | 首爾市, 釜山市, 大邱市, 仁川市, 大田市, 蔚山市 |
-| 동구 (東區) | 6 | 釜山市, 大邱市, 仁川市, 光州市, 大田市, 蔚山市 |
-| 서구 (西區) | 5 | 釜山市, 大邱市, 仁川市, 光州市, 大田市 |
-| 남구 (南區) | 4 | 釜山市, 大邱市, 光州市, 蔚山市 |
-| 북구 (北區) | 4 | 釜山市, 大邱市, 光州市, 蔚山市 |
+| 중구 (中區) | 5 | 首爾市, 釜山市, 大邱市, 大田市, 蔚山市 |
+| 동구 (東區) | 5 | 釜山市, 大邱市, 大田市, 蔚山市, 全南光州市 |
+| 서구 (西區) | 4 | 釜山市, 大邱市, 大田市, 全南光州市 |
+| 남구 (南區) | 4 | 釜山市, 大邱市, 蔚山市, 全南光州市 |
+| 북구 (北區) | 4 | 釜山市, 大邱市, 蔚山市, 全南光州市 |
 | 강서구 (江西區) | 2 | 首爾市, 釜山市 |
-| 고성군 | 2 | 江原道, 慶尚南道 |
+
+> **Note**: the two 고성군 translate differently (高城郡 in 江原道, 固城郡 in 慶尚南道), so they never collide in Chinese. Incheon's 중구 / 동구 / 서구 became 제물포구 / 영종구 / 서해구 / 검단구 on 2026-07-01 and no longer take part in these collisions.
 
 **Handling**: P131 validation ensures the correct Admin 2 is chosen (「中區」 must sit inside 「首爾」).
 
-> **Exception**: the two 고성군 translate differently (高城郡 in 江原道, 固城郡 in 慶尚南道), so they do not collide at the Traditional Chinese layer.
-
 #### Admin 3 Level
 
-About 229 duplicate names (counted from the `HangJeongDong_ver20260401` boundary data). They do not affect what Immich shows, which normally stops at Admin 2.
+About 229 duplicate names (counted from the `HangJeongDong_ver20260701` boundary data). They do not affect what Immich shows, which normally stops at Admin 2.
 
 **Strategy**: keep the Korean source text untranslated.
 
@@ -243,32 +309,21 @@ About 229 duplicate names (counted from the `HangJeongDong_ver20260401` boundary
 
 Some place names carry disambiguation parentheses in Wikidata (「東區 (光州)」). In this project's data structure `admin_1` already names the parent region, so `admin_2` does not need to repeat it.
 
-#### Gwangju-Specific Processing
-
-Gwangju's Dong-gu and Seo-gu carry disambiguation markers in their Traditional Chinese Wikidata labels:
-
-- `동구` → 東區 (光州)
-- `서구` → 西區 (光州)
-
-**Problems:**
-- The same-named districts in other cities (Busan, Daegu, Incheon, Daejeon, Ulsan) have no parentheses.
-- Naming becomes inconsistent.
-- Immich displays redundant information: 「光州 > 東區 (光州)」.
-
 **Processing logic:**
 
-After translation completes, the Rust handler strips trailing disambiguation parentheses only from Admin 2 records where `sidonm == "광주광역시"`. The implementation lives in `src/pipeline/extract/handlers.rs`, controlled by `strip_trailing_parenthetical`.
+The Rust handler strips trailing disambiguation parentheses from **all** Admin 2 records, via `strip_trailing_parenthetical` in `src/pipeline/extract/handlers.rs`.
 
-**Effect:**
+The rule previously applied only when `sidonm == "광주광역시"`. Once Gwangju merged into 전남광주통합특별시 on 2026-07-01 that condition could never hold again, and the stripping **failed silently** — `東區 (光州)` would have gone straight to output with no error anywhere. A whitelist that breaks on the next reorganization should not exist, so the rule now applies unconditionally: official Chinese names of Korean administrative divisions contain no parentheses, so there is nothing to damage.
 
-| Before | After |
-|--------|-------|
-| 光州 > 東區 (光州) | 光州 > 東區 ✅ |
-| 光州 > 西區 (光州) | 光州 > 西區 ✅ |
-| 釜山 > 東區 | 釜山 > 東區 (unaffected) |
+Now that Korean hanja is the primary name source this rule is no longer exercised on the main path (hanja carries no disambiguation suffix), but it remains in place for the Wikidata label fallback chain.
 
-> [!NOTE]
-> This rule targets Gwangju alone, keeping control precise. If other cities turn out to have the same problem, the logic can be extended.
+**Guard rails**: `strip_trailing_parenthetical` only recognises "a closing bracket at the end plus the last opening bracket of the same type", so nested or unbalanced brackets would produce a broken string. The original value is therefore kept whenever stripping would yield an empty string or leave a bracket behind:
+
+| Input | Output | Reason |
+| :--- | :--- | :--- |
+| `東區 (光州)` | `東區` | Normal strip |
+| `甲（乙（丙））` | `甲（乙（丙））` | Stripping would leave the unbalanced `甲（乙` |
+| `（甲）` | `（甲）` | Stripping yields an empty string, i.e. the name is lost |
 
 ---
 
@@ -369,7 +424,12 @@ Example: 보람동 → 寶藍洞
 - API: https://www.wikidata.org/w/api.php
 - SPARQL: https://query.wikidata.org/sparql
 - License: CC0 1.0 Universal (Public Domain)
-- Usage: multilingual place name translations and P131 relation validation
+- Usage: identifying administrative entities, P131 containment validation, and resolving the `kowiki` sitelink
+
+**Korean Wikipedia**
+- API: https://ko.wikipedia.org/w/api.php
+- License: CC BY-SA 4.0
+- Usage: supplies the hanja spelling for Admin 2, taken from the first sentence of the article
 
 **Chinese Wikipedia**
 - API: https://zh.wikipedia.org/w/api.php
