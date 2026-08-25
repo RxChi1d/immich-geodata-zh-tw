@@ -401,8 +401,12 @@ fn korea_admin2(sidonm: &str, sggnm: &str, translations: &WikidataTranslations) 
 /// Reason: 上游譯名過期時層級會對不上，而這種錯誤不會觸發任何既有檢查——
 /// 真實案例：여주시 2013 年由郡升格為市，Wikidata label 卻仍是「驪州郡」；
 /// 검단구 2026 年設區，label 停在舊制的「黔丹面」。兩者都是合法中文，會被
-/// 安靜地送到使用者眼前。此處讓它回退成韓文原名，並反映在 extract log 的
-/// fallback 計數上，把「安靜地錯」變成「看得見地錯」。
+/// 安靜地送到使用者眼前。此處讓它回退成韓文原名，把「安靜地錯」變成輸出
+/// CSV 中看得見的未翻譯項目。
+///
+/// Reason: 回退發生在本消費層，不經過 translator 的 fallback 計數（該計數
+///         只統計 batch_translate 階段無候選通過 P131 的項目），因此
+///         不會出現在 `stage=wikidata phase=translate` 的 log 數字裡。
 fn korea_admin2_level_matches(sggnm: &str, translated: &str) -> bool {
     match sggnm.chars().last() {
         Some('시') => translated.ends_with('市'),

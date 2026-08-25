@@ -62,4 +62,5 @@ PR 變更到這些檔案時，需加上 `data-update` 標籤以確認這是刻�
    - 建構 `TranslationDataset` 時必填 `country_qid`，逐級驗證 admin2 對 admin1、admin1 對國家的隸屬關係。
    - 推行前以 WDQS 確認該國全部 admin1 都能通過 `(wdt:P131)+ <國家QID>`，避免既有正確譯名回退。
    - 搜尋語言依該層級在 Wikidata 上的鑑別度選擇，並以實際抽樣驗證後決定（例如南韓使用韓文原文、泰國以英文為主並以泰文後備）。測試集建議涵蓋該國的結構性同名類別，再加上隨機樣本，並固定亂數種子以便重現；作法可參考[印尼行政區處理](docs/zh-tw/indonesia-admin-processing.md)記錄的實驗。
+   - Wikidata 譯名出錯時多半不會報錯：選到錯誤實體會直接輸出錯誤的譯名，且多數防線只在個別國家的 handler 內生效。動手前請先讀[Wikidata 譯名的已知失效形態](docs/zh-tw/wikidata-translation.md)。
 4. 補上 fixture、單元測試與真實資料驗證，並新增 `docs/zh-tw/` 的對應說明文件。

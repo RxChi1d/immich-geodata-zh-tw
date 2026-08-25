@@ -29,6 +29,7 @@ The documentation is grouped by purpose. For installation steps and common quest
 | :--- | :--- |
 | [Contributing Guide](contributing.md) | Development workflow, commit conventions, testing requirements |
 | [Local Data Processing](development.md) | Reproduce the data pipeline locally: extract boundary data, build a release, verify |
+| [Known Translation Failures on Wikidata](wikidata-translation.md) | Failure patterns, safeguard reach, and cache clearing for KR/TH/ID translations |
 
 ## Research and History
 

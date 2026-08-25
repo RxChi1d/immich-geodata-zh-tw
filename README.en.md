@@ -45,12 +45,14 @@ Each region uses whichever language strategy reads best for users in Taiwan:
 | :--- | :--- | :--- | :--- |
 | 🇹🇼 Taiwan | Official Traditional Chinese names | National Land Surveying and Mapping Center (NLSC), Ministry of the Interior | [Details](docs/en/taiwan-admin-processing.md) |
 | 🇯🇵 Japan | Native Japanese (kanji and kana) | 国土数値情報 (Ministry of Land, Infrastructure, Transport and Tourism, Japan) | [Details](docs/en/japan-admin-processing.md) |
-| 🇰🇷 South Korea | Traditional Chinese translation | admdongkor (open-source project maintaining South Korean administrative dong boundaries) | [Details](docs/en/south-korea-admin-processing.md) |
+| 🇰🇷 South Korea | Official Korean hanja for cities and counties, Traditional Chinese for provinces | admdongkor (open-source project maintaining South Korean administrative dong boundaries) | [Details](docs/en/south-korea-admin-processing.md) |
 | 🇹🇭 Thailand | Traditional Chinese translation (official English, then Thai, as fallback) | COD-AB Thailand administrative boundaries (UN OCHA) | [Details](docs/en/thailand-admin-processing.md) |
 | 🇮🇩 Indonesia | Traditional Chinese translation (official Indonesian as fallback) | Geospatial Information Agency of Indonesia (BIG) | [Details](docs/en/indonesia-admin-processing.md) |
 | 🌏 Other regions | Traditional Chinese translation (original name kept when none exists) | NAER *Translations of Foreign Place Names*, GeoNames | [Details](docs/en/global-translation-processing.md) |
 
 Japan keeps the native Japanese names straight from the official boundary data, with no Chinese conversion. Japanese kanji place names usually differ from the Chinese spelling only in glyph shape — 「横浜市」 versus 「橫濱市」, for example.
+
+South Korean city and county names use the official Korean hanja (「淸州市」, for example) for the same reason: Korean division names are Chinese-character words to begin with, so the characters are the original name rather than a translation.
 
 ## Installation
 
