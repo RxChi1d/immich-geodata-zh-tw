@@ -23,6 +23,11 @@ BIG 圖資為印尼官方公開地理資料。本專案僅將其作為衍生加�
 
 ### BIG REST 下載可重現指令與固定參數
 
+> [!WARNING]
+> 本節記錄的是當時使用的 FeatureServer 與 `resultOffset` 分頁方式，該端點已下線，
+> `resultOffset` 分頁在現行服務上也會失敗。現行的下載步驟見
+> [本地資料處理](../zh-tw/development.md#印尼)。
+
 從 BIG FeatureServer 以 `query` 端點分頁抓取 desa polygon，固定參數如下：
 
 | 參數 | 值 | 說明 |

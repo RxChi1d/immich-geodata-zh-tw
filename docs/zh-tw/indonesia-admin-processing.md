@@ -7,12 +7,14 @@
 本專案針對印尼地區的地理資訊處理，以 **印尼地理空間資訊局（BIG）** 的官方行政區邊界資料為核心：
 
 - **來源**：印尼地理空間資訊局（Badan Informasi Geospasial, BIG）官方 REST 服務
-- **資料提供**：BIG，透過官方 ArcGIS REST 圖徵服務（FeatureServer）發布
+- **資料提供**：BIG，透過官方 ArcGIS REST 圖資服務（`BATASWILAYAH/BATAS_DESAKEL_AR` MapServer）發布
 - **資料層級**：desa（村級）邊界，屬性同時含省、縣市、郡、村各級行政名稱
-- **下載日期**：2026-06-06
-- **資料版本**：`TASWIL20230928`（BIG 公布之行政區劃版本識別碼）
+- **下載日期**：2026-08-24
+- **資料版本**：`TASWIL1000020260612DESAKEL_AR`（2026-06-12，記錄於圖徵的 `METADATA` 屬性）
 - **下載精度參數**：`geometryPrecision=6`（保留小數 6 位，不做幾何簡化的全精度輸出）
-- **座標系**：屬性 `SRS_ID = "SRGI 2013"`，與 WGS84（EPSG:4326）在公尺級差異可忽略，視為 EPSG:4326 處理
+- **座標系**：屬性 `SRS_ID = "4326"`，直接視為 WGS84（EPSG:4326）處理
+
+下載步驟與必要的錯誤檢查請見[本地資料處理](development.md#印尼)。
 
 ### 授權合規立場
 
@@ -55,15 +57,13 @@ BIG desa 圖資的屬性提供下列行政層級：
 > 「Area tidak terdefinisi」（未定義行政區），無法對應到省／縣市，extract
 > 時直接跳過。
 
-> **筆數說明**：本批次 desa 圖資可用 feature 共 83,461 筆（原始 83,462 筆，
-> 1 筆因缺 `WADMPR` / `WADMKK` 被過濾）。extract 輸出的列數會多於行政區數，
+> **筆數說明**：本批次 desa 圖資可用 feature 共 84,468 筆（原始 84,503 筆，
+> 35 筆因缺 `WADMPR` / `WADMKK` 被過濾）。extract 輸出的列數會多於行政區數，
 > 原因是同一個 desa 若由多個不相連的 polygon 組成（multipart 邊界），**每個
 > part 各自計算 Albers centroid 並輸出成獨立的一列**。這批 desa 經 multipart
-> 分列後共產生 104,470 個候選點，與 `meta_data/id_geodata.csv` 現有列數一致。
+> 分列後共產生 108,673 個候選點，與 `meta_data/id_geodata.csv` 現有列數一致。
 > 因此「輸出列數」與「行政區數」不會一致，這是預期行為。feature 筆數為
-> 2026-06-06 下載批次的離線統計（見
-> [印尼投影與座標實驗](../research/idn-handler-projection-coordinate-experiment.md)），
-> 不隨每次 release 重新計算。
+> 2026-08-24 下載批次的離線統計，不隨每次 release 重新計算。
 
 ## 名稱策略
 

@@ -40,6 +40,13 @@ cargo run --release -- extract --country TW \
   --output meta_data/tw_geodata.csv
 ```
 
+> [!NOTE]
+> The NLSC download page triggers the download through an ASP.NET postback, so `curl`
+> cannot fetch the file directly; use a browser. The downloaded file is named
+> `OFiles_<guid>.zip`, and the `VILLAGE_NLSC_<version>` directory only appears after
+> unpacking it. The version is a Republic of China calendar date: `1150624` means
+> 2026-06-24.
+
 ### Japan
 
 Data source: [国土数値情報](https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2025.html)
@@ -51,6 +58,15 @@ cargo run --release -- extract --country JP \
   --shapefile geoname_data/N03-<version>_GML/N03-<version>.shp \
   --output meta_data/jp_geodata.csv
 ```
+
+> [!NOTE]
+> The download page requires clicking through several pages. The file is also available
+> at a stable URL, where `<year>` and `<version>` belong to the same release (for
+> example `2026` and `20260101`):
+>
+> ```
+> https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-<year>/N03-<version>_GML.zip
+> ```
 
 ### South Korea
 
@@ -80,19 +96,86 @@ Thai extraction reads or creates `geoname_data/TH_wikidata_cache.json`, which ho
 
 ### Indonesia
 
-Data source: the official ArcGIS REST FeatureServer of BIG (Badan Informasi Geospasial)
+Data source: [BIG (Badan Informasi Geospasial) geospatial services](https://geoservices.big.go.id/rbi/rest/services/BATASWILAYAH/BATAS_DESAKEL_AR/MapServer/0)
+
+BIG does not offer the desa-level (village) data as a single file. Fetch it in batches through the ArcGIS REST `query` endpoint, then merge the batches.
 
 ```bash
-# 1. Download the desa-level boundary data page by page from the official BIG REST service
-#    (geometryPrecision=6, version TASWIL20230928).
-#    For the download procedure and fixed parameters, see docs/research/indonesia-handler.md
-# 2. Run the extract command
+L="https://geoservices.big.go.id/rbi/rest/services/BATASWILAYAH/BATAS_DESAKEL_AR/MapServer/0"
+
+# 1. Check the feature count, the OBJECTID upper bound, and the data version
+curl -sS -G "$L/query" --data-urlencode "where=1=1" \
+  --data-urlencode "returnCountOnly=true" --data-urlencode "f=json"
+curl -sS -G "$L/query" --data-urlencode "where=1=1" --data-urlencode "f=json" \
+  --data-urlencode 'outStatistics=[{"statisticType":"max","onStatisticField":"OBJECTID","outStatisticFieldName":"m"}]'
+curl -sS -G "$L/query" --data-urlencode "where=OBJECTID=1" \
+  --data-urlencode "outFields=METADATA" --data-urlencode "returnGeometry=false" \
+  --data-urlencode "f=json"
+
+# 2. Download in OBJECTID ranges (adjust the upper bound to the value from step 1)
+mkdir -p geoname_data/idn_oid
+for ((lo=0; lo<93730; lo+=1000)); do
+  hi=$((lo+1000))
+  f="geoname_data/idn_oid/oid_$(printf '%06d' $lo).geojson"
+  [ -s "$f" ] && head -c 40 "$f" | grep -q '{' && continue
+  curl -sS --max-time 300 -G "$L/query" \
+    --data-urlencode "where=OBJECTID>$lo AND OBJECTID<=$hi" \
+    --data-urlencode "outFields=WADMPR,WADMKK,WADMKC,WADMKD" \
+    --data-urlencode "geometryPrecision=6" \
+    --data-urlencode "outSR=4326" \
+    --data-urlencode "f=geojson" -o "$f"
+done
+
+# 3. Merge into a single GeoJSON and check the feature and province counts
+python3 - <<'EOF'
+import json, glob
+feats = []
+for f in sorted(glob.glob('geoname_data/idn_oid/*.geojson')):
+    feats.extend(json.load(open(f, encoding='utf-8'))['features'])
+print('features:', len(feats),
+      '| provinces:', len({x['properties']['WADMPR'] for x in feats}))
+json.dump({'type': 'FeatureCollection', 'features': feats},
+          open('geoname_data/idn_desa_<version>.geojson', 'w', encoding='utf-8'),
+          ensure_ascii=False)
+EOF
+
+# 4. Run the extract command
 cargo run --release -- extract --country ID \
-  --shapefile <path_to_BIG_desa_geojson> \
+  --shapefile geoname_data/idn_desa_<version>.geojson \
   --output meta_data/id_geodata.csv
 ```
 
-Indonesian extraction reads or creates `geoname_data/ID_wikidata_cache.json`, which holds Traditional Chinese translations for Admin1 (provinces) and Admin2 (regencies and cities); Admin3 (districts) and Admin4 (villages) keep the official BIG Indonesian names. For the full download procedure and fixed parameters, see the [Indonesia handler research document (Chinese)](../research/indonesia-handler.md).
+> [!IMPORTANT]
+> When the service fails it returns HTTP 200 with an HTML error page instead of an HTTP
+> error code. Verify that every downloaded batch starts with `{` (the loop above already
+> does this), and confirm the merged feature count matches the total reported in step 1;
+> otherwise data is dropped silently. For ranges that keep failing at 1000 records per
+> batch, retry them 250 records at a time.
+>
+> OBJECTID values are not contiguous, so the upper bound (93730 in this case) being
+> larger than the feature count (84503) is expected.
+
+The data version is stored in the `METADATA` attribute of each feature (for example `TASWIL1000020260612DESAKEL_AR`, the 2026-06-12 release), so there is no need to look it up in the service directory.
+
+Indonesian extraction reads or creates `geoname_data/ID_wikidata_cache.json`, which holds Traditional Chinese translations for Admin1 (provinces) and Admin2 (regencies and cities); Admin3 (districts) and Admin4 (villages) keep the official BIG Indonesian names.
+
+> [!NOTE]
+> `ID_wikidata_cache.json` has two layers: `cache.p131` stores P131 parent-verification
+> results, and `translations` stores the final translation decisions (keyed as
+> `<level>/<country>/<parent divisions…>/<source name>`, for example
+> `admin_2/ID/Jawa Timur/Kabupaten Ngawi`). To force a name to be looked up on Wikidata
+> again, clear both layers; clearing only `cache.p131` is short-circuited by the existing
+> entry in `translations`.
+
+> [!IMPORTANT]
+> Wikidata statement ranks and label quality directly affect the translations, and
+> **failures are silent**: when a lookup or verification fails, the handler quietly falls
+> back to the source name instead of raising an error. `Kabupaten Ngawi`, for example,
+> once fell back to Indonesian because upstream had marked its `P131 → East Java`
+> statement as deprecated — the SPARQL `wdt:` prefix only traverses best-rank statements,
+> so a deprecated statement is equivalent to a missing one. After regenerating the data,
+> compare both the count and the list of untranslated names; treat an increase as
+> something to investigate case by case, not as newly added administrative divisions.
 
 Once extraction finishes, `release` integrates the resulting data automatically.
 

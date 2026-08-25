@@ -42,6 +42,7 @@
 
 - **來源**: 內政部國土測繪中心開放資料平台
 - **資料集**: 村(里)界 (TWD97經緯度)
+- **資料版本**: `VILLAGE_NLSC_1150624`（民國 115 年 6 月 24 日）
 - **授權**: 政府資料開放授權條款-第1版
 - **使用方式**: 臺灣地區行政區邊界與地名資料
 - **資料來源**: https://whgis-nlsc.moi.gov.tw/Opendata/Files.aspx
@@ -56,6 +57,7 @@
 
 - **來源**: 日本國土交通省 国土数値情報ダウンロードサイト
 - **資料集**: 行政区域データ (世界測地系)
+- **資料版本**: `N03-20260101`
 - **授權**: 国土数値情報 利用約款
 - **授權連結**: https://nlftp.mlit.go.jp/ksj/other/agreement.html
 - **使用方式**: 日本地區行政區邊界與地名資料
@@ -99,15 +101,16 @@
 
 ## 7. 印尼地理空間資訊局（BIG，Badan Informasi Geospasial）
 
-- **來源**: BIG 官方 ArcGIS REST 圖徵服務（FeatureServer，desa 村級圖徵）
-- **資料集**: 印尼行政區 desa（村級）邊界，版本 TASWIL20230928，含 38 省全量資料
+- **來源**: BIG 官方 ArcGIS REST 圖資服務（`BATASWILAYAH/BATAS_DESAKEL_AR` MapServer，desa 村級圖徵）
+- **資料集**: 印尼行政區 desa（村級）邊界，含 38 省全量資料
+- **資料版本**: `TASWIL1000020260612DESAKEL_AR`（2026-06-12）
 - **授權**: 印尼官方公開地理資料
 - **使用方式**: 印尼地區行政區邊界與地名資料；本專案僅將其作為衍生加工輸入，輸出經反向地理編碼最佳化後的地名與代表座標資料，不散布、不重新發行原始向量圖資（polygon 邊界）
-- **資料來源**: https://www.big.go.id/
+- **資料來源**: https://www.big.go.id/ 、 https://geoservices.big.go.id/
 
 **授權聲明**:
 
-> 本專案使用印尼地理空間資訊局（[Badan Informasi Geospasial, BIG](https://www.big.go.id/)）官方發布的行政區邊界資料（版本 TASWIL20230928）作為衍生加工輸入，不散布原始向量圖資；原始圖資請逕向 BIG 官方服務取得。
+> 本專案使用印尼地理空間資訊局（[Badan Informasi Geospasial, BIG](https://www.big.go.id/)）官方發布的行政區邊界資料（版本 `TASWIL1000020260612DESAKEL_AR`）作為衍生加工輸入，不散布原始向量圖資；原始圖資請逕向 BIG 官方服務取得。
 
 ---
 
@@ -211,4 +214,4 @@
 
 ---
 
-**最後更新日期**: 2026-08-23
+**最後更新日期**: 2026-08-25

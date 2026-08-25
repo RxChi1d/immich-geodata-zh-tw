@@ -40,6 +40,11 @@ cargo run --release -- extract --country TW \
   --output meta_data/tw_geodata.csv
 ```
 
+> [!NOTE]
+> NLSC 下載頁以 ASP.NET postback 觸發下載，無法用 `curl` 直接取得檔案，需在瀏覽器
+> 操作。下載到的檔名為 `OFiles_<guid>.zip`，解壓縮後才會出現 `VILLAGE_NLSC_<版本>`
+> 目錄。版本號為民國日期，例如 `1150624` 代表民國 115 年 6 月 24 日。
+
 ### 日本
 
 資料來源：[国土数値情報](https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2025.html)
@@ -51,6 +56,14 @@ cargo run --release -- extract --country JP \
   --shapefile geoname_data/N03-<版本>_GML/N03-<版本>.shp \
   --output meta_data/jp_geodata.csv
 ```
+
+> [!NOTE]
+> 下載頁的連結需逐頁點選，也可以直接取用固定網址（`<年份>` 與 `<版本>` 屬於同一次
+> 發布，例如 `2026` 與 `20260101`）：
+>
+> ```
+> https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-<年份>/N03-<版本>_GML.zip
+> ```
 
 ### 南韓
 
@@ -80,18 +93,79 @@ cargo run --release -- extract --country TH \
 
 ### 印尼
 
-資料來源：BIG（Badan Informasi Geospasial）官方 ArcGIS REST FeatureServer
+資料來源：[BIG（Badan Informasi Geospasial）圖資服務](https://geoservices.big.go.id/rbi/rest/services/BATASWILAYAH/BATAS_DESAKEL_AR/MapServer/0)
+
+BIG 沒有提供 desa（村級）圖資的單檔下載，需透過 ArcGIS REST 的 `query` 端點分批取得後合併。
 
 ```bash
-# 1. 從 BIG 官方 REST 服務以分頁方式下載 desa 村級圖資（geometryPrecision=6，版本 TASWIL20230928）
-#    下載方式與固定參數請參閱 docs/research/indonesia-handler.md
-# 2. 執行提取命令
+L="https://geoservices.big.go.id/rbi/rest/services/BATASWILAYAH/BATAS_DESAKEL_AR/MapServer/0"
+
+# 1. 確認 feature 總數、OBJECTID 上限與資料版本
+curl -sS -G "$L/query" --data-urlencode "where=1=1" \
+  --data-urlencode "returnCountOnly=true" --data-urlencode "f=json"
+curl -sS -G "$L/query" --data-urlencode "where=1=1" --data-urlencode "f=json" \
+  --data-urlencode 'outStatistics=[{"statisticType":"max","onStatisticField":"OBJECTID","outStatisticFieldName":"m"}]'
+curl -sS -G "$L/query" --data-urlencode "where=OBJECTID=1" \
+  --data-urlencode "outFields=METADATA" --data-urlencode "returnGeometry=false" \
+  --data-urlencode "f=json"
+
+# 2. 以 OBJECTID 區間分批下載（上限請依步驟 1 的結果調整）
+mkdir -p geoname_data/idn_oid
+for ((lo=0; lo<93730; lo+=1000)); do
+  hi=$((lo+1000))
+  f="geoname_data/idn_oid/oid_$(printf '%06d' $lo).geojson"
+  [ -s "$f" ] && head -c 40 "$f" | grep -q '{' && continue
+  curl -sS --max-time 300 -G "$L/query" \
+    --data-urlencode "where=OBJECTID>$lo AND OBJECTID<=$hi" \
+    --data-urlencode "outFields=WADMPR,WADMKK,WADMKC,WADMKD" \
+    --data-urlencode "geometryPrecision=6" \
+    --data-urlencode "outSR=4326" \
+    --data-urlencode "f=geojson" -o "$f"
+done
+
+# 3. 合併為單一 GeoJSON，並核對 feature 數與省份數
+python3 - <<'EOF'
+import json, glob
+feats = []
+for f in sorted(glob.glob('geoname_data/idn_oid/*.geojson')):
+    feats.extend(json.load(open(f, encoding='utf-8'))['features'])
+print('feature 數:', len(feats),
+      '| 省份數:', len({x['properties']['WADMPR'] for x in feats}))
+json.dump({'type': 'FeatureCollection', 'features': feats},
+          open('geoname_data/idn_desa_<版本>.geojson', 'w', encoding='utf-8'),
+          ensure_ascii=False)
+EOF
+
+# 4. 執行提取命令
 cargo run --release -- extract --country ID \
-  --shapefile <path_to_BIG_desa_geojson> \
+  --shapefile geoname_data/idn_desa_<版本>.geojson \
   --output meta_data/id_geodata.csv
 ```
 
-印尼提取會讀取或建立 `geoname_data/ID_wikidata_cache.json`，用於 Admin1（省）與 Admin2（縣市）繁中翻譯；Admin3（郡）與 Admin4（村）保留 BIG 官方印尼文。詳細下載流程與固定參數請參閱[印尼 handler 研究文件](../research/indonesia-handler.md)。
+> [!IMPORTANT]
+> 服務端失敗時會回傳 HTTP 200 與一段 HTML 錯誤頁，而不是 HTTP 錯誤碼。每批下載後
+> 都必須確認檔案開頭是 `{`（上述迴圈已內含此檢查），合併前也要核對 feature 數與
+> 步驟 1 回報的總數一致，否則會靜默漏抓資料。單批 1000 筆仍持續失敗的區間，改以
+> 250 筆為單位重抓即可。
+>
+> OBJECTID 並非連續，上限（本次為 93730）大於 feature 總數（84503）屬正常現象。
+
+資料版本記錄在圖徵的 `METADATA` 屬性（例如 `TASWIL1000020260612DESAKEL_AR`，代表 2026-06-12 版），不需另外從服務目錄查詢。
+
+印尼提取會讀取或建立 `geoname_data/ID_wikidata_cache.json`，用於 Admin1（省）與 Admin2（縣市）繁中翻譯；Admin3（郡）與 Admin4（村）保留 BIG 官方印尼文。
+
+> [!NOTE]
+> `ID_wikidata_cache.json` 有兩層：`cache.p131` 存 P131 隸屬驗證結果，`translations`
+> 存最終譯名決策（key 格式為 `<層級>/<國碼>/<上層行政區…>/<原名>`，例如
+> `admin_2/ID/Jawa Timur/Kabupaten Ngawi`）。若要讓某個地名重新查詢 Wikidata，兩層
+> 都要清掉；只清 `cache.p131` 會被 `translations` 的既有結果短路。
+
+> [!IMPORTANT]
+> Wikidata 的 statement rank 與 label 品質會直接影響譯名，而且**失敗是無聲的**：查不到
+> 或驗證不過時 handler 會安靜地退回原文，不會報錯。例如 `Kabupaten Ngawi` 曾因上游把
+> `P131 → 東爪哇省` 標成 deprecated 而退回印尼原文——SPARQL 的 `wdt:` 前綴只走
+> best-rank statement，deprecated 的敘述等同不存在。重跑資料後請比對未翻譯地名的數量
+> 與清單，數量上升時要逐筆查明原因，而不是視為來源新增的行政區。
 
 提取完成後，執行 `release` 時會自動整合這些資料。
 
