@@ -361,7 +361,7 @@ fn log_line_reflects_accumulated_lookup_stats() {
 
 #[test]
 fn build_admin1_centroids_averages_city_coords() {
-    // cities500 schema：col4=lat col5=lon col8=country col10=admin1
+    // cities500 schema 欄位：col4=緯度 col5=經度 col8=國碼 col10=admin1
     let row = |lat: &str, lon: &str, cc: &str, a1: &str| -> Vec<String> {
         let mut r = vec![String::new(); 19];
         r[4] = lat.into();

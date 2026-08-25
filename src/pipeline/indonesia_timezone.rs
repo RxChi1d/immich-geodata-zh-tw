@@ -1,9 +1,9 @@
 //! 印尼 38 省的 per-province 時區對照。
 //!
 //! 印尼橫跨三個時區：
-//! - WIB（Waktu Indonesia Barat）= `Asia/Jakarta`（UTC+7）
-//! - WITA（Waktu Indonesia Tengah）= `Asia/Makassar`（UTC+8）
-//! - WIT（Waktu Indonesia Timur）= `Asia/Jayapura`（UTC+9）
+//! - WIB（Waktu Indonesia Barat，西部時間）= `Asia/Jakarta`（UTC+7）
+//! - WITA（Waktu Indonesia Tengah，中部時間）= `Asia/Makassar`（UTC+8）
+//! - WIT（Waktu Indonesia Timur，東部時間）= `Asia/Jayapura`（UTC+9）
 //!
 //! ## 解析時機與 key 選擇
 //!

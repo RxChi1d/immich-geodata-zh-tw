@@ -73,24 +73,48 @@ cargo run --release -- extract --country JP \
 Data source: [admdongkor](https://github.com/vuski/admdongkor)
 
 ```bash
-# 1. Download and unpack the official administrative boundary data from the admdongkor project
+# 1. Download the GeoJSON for that version (a single file, no unpacking needed)
+VER=20260701   # set this to the version you want
+curl -sSL --create-dirs -o "geoname_data/HangJeongDong_ver${VER}.geojson" \
+  "https://raw.githubusercontent.com/vuski/admdongkor/master/ver${VER}/HangJeongDong_ver${VER}.geojson"
+
 # 2. Run the extract command
 cargo run --release -- extract --country KR \
-  --shapefile geoname_data/HangJeongDong_ver<version>.geojson \
+  --shapefile "geoname_data/HangJeongDong_ver${VER}.geojson" \
   --output meta_data/kr_geodata.csv
 ```
+
+> [!NOTE]
+> The version number is the date the release takes effect (for example `20260701`). The
+> available versions are the `ver*` directories at the root of the admdongkor repository;
+> each holds one GeoJSON of the same name.
 
 ### Thailand
 
 Data source: [Thailand COD-AB](https://data.humdata.org/dataset/cod-ab-tha)
 
 ```bash
-# 1. Download and unpack tha_admin_boundaries.shp.zip
-# 2. Use tha_admin3.shp to extract the Admin 3 / Tambon boundary data
+# 1. Query the HDX API for the current shapefile download URL
+URL=$(curl -sS "https://data.humdata.org/api/3/action/package_show?id=cod-ab-tha" \
+  | jq -r '.result.resources[] | select(.name == "tha_admin_boundaries.shp.zip") | .url')
+
+# 2. Download and unpack it (HDX issues a 302 to a presigned URL, so -L is required)
+mkdir -p geoname_data
+curl -sSL -o geoname_data/tha_admin_boundaries.shp.zip "$URL"
+unzip -q -d geoname_data/tha_admin_boundaries geoname_data/tha_admin_boundaries.shp.zip
+
+# 3. Use tha_admin3.shp to extract the Admin 3 / Tambon boundary data
 cargo run --release -- extract --country TH \
   --shapefile geoname_data/tha_admin_boundaries/tha_admin3.shp \
   --output meta_data/th_geodata.csv
 ```
+
+> [!NOTE]
+> HDX download URLs embed a resource UUID that changes when the dataset is republished,
+> so always resolve the current URL through the API above rather than reusing a fixed link
+> from documentation or an existing script. The `last_modified` field in the same API
+> response is the release date of that version, which tells you whether upstream has
+> published a new one.
 
 Thai extraction reads or creates `geoname_data/TH_wikidata_cache.json`, which holds Traditional Chinese translations for Admin1 and Admin2; Admin3 keeps the official COD-AB English names.
 
@@ -159,23 +183,12 @@ The data version is stored in the `METADATA` attribute of each feature (for exam
 
 Indonesian extraction reads or creates `geoname_data/ID_wikidata_cache.json`, which holds Traditional Chinese translations for Admin1 (provinces) and Admin2 (regencies and cities); Admin3 (districts) and Admin4 (villages) keep the official BIG Indonesian names.
 
-> [!NOTE]
-> `ID_wikidata_cache.json` has two layers: `cache.p131` stores P131 parent-verification
-> results, and `translations` stores the final translation decisions (keyed as
-> `<level>/<country>/<parent divisions…>/<source name>`, for example
-> `admin_2/ID/Jawa Timur/Kabupaten Ngawi`). To force a name to be looked up on Wikidata
-> again, clear both layers; clearing only `cache.p131` is short-circuited by the existing
-> entry in `translations`.
-
 > [!IMPORTANT]
-> Wikidata statement ranks and label quality directly affect the translations, and
-> **failures are silent**: when a lookup or verification fails, the handler quietly falls
-> back to the source name instead of raising an error. `Kabupaten Ngawi`, for example,
-> once fell back to Indonesian because upstream had marked its `P131 → East Java`
-> statement as deprecated — the SPARQL `wdt:` prefix only traverses best-rank statements,
-> so a deprecated statement is equivalent to a missing one. After regenerating the data,
-> compare both the count and the list of untranslated names; treat an increase as
-> something to investigate case by case, not as newly added administrative divisions.
+> Wikidata translation failures are silent: when a lookup or verification fails, the
+> handler quietly falls back to the source name instead of raising an error. After
+> regenerating the data, compare the **full list** of untranslated names, not the count.
+> For the failure patterns, how far the current safeguards reach, and how to clear the
+> caches, see [Known Translation Failures on Wikidata](wikidata-translation.md).
 
 Once extraction finishes, `release` integrates the resulting data automatically.
 

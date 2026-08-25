@@ -32,7 +32,7 @@ PR titles drive automatic categorization and release notes. CI blocks the merge 
 
 ## Writing Conventions
 
-- **Code**: Write comments, docstrings, and identifiers in English. Some existing code still has Chinese comments and is being migrated; write anything you add or change in English.
+- **Code**: Write comments and doc comments in Traditional Chinese (Taiwan usage); use English for function and variable names.
 - **Documentation**: The Traditional Chinese (Taiwan usage) version lives in `docs/zh-tw/`, and the English version in `docs/en/`. Follow the Google writing style: simple, concise, easy to understand.
 - **Communication**: Commit messages, PRs, and issues may be in Traditional Chinese, Simplified Chinese, or English.
 - If a change affects how the project is used (installation steps, options, how data appears), update the corresponding documentation in the same PR.
@@ -62,4 +62,5 @@ When a PR changes these files, add the `data-update` label to confirm the data u
    - Set `country_qid` when building the `TranslationDataset`, and verify containment level by level: admin2 against admin1, admin1 against the country.
    - Before rollout, use WDQS to confirm that every admin1 in the country passes `(wdt:P131)+ <country QID>`, so existing correct translations do not regress.
    - Choose the search language by how well it discriminates at that administrative level on Wikidata, and confirm the choice with an actual sample (South Korea uses native Korean, Thailand uses English with a Thai fallback). Build the test set from the country's structural same-name categories plus a random sample, and fix the random seed so results are reproducible. See the experiment recorded in [Indonesia Administrative Division Processing](indonesia-admin-processing.md).
+   - Wikidata translation failures are silent, and most safeguards live in individual country handlers rather than the shared layer. Read [Known Translation Failures on Wikidata](wikidata-translation.md) before you start.
 4. Add fixtures, unit tests, and real-data verification, along with the corresponding documentation page in `docs/zh-tw/`.

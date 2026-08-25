@@ -70,24 +70,45 @@ cargo run --release -- extract --country JP \
 資料來源：[admdongkor](https://github.com/vuski/admdongkor)
 
 ```bash
-# 1. 從 admdongkor 專案下載官方行政區邊界資料並解壓縮
+# 1. 下載該版本的 GeoJSON（單一檔案，不需解壓縮）
+VER=20260701   # 改成要下載的版本
+curl -sSL --create-dirs -o "geoname_data/HangJeongDong_ver${VER}.geojson" \
+  "https://raw.githubusercontent.com/vuski/admdongkor/master/ver${VER}/HangJeongDong_ver${VER}.geojson"
+
 # 2. 執行提取命令
 cargo run --release -- extract --country KR \
-  --shapefile geoname_data/HangJeongDong_ver<版本>.geojson \
+  --shapefile "geoname_data/HangJeongDong_ver${VER}.geojson" \
   --output meta_data/kr_geodata.csv
 ```
+
+> [!NOTE]
+> 版本號即該版生效日期（例如 `20260701`）。可用版本以 admdongkor 儲存庫根目錄下的
+> `ver*` 目錄為準，每個目錄各含一個同名 GeoJSON。
 
 ### 泰國
 
 資料來源：[Thailand COD-AB](https://data.humdata.org/dataset/cod-ab-tha)
 
 ```bash
-# 1. 下載 tha_admin_boundaries.shp.zip 並解壓縮
-# 2. 使用 tha_admin3.shp 提取 Admin 3 / Tambon 邊界資料
+# 1. 向 HDX API 取得目前的 shapefile 下載網址
+URL=$(curl -sS "https://data.humdata.org/api/3/action/package_show?id=cod-ab-tha" \
+  | jq -r '.result.resources[] | select(.name == "tha_admin_boundaries.shp.zip") | .url')
+
+# 2. 下載並解壓縮（HDX 會 302 轉址到預簽網址，-L 不可省略）
+mkdir -p geoname_data
+curl -sSL -o geoname_data/tha_admin_boundaries.shp.zip "$URL"
+unzip -q -d geoname_data/tha_admin_boundaries geoname_data/tha_admin_boundaries.shp.zip
+
+# 3. 使用 tha_admin3.shp 提取 Admin 3 / Tambon 邊界資料
 cargo run --release -- extract --country TH \
   --shapefile geoname_data/tha_admin_boundaries/tha_admin3.shp \
   --output meta_data/th_geodata.csv
 ```
+
+> [!NOTE]
+> HDX 的下載網址含資源 UUID，改版時會變動，因此請透過上述 API 取得當前網址，不要
+> 沿用文件或既有腳本中的固定連結。同一個 API 回應中的 `last_modified` 即該版的發布
+> 日期，可用來判斷上游是否已改版。
 
 泰國提取會讀取或建立 `geoname_data/TH_wikidata_cache.json`，用於 Admin1/Admin2 繁中翻譯；Admin3 保留 COD-AB 官方英文。
 
@@ -154,18 +175,10 @@ cargo run --release -- extract --country ID \
 
 印尼提取會讀取或建立 `geoname_data/ID_wikidata_cache.json`，用於 Admin1（省）與 Admin2（縣市）繁中翻譯；Admin3（郡）與 Admin4（村）保留 BIG 官方印尼文。
 
-> [!NOTE]
-> `ID_wikidata_cache.json` 有兩層：`cache.p131` 存 P131 隸屬驗證結果，`translations`
-> 存最終譯名決策（key 格式為 `<層級>/<國碼>/<上層行政區…>/<原名>`，例如
-> `admin_2/ID/Jawa Timur/Kabupaten Ngawi`）。若要讓某個地名重新查詢 Wikidata，兩層
-> 都要清掉；只清 `cache.p131` 會被 `translations` 的既有結果短路。
-
 > [!IMPORTANT]
-> Wikidata 的 statement rank 與 label 品質會直接影響譯名，而且**失敗是無聲的**：查不到
-> 或驗證不過時 handler 會安靜地退回原文，不會報錯。例如 `Kabupaten Ngawi` 曾因上游把
-> `P131 → 東爪哇省` 標成 deprecated 而退回印尼原文——SPARQL 的 `wdt:` 前綴只走
-> best-rank statement，deprecated 的敘述等同不存在。重跑資料後請比對未翻譯地名的數量
-> 與清單，數量上升時要逐筆查明原因，而不是視為來源新增的行政區。
+> Wikidata 譯名的失敗是無聲的：查不到或驗證不過時 handler 會安靜地退回原文，不會報錯。
+> 重跑後必須比對未翻譯地名的**完整清單**而非數量。失效形態、現行防線的適用範圍與快取
+> 的清除方式，見 [Wikidata 譯名的已知失效形態](wikidata-translation.md)。
 
 提取完成後，執行 `release` 時會自動整合這些資料。
 

@@ -27,6 +27,7 @@
 | :--- | :--- |
 | [貢獻指南](../CONTRIBUTING.md) | 開發流程、提交規範、測試要求 |
 | [本地資料處理](zh-tw/development.md) | 在本機重現資料處理流程：提取圖資、產生 release、驗證 |
+| [Wikidata 譯名的已知失效形態](zh-tw/wikidata-translation.md) | KR/TH/ID 譯名的失效形態、防線範圍與快取清除方式 |
 
 ## 研究與歷史紀錄
 
