@@ -73,6 +73,7 @@
 
 - **來源**: vuski/admdongkor (GitHub)，原始資料為南韓統計廳 SGIS 公開的行政洞界資料
 - **資料集**: 南韓行政區邊界資料 (GeoJSON)
+- **資料版本**: `HangJeongDong_ver20260701`
 - **授權**: 邊界資料採 Creative Commons Attribution 4.0 (CC BY 4.0)；原始資料依南韓 KOGL 第 1 型（공공누리 제1유형，出處標示）開放，出處標示義務不因加工而免除
 - **使用方式**: 南韓地區行政區邊界與地名資料
 - **授權連結**: https://github.com/vuski/admdongkor/blob/master/LICENSE-DATA
@@ -88,6 +89,7 @@
 
 - **來源**: Humanitarian Data Exchange (HDX) - Thailand Subnational Administrative Boundaries
 - **資料集**: Thailand administrative level 0-3 boundaries (COD-AB)
+- **資料版本**: `v01`（`valid_on` 2022-01-22，資料集檔案發布於 2026-01-26）
 - **授權**: Creative Commons Attribution for Intergovernmental Organisations (CC BY-IGO)
 - **使用方式**: 泰國地區行政區邊界與地名資料
 - **授權連結**: https://creativecommons.org/licenses/by/3.0/igo/
@@ -153,7 +155,21 @@
 
 ---
 
-## 11. 中文維基百科
+## 11. 韓文維基百科
+
+- **來源**: 韓文維基百科（ko.wikipedia.org）
+- **授權**: Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0)
+- **使用方式**: 取得南韓行政區的漢字表記（取自條目開頭首句的括號），作為 Admin 2 的中文名稱
+- **授權連結**: https://creativecommons.org/licenses/by-sa/4.0/
+- **資料來源**: https://ko.wikipedia.org/
+
+**授權聲明**:
+
+> 本專案自韓文維基百科取用南韓行政區的漢字表記作為地名，內容依 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) 提供。
+
+---
+
+## 12. 中文維基百科
 
 - **來源**: 中文維基百科（zh.wikipedia.org）
 - **授權**: Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0)
@@ -167,7 +183,7 @@
 
 ---
 
-## 12. i18n-iso-countries
+## 13. i18n-iso-countries
 
 - **來源**: [node-i18n-iso-countries](https://github.com/michaelwittig/node-i18n-iso-countries)（npm 套件 `i18n-iso-countries`）
 - **授權**: MIT License，Copyright (c) 2016 widdix GmbH
@@ -181,7 +197,7 @@
 
 ---
 
-## 13. 其他參考資料
+## 14. 其他參考資料
 
 ### 國家/地區中文譯名參考
 
