@@ -277,10 +277,17 @@ fn korea_feature_row(
     let (longitude, latitude) = point_geometry(&feature.geometry)?;
     let components = korea_admin_components(feature);
 
-    let mut admin2 = korea_admin2(&components.sidonm, &components.sggnm, translations);
-    if components.sidonm == "광주광역시" {
-        admin2 = strip_trailing_parenthetical(&admin2);
-    }
+    // Reason: Wikidata 對同名行政區的 label 帶消歧後綴（真實案例：光州的
+    //         「東區 (光州)」「西區 (光州)」），那是 Wikidata 的內部格式，
+    //         任何情況下都不該輸出給使用者。原本此處以 `sidonm == "광주광역시"`
+    //         白名單限定，2026-07-01 光州併入전남광주통합특별시後條件永不成立、
+    //         剝除靜默失效——這種「改制即失效」的白名單不該再出現，故改為
+    //         KR admin2 一律套用。韓國行政區的正式中文名不含括號，無誤傷風險。
+    let admin2 = strip_trailing_parenthetical(&korea_admin2(
+        &components.sidonm,
+        &components.sggnm,
+        translations,
+    ));
 
     Ok(ExtractRow::from_point(
         latitude,
@@ -347,6 +354,12 @@ fn korea_admin1(name: &str, translations: &WikidataTranslations) -> String {
         "충청남도" => "忠清南道",
         "전북특별자치도" => "全羅北道",
         "전라남도" => "全羅南道",
+        // Reason: 2026-07-01 依법률 제21446호，전라남도與광주광역시合併為
+        //         전남광주통합특별시。譯名沿用本表既有慣例——去掉行政類別
+        //         修飾詞（特別／廣域／特別自治／統合特別）只留地名 + 市／道，
+        //         故取「全南光州市」而非官方漢字全稱「全南光州統合特別市」。
+        //         舊的 광주광역시／전라남도 兩條保留，供舊版圖資重跑使用。
+        "전남광주통합특별시" => "全南光州市",
         "경상북도" => "慶尚北道",
         "경상남도" => "慶尚南道",
         "제주특별자치도" => "濟州道",
@@ -379,7 +392,25 @@ fn korea_admin2(sidonm: &str, sggnm: &str, translations: &WikidataTranslations) 
         // Reason: KR 期望純中文輸出；非中文形態（純拉丁、中英夾雜）的
         //         「翻譯」一律視為無效（如 stale cache 殘留），回退韓文原文。
         .filter(|value| is_valid_chinese_translation(value))
+        .filter(|value| korea_admin2_level_matches(sggnm, value))
         .unwrap_or_else(|| sggnm.to_string())
+}
+
+/// 檢查譯名的行政層級後綴與韓文原名一致（시→市、군→郡、구→區）。
+///
+/// Reason: 上游譯名過期時層級會對不上，而這種錯誤不會觸發任何既有檢查——
+/// 真實案例：여주시 2013 年由郡升格為市，Wikidata label 卻仍是「驪州郡」；
+/// 검단구 2026 年設區，label 停在舊制的「黔丹面」。兩者都是合法中文，會被
+/// 安靜地送到使用者眼前。此處讓它回退成韓文原名，並反映在 extract log 的
+/// fallback 計數上，把「安靜地錯」變成「看得見地錯」。
+fn korea_admin2_level_matches(sggnm: &str, translated: &str) -> bool {
+    match sggnm.chars().last() {
+        Some('시') => translated.ends_with('市'),
+        Some('군') => translated.ends_with('郡'),
+        Some('구') => translated.ends_with('區'),
+        // 其餘層級（世宗的洞／邑／面等）不做此檢查。
+        _ => true,
+    }
 }
 
 fn sejong_admin2(name: &str) -> String {

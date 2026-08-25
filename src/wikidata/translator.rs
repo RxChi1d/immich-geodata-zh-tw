@@ -15,6 +15,8 @@ use super::types::{
 
 const SEARCH_LIMIT: usize = 7;
 const ENTITY_BATCH_SIZE: usize = 50;
+/// MediaWiki 的 extracts 擴充對多標題查詢上限為 20 篇，超過會被截斷。
+const KOWIKI_EXTRACT_BATCH_SIZE: usize = 20;
 const CLAIM_LANGUAGES: &str = "en";
 
 pub struct BatchTranslateOptions<'a> {
@@ -187,6 +189,28 @@ impl<C: WikidataApi> WikidataTranslator<C> {
             fallback_count
         );
         Ok(results)
+    }
+
+    /// 批次取得韓文維基條目的開頭純文字，回傳「請求標題 → 開頭文字」。
+    ///
+    /// Reason: 韓國行政區的漢字表記只存在於條目首句的括號中，Wikidata 無
+    /// 對應的結構化屬性。此處只負責取回原文並還原 redirect/normalize 造成的
+    /// 標題變動，漢字的抽取規則屬各國 handler 職責，不放在共用層。
+    pub fn fetch_kowiki_extracts(
+        &mut self,
+        titles: &[String],
+    ) -> Result<HashMap<String, String>, String> {
+        let unique = dedupe_keep_order(titles.iter().cloned());
+        let mut extracts = HashMap::with_capacity(unique.len());
+        for batch in unique.chunks(KOWIKI_EXTRACT_BATCH_SIZE) {
+            let Ok(body) = self.client.kowiki_extracts_json(batch) else {
+                continue;
+            };
+            for (title, extract) in parse_kowiki_extracts(&body)? {
+                extracts.insert(title, extract);
+            }
+        }
+        Ok(extracts)
     }
 
     fn search_wikidata(&mut self, item: &TranslationItem) -> Vec<String> {
@@ -477,13 +501,19 @@ fn parse_entity_labels(body: &str) -> Result<HashMap<String, HashMap<String, Str
                 }
             }
         }
-        if let Some(title) = entity
-            .get("sitelinks")
-            .and_then(|value| value.get("zhwiki"))
-            .and_then(|value| value.get("title"))
-            .and_then(Value::as_str)
-        {
-            labels.insert("zhwiki".to_string(), title.to_string());
+        // Reason: sitelink 標題與 label 一起存進同一張表，沿用既有的 labels
+        //         快取與失效機制，不必為了「條目標題」另開一層快取。
+        //         zhwiki 供既有的中文標題轉換後備使用；kowiki 供 KR handler
+        //         取韓國行政區的漢字表記（Wikidata 沒有結構化漢字欄位）。
+        for wiki in ["zhwiki", "kowiki"] {
+            if let Some(title) = entity
+                .get("sitelinks")
+                .and_then(|value| value.get(wiki))
+                .and_then(|value| value.get("title"))
+                .and_then(Value::as_str)
+            {
+                labels.insert(wiki.to_string(), title.to_string());
+            }
         }
         results.insert(qid.clone(), labels);
     }
@@ -527,6 +557,62 @@ fn parse_p131_answer(body: &str) -> Result<bool, String> {
     root.get("boolean")
         .and_then(Value::as_bool)
         .ok_or_else(|| "Wikidata P131 回應缺少 boolean".to_string())
+}
+
+/// 解析韓文維基 extracts 回應，回傳「請求時使用的標題 → 條目開頭文字」。
+///
+/// Reason: MediaWiki 會把請求標題正規化（`normalized`）或跟隨重新導向
+/// （`redirects`）後才回傳 page，回應中的 `title` 未必等於我們送出的標題。
+/// 呼叫端是以「送出的標題」為 key 查回結果，因此必須把這兩層映射反推回去，
+/// 否則被重新導向的條目會被誤判為查無資料。
+pub(super) fn parse_kowiki_extracts(body: &str) -> Result<HashMap<String, String>, String> {
+    let root: Value = serde_json::from_str(body)
+        .map_err(|error| format!("韓文維基 extracts JSON 解析失敗：{error}"))?;
+    let Some(query) = root.get("query") else {
+        return Ok(HashMap::new());
+    };
+    // 回傳標題 → 原始請求標題（可能經過 normalize 再 redirect 兩段）。
+    let mut origin = HashMap::<String, String>::new();
+    for key in ["normalized", "redirects"] {
+        for entry in query
+            .get(key)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let (Some(from), Some(to)) = (
+                entry.get("from").and_then(Value::as_str),
+                entry.get("to").and_then(Value::as_str),
+            ) else {
+                continue;
+            };
+            let source = origin
+                .get(from)
+                .cloned()
+                .unwrap_or_else(|| from.to_string());
+            origin.insert(to.to_string(), source);
+        }
+    }
+    let mut extracts = HashMap::new();
+    for page in query
+        .get("pages")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .map(|(_, page)| page)
+    {
+        let (Some(title), Some(extract)) = (
+            page.get("title").and_then(Value::as_str),
+            page.get("extract").and_then(Value::as_str),
+        ) else {
+            continue;
+        };
+        if let Some(requested) = origin.get(title) {
+            extracts.insert(requested.clone(), extract.to_string());
+        }
+        extracts.insert(title.to_string(), extract.to_string());
+    }
+    Ok(extracts)
 }
 
 pub(super) fn parse_zhwiki_converted_title(body: &str) -> Result<String, String> {

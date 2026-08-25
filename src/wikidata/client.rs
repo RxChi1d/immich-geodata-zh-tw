@@ -7,6 +7,7 @@ use crate::http::{HttpClient, HttpRequestPolicy};
 pub const WDQS_URL: &str = "https://query.wikidata.org/sparql";
 pub const WDACT_URL: &str = "https://www.wikidata.org/w/api.php";
 pub const ZHWIKI_URL: &str = "https://zh.wikipedia.org/w/api.php";
+pub const KOWIKI_URL: &str = "https://ko.wikipedia.org/w/api.php";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WikidataClientOptions {
@@ -46,6 +47,8 @@ pub trait WikidataApi {
     ) -> Result<String, String>;
     fn ask_p131_json(&self, candidate_qid: &str, parent_qid: &str) -> Result<String, String>;
     fn zhwiki_convert_title_json(&self, title: &str) -> Result<String, String>;
+    /// 批次取得韓文維基條目的開頭純文字（用於抽取韓國地名的漢字表記）。
+    fn kowiki_extracts_json(&self, titles: &[String]) -> Result<String, String>;
 }
 
 /// Wikidata API 與中文維基 API 的每請求節流間隔。
@@ -122,6 +125,10 @@ impl WikidataApi for WikidataHttpClient {
         self.http
             .get_text(zhwiki_convert_title_url(title)?.as_str())
     }
+
+    fn kowiki_extracts_json(&self, titles: &[String]) -> Result<String, String> {
+        self.http.get_text(kowiki_extracts_url(titles)?.as_str())
+    }
 }
 
 pub fn search_entities_url(name: &str, source_lang: &str, limit: usize) -> Result<Url, String> {
@@ -165,6 +172,28 @@ pub fn zhwiki_convert_title_url(title: &str) -> Result<Url, String> {
         .append_pair("format", "json")
         .append_pair("converttitles", "1")
         .append_pair("titles", title);
+    Ok(url)
+}
+
+/// 韓文維基「條目開頭純文字」查詢 URL。
+///
+/// Reason: 韓國行政區的漢字寫在條目首句的括號中（如
+/// `함평군(咸平郡)은 …`），Wikidata 沒有結構化的漢字欄位（P1705/P1448
+/// 存的是韓文），因此只能從條目開頭取得。`exintro` 限定只回傳第一段，
+/// `explaintext` 去除 HTML，避免抓到整篇條目。
+///
+/// MediaWiki 的 extracts 擴充對多標題查詢設有上限（20 篇），呼叫端需自行
+/// 分批；此處只負責組出單一批次的 URL。
+pub fn kowiki_extracts_url(titles: &[String]) -> Result<Url, String> {
+    let mut url = Url::parse(KOWIKI_URL).map_err(|error| format!("韓文維基 URL 錯誤：{error}"))?;
+    url.query_pairs_mut()
+        .append_pair("action", "query")
+        .append_pair("format", "json")
+        .append_pair("prop", "extracts")
+        .append_pair("exintro", "1")
+        .append_pair("explaintext", "1")
+        .append_pair("redirects", "1")
+        .append_pair("titles", &titles.join("|"));
     Ok(url)
 }
 
@@ -225,6 +254,20 @@ mod tests {
         assert_eq!(url.host_str(), Some("query.wikidata.org"));
         assert!(url.as_str().contains("format=json"));
         assert!(url.as_str().contains("P131"));
+    }
+
+    #[test]
+    fn kowiki_extracts_url_matches_reference_request_contract() {
+        let url = kowiki_extracts_url(&["함평군".to_string(), "관악구".to_string()]).unwrap();
+        let params: Vec<_> = url.query_pairs().collect();
+
+        assert_eq!(url.host_str(), Some("ko.wikipedia.org"));
+        assert!(params.contains(&("action".into(), "query".into())));
+        assert!(params.contains(&("prop".into(), "extracts".into())));
+        assert!(params.contains(&("exintro".into(), "1".into())));
+        assert!(params.contains(&("explaintext".into(), "1".into())));
+        // 多標題以 `|` 串接，一次請求取回整批。
+        assert!(params.contains(&("titles".into(), "함평군|관악구".into())));
     }
 
     #[test]

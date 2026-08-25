@@ -23,7 +23,18 @@ pub(super) fn strip_trailing_parenthetical(value: &str) -> String {
     } else {
         None
     };
-    stripped.unwrap_or(trimmed).trim_end().to_string()
+    let Some(stripped) = stripped.map(str::trim_end) else {
+        return trimmed.to_string();
+    };
+    // Reason: 本函式只認「尾端閉括號 + 最後一個同型左括號」，對巢狀或不成對
+    //         的括號會切出壞字串——`甲（乙（丙））` 會變成未閉合的 `甲（乙`，
+    //         `（甲）` 會整串被剝成空字串（行政區名變空，屬資料損壞）。
+    //         因此只在結果既非空、也不殘留任何括號時才採用，否則原樣保留：
+    //         寧可留著看得見的括號，也不要輸出壞掉或空的地名。
+    if stripped.is_empty() || stripped.contains(['(', ')', '（', '）']) {
+        return trimmed.to_string();
+    }
+    stripped.to_string()
 }
 
 /// 判斷字串是否含 CJK 漢字。
@@ -71,6 +82,18 @@ mod tests {
         assert_eq!(strip_trailing_parenthetical("薩米縣（巴布亞省）"), "薩米縣");
         // 無括號或括號不在尾端者不動。
         assert_eq!(strip_trailing_parenthetical("萬隆縣"), "萬隆縣");
+        // 只有右括號、或左括號不在尾端，都不視為消歧後綴。
+        assert_eq!(strip_trailing_parenthetical("甲）"), "甲）");
+        assert_eq!(strip_trailing_parenthetical("甲（"), "甲（");
+        // 巢狀括號會切出未閉合字串，須整串保留而非輸出壞值。
+        assert_eq!(
+            strip_trailing_parenthetical("甲（乙（丙））"),
+            "甲（乙（丙））"
+        );
+        assert_eq!(strip_trailing_parenthetical("甲((乙)"), "甲((乙)");
+        // 整串都被括號包住時剝除後為空，必須保留原值。
+        assert_eq!(strip_trailing_parenthetical("（甲）"), "（甲）");
+        assert_eq!(strip_trailing_parenthetical("()"), "()");
         assert_eq!(
             strip_trailing_parenthetical("邦加-勿里洞省"),
             "邦加-勿里洞省"

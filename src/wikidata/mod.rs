@@ -9,8 +9,9 @@ mod translator_tests;
 
 pub use cache::TranslationCacheStore;
 pub use client::{
-    WDACT_URL, WDQS_URL, WikidataApi, WikidataClientOptions, WikidataHttpClient, ZHWIKI_URL,
-    get_entities_url, search_entities_url, wdqs_url, zhwiki_convert_title_url,
+    KOWIKI_URL, WDACT_URL, WDQS_URL, WikidataApi, WikidataClientOptions, WikidataHttpClient,
+    ZHWIKI_URL, get_entities_url, kowiki_extracts_url, search_entities_url, wdqs_url,
+    zhwiki_convert_title_url,
 };
 pub use translator::{
     BatchTranslateOptions, WikidataCandidateMetadata, WikidataTranslator, dedupe_keep_order,

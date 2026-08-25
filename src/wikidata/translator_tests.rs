@@ -594,6 +594,10 @@ impl WikidataApi for MockApi {
     fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
         Ok(r#"{"query":{"pages":{"1":{"title":"中區"}}}}"#.to_string())
     }
+
+    fn kowiki_extracts_json(&self, _: &[String]) -> Result<String, String> {
+        Ok(r#"{"query":{"pages":{}}}"#.to_string())
+    }
 }
 
 struct EmptySearchApi;
@@ -613,6 +617,10 @@ impl WikidataApi for EmptySearchApi {
 
     fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
         Ok(r#"{"query":{"pages":{"1":{"title":""}}}}"#.to_string())
+    }
+
+    fn kowiki_extracts_json(&self, _: &[String]) -> Result<String, String> {
+        Ok(r#"{"query":{"pages":{}}}"#.to_string())
     }
 }
 
@@ -638,6 +646,10 @@ impl WikidataApi for EnglishOnlyApi {
     fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
         Ok(r#"{"query":{"pages":{"1":{"title":""}}}}"#.to_string())
     }
+
+    fn kowiki_extracts_json(&self, _: &[String]) -> Result<String, String> {
+        Ok(r#"{"query":{"pages":{}}}"#.to_string())
+    }
 }
 
 struct UnverifiedParentApi;
@@ -660,6 +672,10 @@ impl WikidataApi for UnverifiedParentApi {
 
     fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
         Ok(r#"{"query":{"pages":{"1":{"title":"方"}}}}"#.to_string())
+    }
+
+    fn kowiki_extracts_json(&self, _: &[String]) -> Result<String, String> {
+        Ok(r#"{"query":{"pages":{}}}"#.to_string())
     }
 }
 
@@ -687,6 +703,10 @@ impl WikidataApi for VerifiedParentApi {
     fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
         Ok(r#"{"query":{"pages":{"1":{"title":"班鑾縣"}}}}"#.to_string())
     }
+
+    fn kowiki_extracts_json(&self, _: &[String]) -> Result<String, String> {
+        Ok(r#"{"query":{"pages":{}}}"#.to_string())
+    }
 }
 
 struct AssertThaiSearchApi;
@@ -709,6 +729,10 @@ impl WikidataApi for AssertThaiSearchApi {
 
     fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
         Ok(r#"{"query":{"pages":{"1":{"title":""}}}}"#.to_string())
+    }
+
+    fn kowiki_extracts_json(&self, _: &[String]) -> Result<String, String> {
+        Ok(r#"{"query":{"pages":{}}}"#.to_string())
     }
 }
 
@@ -734,6 +758,10 @@ impl WikidataApi for ErroringP131Api {
     fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
         Ok(r#"{"query":{"pages":{"1":{"title":""}}}}"#.to_string())
     }
+
+    fn kowiki_extracts_json(&self, _: &[String]) -> Result<String, String> {
+        Ok(r#"{"query":{"pages":{}}}"#.to_string())
+    }
 }
 
 struct PanicApi;
@@ -753,5 +781,9 @@ impl WikidataApi for PanicApi {
 
     fn zhwiki_convert_title_json(&self, _: &str) -> Result<String, String> {
         panic!("全 cache hit 不應呼叫 zhwiki")
+    }
+
+    fn kowiki_extracts_json(&self, _: &[String]) -> Result<String, String> {
+        Ok(r#"{"query":{"pages":{}}}"#.to_string())
     }
 }

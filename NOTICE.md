@@ -73,6 +73,7 @@
 
 - **來源**: vuski/admdongkor (GitHub)，原始資料為南韓統計廳 SGIS 公開的行政洞界資料
 - **資料集**: 南韓行政區邊界資料 (GeoJSON)
+- **資料版本**: `HangJeongDong_ver20260701`
 - **授權**: 邊界資料採 Creative Commons Attribution 4.0 (CC BY 4.0)；原始資料依南韓 KOGL 第 1 型（공공누리 제1유형，出處標示）開放，出處標示義務不因加工而免除
 - **使用方式**: 南韓地區行政區邊界與地名資料
 - **授權連結**: https://github.com/vuski/admdongkor/blob/master/LICENSE-DATA
@@ -88,6 +89,7 @@
 
 - **來源**: Humanitarian Data Exchange (HDX) - Thailand Subnational Administrative Boundaries
 - **資料集**: Thailand administrative level 0-3 boundaries (COD-AB)
+- **資料版本**: `v01`（`valid_on` 2022-01-22，資料集檔案發布於 2026-01-26）
 - **授權**: Creative Commons Attribution for Intergovernmental Organisations (CC BY-IGO)
 - **使用方式**: 泰國地區行政區邊界與地名資料
 - **授權連結**: https://creativecommons.org/licenses/by/3.0/igo/
