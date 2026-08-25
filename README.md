@@ -45,12 +45,14 @@
 | :--- | :--- | :--- | :--- |
 | 🇹🇼 臺灣 | 繁體中文官方名稱 | 內政部國土測繪中心（NLSC） | [詳細說明](docs/zh-tw/taiwan-admin-processing.md) |
 | 🇯🇵 日本 | 日文原名（漢字與假名） | 国土数値情報（日本國土交通省） | [詳細說明](docs/zh-tw/japan-admin-processing.md) |
-| 🇰🇷 南韓 | 繁體中文翻譯 | admdongkor（開源專案，整理南韓行政洞界資料） | [詳細說明](docs/zh-tw/south-korea-admin-processing.md) |
+| 🇰🇷 南韓 | 縣市為韓國官方漢字，一級行政區為繁體中文 | admdongkor（開源專案，整理南韓行政洞界資料） | [詳細說明](docs/zh-tw/south-korea-admin-processing.md) |
 | 🇹🇭 泰國 | 繁體中文翻譯（官方英文、泰文備用） | COD-AB 泰國行政區邊界（聯合國 OCHA） | [詳細說明](docs/zh-tw/thailand-admin-processing.md) |
 | 🇮🇩 印尼 | 繁體中文翻譯（官方印尼文備用） | 印尼地理空間資訊局（BIG） | [詳細說明](docs/zh-tw/indonesia-admin-processing.md) |
 | 🌏 其他地區 | 繁體中文翻譯（無譯名時保留原文） | 國教院《外國地名譯名》、GeoNames | [詳細說明](docs/zh-tw/global-translation-processing.md) |
 
 日本地區直接使用官方圖資的日文原名，不另做中文轉寫。日文漢字地名與中文寫法多半只差字形，例如「横浜市」與「橫濱市」。
+
+南韓的縣市名稱採用韓國官方漢字（例如「淸州市」），理由相同——韓國行政區名本來就是漢字詞，漢字是原名而非翻譯。
 
 ## 安裝
 

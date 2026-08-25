@@ -6,6 +6,8 @@ This document explains how to reproduce the project's data processing flow local
 
 Local data processing uses the Rust CLI. Install the Rust toolchain first, and make sure `pkg-config` and the PROJ development library are available on your system (on Ubuntu, `libproj-dev`).
 
+The boundary-data download steps additionally use `curl`, `jq`, and `unzip`.
+
 ### Official Prebuilt Binary
 
 GitHub Releases currently ship a prebuilt binary for Linux x86_64 only, mainly for GitHub Actions, Linux servers, and Immich container environments. On macOS and Windows, build locally instead.

@@ -6,6 +6,8 @@
 
 本機資料處理使用 Rust CLI。請先安裝 Rust toolchain，並確認系統可使用 `pkg-config` 與 PROJ development library（例如 Ubuntu 的 `libproj-dev`）。
 
+下載各國圖資的步驟另外會用到 `curl`、`jq` 與 `unzip`。
+
 ### 官方預編譯 binary
 
 GitHub Releases 目前只提供 Linux x86_64 的預編譯 binary，主要供 GitHub Actions、Linux server 與 Immich container 類環境使用。macOS 與 Windows 請使用本地編譯。
