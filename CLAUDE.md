@@ -224,7 +224,7 @@ src/pipeline/
   - 輸出標準化欄位：latitude, longitude, country, admin_1-4
 
 #### 2. Transform（轉換）
-- `transform_cities_schema`：將標準 CSV 轉成 CITIES_SCHEMA，負責生成
+- `transform_cities_schema`：將 normalized CSV 轉成 cities500 欄位格式，負責生成
   geoname_id、對應行政區與補齊時區、國家代碼。
 
 #### 3. Load（載入）
@@ -253,10 +253,12 @@ cargo run --release -- release \
 ### 擴充新國家
 
 1. 在 `src/pipeline/extract/handlers.rs` 新增或拆分該國 handler。
-2. 實作該國資料來源讀取、座標轉換、行政區欄位對應與 normalized CSV 輸出：
-   - `geoname_id` 從 `92_000_000` 起算。
-   - 填寫正確時區與 `country_code`。
-   - 輸出需符合 `CITIES_SCHEMA`。
+2. 實作該國資料來源讀取、座標轉換與行政區欄位對應，輸出 normalized CSV
+   （欄位為 `latitude,longitude,country,admin_1..admin_4`）。
+   - `geoname_id`、時區與 `country_code` 由 `transform_cities_schema` 填入，
+     不在 handler 產生。
+   - 時區需在 `country_profile` 註冊解析方式（多時區國家另備對照表，
+     例如 `indonesia_timezone::timezone_for_province`）。
 3. 若該國使用 Wikidata 翻譯，遵循 P131 parent 驗證標準：
    - 人工查證該國的 Wikidata QID（以即時查詢確認 label），寫入 handler
      常數並附中文名註解；QID 為 Wikidata 永久識別碼，不做執行期查詢。

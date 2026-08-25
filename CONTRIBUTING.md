@@ -56,7 +56,7 @@ PR 變更到這些檔案時，需加上 `data-update` 標籤以確認這是刻�
 ## 新增支援的國家
 
 1. 在 `src/pipeline/extract/handlers.rs` 新增該國 handler，並同步更新 CLI 的國家解析與 handler routing。
-2. 實作資料來源讀取、座標轉換與行政區欄位對應，輸出符合 `CITIES_SCHEMA` 的 CSV：`geoname_id` 自 `92_000_000` 起算，並填入正確的時區與 `country_code`。
+2. 實作資料來源讀取、座標轉換與行政區欄位對應，輸出欄位為 `latitude,longitude,country,admin_1..admin_4` 的 normalized CSV。`geoname_id`、時區與 `country_code` 不在 handler 產生，由後續的 `transform_cities_schema` 填入；多時區國家需另備省份對照表並在 `country_profile` 註冊。
 3. 若該國使用 Wikidata 翻譯，須遵循 P131 隸屬驗證標準：
    - 人工查證該國的 Wikidata QID 並寫入 handler 常數，附上中文名註解；QID 不做執行期查詢。
    - 建構 `TranslationDataset` 時必填 `country_qid`，逐級驗證 admin2 對 admin1、admin1 對國家的隸屬關係。
