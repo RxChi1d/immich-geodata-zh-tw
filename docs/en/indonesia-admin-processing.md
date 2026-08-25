@@ -7,12 +7,14 @@
 Indonesian processing is built around the official administrative boundary data published by the **Geospatial Information Agency of Indonesia (BIG)**:
 
 - **Source**: official REST service of Badan Informasi Geospasial (BIG)
-- **Provider**: BIG, published through the official ArcGIS REST FeatureServer
+- **Provider**: BIG, published through the official ArcGIS REST service (`BATASWILAYAH/BATAS_DESAKEL_AR` MapServer)
 - **Dataset layer**: desa (village) boundaries; the attributes carry province, regency/city, district, and village names
-- **Download date**: 2026-06-06
-- **Data version**: `TASWIL20230928` (BIG administrative-division version identifier)
+- **Download date**: 2026-08-24
+- **Data version**: `TASWIL1000020260612DESAKEL_AR` (2026-06-12, recorded in each feature's `METADATA` attribute)
 - **Download precision**: `geometryPrecision=6` (six decimal places, full-precision output with no geometry simplification)
-- **Coordinate system**: attribute `SRS_ID = "SRGI 2013"`; the difference from WGS84 (EPSG:4326) is negligible at the meter scale, so it is treated as EPSG:4326
+- **Coordinate system**: attribute `SRS_ID = "4326"`, treated directly as WGS84 (EPSG:4326)
+
+For the download steps and the error checks they require, see [Local Data Processing](development.md#indonesia).
 
 ### License Compliance Stance
 
@@ -46,7 +48,7 @@ Translation lookup for `admin_2` runs in three stages: first query the (province
 
 > **Undefined-area filtering**: features whose `WADMPR` or `WADMKK` is empty are mostly "Area tidak terdefinisi" (undefined administrative area). They cannot map to a province or regency/city and are skipped during extract.
 
-> **Row counts**: this batch of desa boundary data holds 83,461 usable features (83,462 originally; one was filtered for a missing `WADMPR` / `WADMKK`). Extract emits more rows than there are administrative divisions, because when a single desa consists of several disjoint polygons (a multipart boundary), **each part gets its own Albers centroid and becomes a separate row**. After per-part splitting, this batch of desa yields 104,470 candidate points, matching the current row count of `meta_data/id_geodata.csv`. Row count and administrative-division count therefore differ, which is expected behavior. The feature count is an offline statistic for the 2026-06-06 download batch (see [Indonesia Projection and Coordinate Experiment](../research/idn-handler-projection-coordinate-experiment.md), in Traditional Chinese) and is not recomputed on every release.
+> **Row counts**: this batch of desa boundary data holds 84,468 usable features (84,503 originally; 35 were filtered for a missing `WADMPR` / `WADMKK`). Extract emits more rows than there are administrative divisions, because when a single desa consists of several disjoint polygons (a multipart boundary), **each part gets its own Albers centroid and becomes a separate row**. After per-part splitting, this batch of desa yields 108,673 candidate points, matching the current row count of `meta_data/id_geodata.csv`. Row count and administrative-division count therefore differ, which is expected behavior. The feature count is an offline statistic for the 2026-08-24 download batch and is not recomputed on every release.
 
 ## Naming Strategy
 
