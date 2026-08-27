@@ -56,7 +56,7 @@ When a PR changes these files, add the `data-update` label to confirm the data u
 ## Adding Support for a Country
 
 1. Add the country handler in `src/pipeline/extract/handlers.rs`, and update the CLI country parsing and handler routing to match.
-2. Implement the data source reader, coordinate conversion, and administrative division field mapping, and emit a CSV that matches `CITIES_SCHEMA`: `geoname_id` starts at `92_000_000`, with the correct time zone and `country_code`.
+2. Implement the data source reader, coordinate conversion, and administrative division field mapping, and emit a normalized CSV with the columns `latitude,longitude,country,admin_1..admin_4`. The handler does not produce `geoname_id`, the time zone, or `country_code` — `transform_cities_schema` fills those in later. A country spanning several time zones needs a province lookup table registered through `country_profile`.
 3. If the country uses Wikidata translations, follow the P131 containment verification standard:
    - Look up the country's Wikidata QID manually, write it into a handler constant, and annotate it with the Chinese name. QIDs are never queried at runtime.
    - Set `country_qid` when building the `TranslationDataset`, and verify containment level by level: admin2 against admin1, admin1 against the country.
