@@ -61,14 +61,20 @@ jobs:
         with:
           fetch-depth: 2
 
-      # Reason: meta_data/*_geodata.csv is canonical production metadata, not a
+      # Reason: data/handler/*_geodata.csv is canonical production metadata, not a
       # build artifact. Changing it requires the data-update label so that the
       # change is a deliberate data refresh rather than an accidental rewrite.
       - name: Canonical geodata files are protected
         env:
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: |
-          changed="$(git diff --name-only HEAD^1 HEAD -- 'meta_data/*_geodata.csv')"
+          # Reason: --name-only 不做 rename 偵測，純目錄搬移會被當成「新增 canonical
+          # 檔案」而誤報。守衛要管的是內容有沒有變，不是路徑有沒有動，因此改以
+          # --name-status -M 取狀態，並略過內容完全相同的 R100。帶修改的 rename
+          # （R0xx）仍會被列出。
+          changed="$(git diff --name-status -M HEAD^1 HEAD \
+            | awk -F'\t' '$1 == "R100" { next } { print $NF }' \
+            | grep -E '^data/handler/.*_geodata\.csv$' || true)"
           if [ -z "$changed" ]; then
             echo "No canonical geodata files changed."
             exit 0
@@ -82,7 +88,7 @@ jobs:
             exit 0
           fi
 
-          echo "::error::meta_data/*_geodata.csv changed without the 'data-update' label. Add the label if this is a deliberate data refresh, otherwise revert these files."
+          echo "::error::data/handler/*_geodata.csv changed without the 'data-update' label. Add the label if this is a deliberate data refresh, otherwise revert these files."
           exit 1
 
       # Reason: A missing link reference does not fail the release. The

@@ -119,10 +119,10 @@ impl Default for ProductionOptions {
             cities_file: None,
             output_file: None,
             alternate_name_file: None,
-            metadata_folder: PathBuf::from("./meta_data"),
+            metadata_folder: PathBuf::from("./data/handler"),
             // Reason: LocationIQ 產物與 handler extract 產物欄位同為 GEODATA_COLUMNS
             // 但生命週期相反——前者是重建需消耗付費 quota 的查詢結果，後者是 CLAUDE.md
-            // 資料保護規則禁止重新產生的 canonical metadata。共用 meta_data/ 時只靠檔名
+            // 資料保護規則禁止重新產生的 canonical metadata。兩者曾共用 meta_data/，只靠檔名
             // 大小寫區分，清理者無從判斷哪些檔案可動，因此以目錄分隔。刻意不跟隨
             // --metadata-folder：搬移 handler metadata 時不應連帶移動付費查詢結果。
             locationiq_folder: PathBuf::from("./data/locationiq"),

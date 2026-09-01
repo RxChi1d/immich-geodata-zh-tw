@@ -1,6 +1,6 @@
 //! 印尼 production metadata 的時區端到端驗證。
 //!
-//! 以真實 `meta_data/id_geodata.csv` 完整跑 transform（cities500 列生成），
+//! 以真實 `data/handler/id_geodata.csv` 完整跑 transform（cities500 列生成），
 //! 驗證 per-province 時區解析在 production 資料上有效：
 //! 1. 全部 104,470 列都能解析時區（解析失敗會直接回傳 Err，多時區國家
 //!    不允許靜默回退）。
@@ -23,8 +23,8 @@ const NAME_INDEX: usize = 1;
 
 #[test]
 fn production_id_geodata_resolves_all_timezones() {
-    let input = Path::new("meta_data/id_geodata.csv");
-    assert!(input.exists(), "meta_data/id_geodata.csv 應存在");
+    let input = Path::new("data/handler/id_geodata.csv");
+    assert!(input.exists(), "data/handler/id_geodata.csv 應存在");
 
     // 解析失敗（省名未命中對照表）時 build 會回傳 Err——這就是要驗證的行為。
     let rows = build_city_rows_from_geodata(

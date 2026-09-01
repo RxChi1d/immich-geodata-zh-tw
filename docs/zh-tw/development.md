@@ -39,7 +39,7 @@ cargo run --release -- help
 # 2. 執行提取命令
 cargo run --release -- extract --country TW \
   --shapefile geoname_data/VILLAGE_NLSC_<版本>/VILLAGE_NLSC_<版本>.shp \
-  --output meta_data/tw_geodata.csv
+  --output data/handler/tw_geodata.csv
 ```
 
 > [!NOTE]
@@ -56,7 +56,7 @@ cargo run --release -- extract --country TW \
 # 2. 執行提取命令
 cargo run --release -- extract --country JP \
   --shapefile geoname_data/N03-<版本>_GML/N03-<版本>.shp \
-  --output meta_data/jp_geodata.csv
+  --output data/handler/jp_geodata.csv
 ```
 
 > [!NOTE]
@@ -80,7 +80,7 @@ curl -sSL --create-dirs -o "geoname_data/HangJeongDong_ver${VER}.geojson" \
 # 2. 執行提取命令
 cargo run --release -- extract --country KR \
   --shapefile "geoname_data/HangJeongDong_ver${VER}.geojson" \
-  --output meta_data/kr_geodata.csv
+  --output data/handler/kr_geodata.csv
 ```
 
 > [!NOTE]
@@ -104,7 +104,7 @@ unzip -q -d geoname_data/tha_admin_boundaries geoname_data/tha_admin_boundaries.
 # 3. 使用 tha_admin3.shp 提取 Admin 3 / Tambon 邊界資料
 cargo run --release -- extract --country TH \
   --shapefile geoname_data/tha_admin_boundaries/tha_admin3.shp \
-  --output meta_data/th_geodata.csv
+  --output data/handler/th_geodata.csv
 ```
 
 > [!NOTE]
@@ -162,7 +162,7 @@ EOF
 # 4. 執行提取命令
 cargo run --release -- extract --country ID \
   --shapefile geoname_data/idn_desa_<版本>.geojson \
-  --output meta_data/id_geodata.csv
+  --output data/handler/id_geodata.csv
 ```
 
 > [!IMPORTANT]

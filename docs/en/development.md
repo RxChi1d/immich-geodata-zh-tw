@@ -39,7 +39,7 @@ Data source: [National Land Surveying and Mapping Center (NLSC)](https://whgis-n
 # 2. Run the extract command
 cargo run --release -- extract --country TW \
   --shapefile geoname_data/VILLAGE_NLSC_<version>/VILLAGE_NLSC_<version>.shp \
-  --output meta_data/tw_geodata.csv
+  --output data/handler/tw_geodata.csv
 ```
 
 > [!NOTE]
@@ -58,7 +58,7 @@ Data source: [国土数値情報](https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjT
 # 2. Run the extract command
 cargo run --release -- extract --country JP \
   --shapefile geoname_data/N03-<version>_GML/N03-<version>.shp \
-  --output meta_data/jp_geodata.csv
+  --output data/handler/jp_geodata.csv
 ```
 
 > [!NOTE]
@@ -83,7 +83,7 @@ curl -sSL --create-dirs -o "geoname_data/HangJeongDong_ver${VER}.geojson" \
 # 2. Run the extract command
 cargo run --release -- extract --country KR \
   --shapefile "geoname_data/HangJeongDong_ver${VER}.geojson" \
-  --output meta_data/kr_geodata.csv
+  --output data/handler/kr_geodata.csv
 ```
 
 > [!NOTE]
@@ -108,7 +108,7 @@ unzip -q -d geoname_data/tha_admin_boundaries geoname_data/tha_admin_boundaries.
 # 3. Use tha_admin3.shp to extract the Admin 3 / Tambon boundary data
 cargo run --release -- extract --country TH \
   --shapefile geoname_data/tha_admin_boundaries/tha_admin3.shp \
-  --output meta_data/th_geodata.csv
+  --output data/handler/th_geodata.csv
 ```
 
 > [!NOTE]
@@ -168,7 +168,7 @@ EOF
 # 4. Run the extract command
 cargo run --release -- extract --country ID \
   --shapefile geoname_data/idn_desa_<version>.geojson \
-  --output meta_data/id_geodata.csv
+  --output data/handler/id_geodata.csv
 ```
 
 > [!IMPORTANT]

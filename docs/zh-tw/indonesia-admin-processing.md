@@ -61,7 +61,7 @@ BIG desa 圖資的屬性提供下列行政層級：
 > 35 筆因缺 `WADMPR` / `WADMKK` 被過濾）。extract 輸出的列數會多於行政區數，
 > 原因是同一個 desa 若由多個不相連的 polygon 組成（multipart 邊界），**每個
 > part 各自計算 Albers centroid 並輸出成獨立的一列**。這批 desa 經 multipart
-> 分列後共產生 108,673 個候選點，與 `meta_data/id_geodata.csv` 現有列數一致。
+> 分列後共產生 108,673 個候選點，與 `data/handler/id_geodata.csv` 現有列數一致。
 > 因此「輸出列數」與「行政區數」不會一致，這是預期行為。feature 筆數為
 > 2026-08-24 下載批次的離線統計，不隨每次 release 重新計算。
 

@@ -42,7 +42,7 @@ git status --short --branch
 ```bash
 cargo run --release -- extract --country TW \
   --shapefile geoname_data/VILLAGE_NLSC_XXXXXX/VILLAGE_NLSC_XXXXXX.shp \
-  --output meta_data/tw_geodata.csv
+  --output data/handler/tw_geodata.csv
 ```
 
 5. 使用 Rust CLI 產生 release artifacts。若只更新 handler countries（TW/JP/KR/TH），跳過 LocationIQ：
@@ -60,7 +60,7 @@ cargo run --release -- release \
 
 - 不要把外部 skill 文字複製成第二份操作手冊；此 skill 應保持精簡，細節以專案文件為準。
 - 不要使用 sample 或衍生來源檔產生 release。
-- source data 有變更時，不要在 extract 前先跑 release；release 會消耗 `meta_data/*_geodata.csv`。
+- source data 有變更時，不要在 extract 前先跑 release；release 會消耗 `data/handler/*_geodata.csv`。
 - 不要外洩 API keys；使用 env vars，並在所有輸出中以 `[REDACTED]` 遮蔽。
 - 新 KR/TH 版本 extract 可能花時間處理 Wikidata cache；只因為慢而中斷前，先確認是否仍有進度。
 - Wikidata/Wikimedia API 的速率限制以 IP 計（滾動視窗配額）：**一次只能執行一個國家的

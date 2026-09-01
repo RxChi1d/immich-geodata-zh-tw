@@ -24,7 +24,7 @@ use crate::unicode_han::{includes_han, is_han_name};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProductionTranslateOptions {
     /// LocationIQ 逆地理查詢產物的目錄（production 為 `data/locationiq/`）。
-    /// 不是 handler 的 `meta_data/`——後者由 enhance 階段消費。
+    /// 不是 handler 的 `data/handler/`——後者由 enhance 階段消費。
     pub metadata_dir: PathBuf,
     pub data_dir: PathBuf,
     pub cities_file: PathBuf,
@@ -398,7 +398,7 @@ fn alternate_name_dataframe_to_rows(df: &DataFrame) -> Result<Vec<Vec<String>>, 
 /// 由檔名解析 LocationIQ metadata 的國碼。
 ///
 /// production 的 LocationIQ 產物 `{CC}.csv`（ISO-3166-1 alpha-2）位於
-/// `data/locationiq/`，與 handler extract 產物 `meta_data/{cc}_geodata.csv`
+/// `data/locationiq/`，與 handler extract 產物 `data/handler/{cc}_geodata.csv`
 /// 分屬不同目錄。後者由 enhance 階段（`admin1_load` / `cities500_load`）以
 /// 明確檔名消費，其內容早已寫入 cities500，不應在此重複載入。
 ///

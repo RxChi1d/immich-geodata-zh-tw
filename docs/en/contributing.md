@@ -49,7 +49,7 @@ New features and bug fixes need `cargo test` coverage for at least the normal ca
 
 ## Data File Protection Rules
 
-`meta_data/*_geodata.csv` holds production data generated from official boundary data and verified by the release workflow. It is not a regenerable build artifact. Do not delete, regenerate, or normalize these files outside of an explicit data update task.
+`data/handler/*_geodata.csv` holds production data generated from official boundary data and verified by the release workflow. It is not a regenerable build artifact. Do not delete, regenerate, or normalize these files outside of an explicit data update task.
 
 When a PR changes these files, add the `data-update` label to confirm the data update is intentional. Otherwise CI blocks the merge.
 

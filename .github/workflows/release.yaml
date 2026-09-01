@@ -88,12 +88,12 @@ jobs:
       - name: Verify handler geodata exists
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         run: |
-          # handler 國家的納入依賴 meta_data/*_geodata.csv 存在；
+          # handler 國家的納入依賴 data/handler/*_geodata.csv 存在；
           # 缺檔會讓該國「靜默」消失於 release，因此先硬性驗證。
           missing=0
           for country in tw jp kr th id; do
-            if [[ ! -s "meta_data/${country}_geodata.csv" ]]; then
-              echo "::error::meta_data/${country}_geodata.csv 缺失或為空，該國將從 release 消失"
+            if [[ ! -s "data/handler/${country}_geodata.csv" ]]; then
+              echo "::error::data/handler/${country}_geodata.csv 缺失或為空，該國將從 release 消失"
               missing=1
             fi
           done
@@ -104,7 +104,7 @@ jobs:
       - name: Build with Rust
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         run: |
-          # TW/JP/KR/TH/ID 皆由 handler 消耗 meta_data/*_geodata.csv，
+          # TW/JP/KR/TH/ID 皆由 handler 消耗 data/handler/*_geodata.csv，
           # 不需再以 --country-code 走 LocationIQ 流程；無 non-handler 國家時
           # locationiq 階段會自動 skip，因此也不需要 LOCATIONIQ_API_KEY。
           ".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}" release
@@ -155,8 +155,8 @@ jobs:
           branch: chore/update-meta-data-${{ env.TODAY }}
           create_branch: true
           commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
-          file_pattern: meta_data/*
-      - name: Create PR for meta_data
+          file_pattern: data/handler/*
+      - name: Create PR for handler geodata
         if: steps.auto-commit.outputs.changes_detected == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -167,8 +167,8 @@ jobs:
             gh pr create \
               --base main \
               --head "$branch" \
-              --title "chore(geodata): 發布後更新 meta_data ${{ env.TODAY }}" \
-              --body "這是 release 流程產生的 meta_data 更新，請審核後合併。"
+              --title "chore(geodata): 發布後更新 handler 圖資 ${{ env.TODAY }}" \
+              --body "這是 release 流程產生的 handler 圖資更新，請審核後合併。"
           else
             echo "已有開啟中的 PR，跳過建立。"
           fi
