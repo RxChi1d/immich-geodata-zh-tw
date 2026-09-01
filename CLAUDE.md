@@ -297,7 +297,8 @@ cargo test
 - **`data/` 為餵給 release pipeline 的持久化輸入**：與 `output/`、`geoname_data/`
   這類可隨時清空的執行期目錄不同，`data/` 底下的內容納入 git 追蹤，並依產生方式
   分類：`data/handler/`（各國 extract handler 產物）、`data/locationiq/`
-  （LocationIQ 逆地理查詢產物）。vendored 外部資料的收攏另案處理。
+  （LocationIQ 逆地理查詢產物）、`data/vendor/`（vendored 外部資料，如 NAER
+  譯名表與 i18n-iso-countries）。
 - **`data/locationiq/*.csv` 可重建但有代價**：由 locationiq 階段逐點查詢產生，
   刪除後重跑即可復原，但會消耗 LocationIQ 的付費請求額度。git 追蹤是它跨次執行
   存活的預期方式，但 release workflow 的 auto-commit 目前只涵蓋 `data/handler/*`

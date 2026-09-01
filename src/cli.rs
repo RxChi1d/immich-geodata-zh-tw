@@ -327,7 +327,7 @@ fn run_translate_production(options: &ProductionOptions) -> Result<(), String> {
             .alternate_name_file
             .clone()
             .unwrap_or_else(|| options.output_folder.join("alternate_chinese_name.csv")),
-        naer_file: PathBuf::from("naer/naer_place_names.csv"),
+        naer_file: PathBuf::from("data/vendor/naer/naer_place_names.csv"),
         output_dir: options.output_folder.clone(),
         profile: options.profile,
     })
@@ -336,8 +336,8 @@ fn run_translate_production(options: &ProductionOptions) -> Result<(), String> {
 
 fn run_naer_prepare_command(args: &[String]) -> Result<(), String> {
     let mut input: Option<PathBuf> = None;
-    let mut output = PathBuf::from("naer/naer_place_names.csv");
-    let mut country_names_file = PathBuf::from("i18n-iso-countries/langs/zh-tw.json");
+    let mut output = PathBuf::from("data/vendor/naer/naer_place_names.csv");
+    let mut country_names_file = PathBuf::from("data/vendor/i18n-iso-countries/langs/zh-tw.json");
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {

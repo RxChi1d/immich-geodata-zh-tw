@@ -9,6 +9,6 @@
   中文譯名）、`country_code`（ISO 3166-1 alpha-2，未對應留空）、
   `latitude`/`longitude`（十進位）、`feature_hint`（自然地物啟發式標記）
 - **重生成**：
-  `cargo run --release -- naer-prepare --input <原始CSV> --output naer/naer_place_names.csv`
+  `cargo run --release -- naer-prepare --input <原始CSV> --output data/vendor/naer/naer_place_names.csv`
 - 設計與決策原因見 `docs/zh-tw/global-translation-processing.md` 與
   `docs/research/chinese-translation-sources.md`

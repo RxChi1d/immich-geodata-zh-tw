@@ -161,7 +161,7 @@ pub fn clean_zh_name(raw: &str) -> String {
 pub struct NaerPrepareOptions {
     pub input: PathBuf,
     pub output: PathBuf,
-    /// i18n-iso-countries 的 zh-tw 國名檔，預設 `i18n-iso-countries/langs/zh-tw.json`。
+    /// i18n-iso-countries 的 zh-tw 國名檔，預設 `data/vendor/i18n-iso-countries/langs/zh-tw.json`。
     pub country_names_file: PathBuf,
 }
 

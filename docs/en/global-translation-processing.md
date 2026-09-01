@@ -128,10 +128,10 @@ table below (implemented in `src/pipeline/naer_lookup.rs`):
   records. The 412-record difference consists of rows dropped for
   unparseable coordinates, an empty coordinate column, or an unusable name
 - **Vendored file**: the cleaned 6-column CSV lives at
-  `naer/naer_place_names.csv`, covering 192 ISO 3166-1 alpha-2 country
+  `data/vendor/naer/naer_place_names.csv`, covering 192 ISO 3166-1 alpha-2 country
   codes, plus 1,798 records whose country name could not be mapped
   (`country_code` left empty); field descriptions are in
-  [`naer/README.md`](../../naer/README.md)
+  [`data/vendor/naer/README.md`](../../data/vendor/naer/README.md)
 
 ## Why NAER (Research Summary)
 
@@ -221,7 +221,7 @@ of the release path; run it manually only when the data source is updated:
 # 2. Run the naer-prepare subcommand to clean and emit the vendored file
 cargo run --release -- naer-prepare \
   --input <path-to-raw-CSV> \
-  --output naer/naer_place_names.csv
+  --output data/vendor/naer/naer_place_names.csv
 
 # 3. Review the statistics report and the git diff, then commit once no
 #    anomalies are found
