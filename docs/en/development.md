@@ -200,6 +200,12 @@ Once extraction finishes, `release` integrates the resulting data automatically.
 
 Sign up at [LocationIQ](https://locationiq.com/) and obtain an API key.
 
+> [!NOTE]
+> An API key is only required when generating metadata for countries without a
+> handler. If `--country-code` names no non-handler country (for example, when
+> repackaging the official TW/JP/KR/TH/ID datasets), the LocationIQ stage is
+> skipped automatically and `release` does not ask for an API key.
+
 ### Run the Data Processing
 
 ```bash

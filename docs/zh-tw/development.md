@@ -190,6 +190,11 @@ cargo run --release -- extract --country ID \
 
 至 [LocationIQ](https://locationiq.com/) 註冊帳號並取得 API key。
 
+> [!NOTE]
+> 只有要為 handler 以外的國家產生 metadata 時才需要 API key。若 `--country-code`
+> 未指定任何非 handler 國家（例如只重新打包 TW/JP/KR/TH/ID 的官方圖資），
+> LocationIQ 階段會自動跳過，`release` 不會要求 API key。
+
 ### 執行資料處理
 
 ```bash

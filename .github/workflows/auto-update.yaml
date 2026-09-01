@@ -82,11 +82,10 @@ jobs:
       - name: Build with Rust
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         run: |
-          # TH 已改由 handler 處理（消耗 meta_data/th_geodata.csv），
-          # 不需再以 --country-code 走 LocationIQ 流程；
-          # 無 non-handler 國家時 locationiq 階段會自動 skip。
-          ".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}" release \
-            --locationiq-api-key "${{ secrets.LOCATIONIQ_API_KEY }}"
+          # TW/JP/KR/TH/ID 皆由 handler 消耗 meta_data/*_geodata.csv，
+          # 不需再以 --country-code 走 LocationIQ 流程；無 non-handler 國家時
+          # locationiq 階段會自動 skip，因此也不需要 LOCATIONIQ_API_KEY。
+          ".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}" release
       - name: Point nightly tag at built commit
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         # Reason: nightly release 改為就地更新（allowUpdates），而 ncipollo 只在
