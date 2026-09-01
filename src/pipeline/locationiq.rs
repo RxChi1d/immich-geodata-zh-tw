@@ -11,22 +11,9 @@ use crate::http::{HttpClient, HttpRequestPolicy};
 use crate::observability::ProgressReporter;
 use crate::pipeline::fixtures::{Fixture, load_fixtures};
 use crate::pipeline::polars_table::{
-    read_cities_rows, read_geodata_rows_with_header, read_string_rows,
-    write_geodata_rows_with_header,
+    read_cities_rows, read_geodata_rows_with_header, write_geodata_rows_with_header,
 };
 use crate::pipeline::table::{format_coordinate, read_delimited};
-
-const MUNICIPALITIES: [&str; 9] = [
-    "臺北市",
-    "新北市",
-    "桃園市",
-    "臺中市",
-    "臺南市",
-    "高雄市",
-    "基隆市",
-    "新竹市",
-    "嘉義市",
-];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProductionLocationiqOptions {
@@ -37,7 +24,6 @@ pub struct ProductionLocationiqOptions {
     pub qps: u32,
     pub api_key: String,
     pub overwrite: bool,
-    pub tw_admin1_map: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -160,7 +146,6 @@ fn run_fixture(fixture: &Fixture, options: &RunOptions) -> Result<(), String> {
         .map(|row| (row[0].clone(), row[1].clone()))
         .collect();
     let responses = read_responses(&fixture.root.join("locationiq").join("responses.csv"))?;
-    let admin1_map = read_admin1_map(&fixture.root.join("locationiq").join("tw_admin1_map.csv"))?;
     let cities = read_cities_rows(
         &fixture
             .root
@@ -181,7 +166,7 @@ fn run_fixture(fixture: &Fixture, options: &RunOptions) -> Result<(), String> {
         let response = responses
             .get(&(latitude.clone(), longitude.clone()))
             .ok_or_else(|| format!("LocationIQ fixture 缺少座標回應：{latitude},{longitude}"))?;
-        rows.push(build_geodata_row(country, &city, response, &admin1_map)?);
+        rows.push(build_geodata_row(response));
         existing_coords.insert((latitude, longitude));
     }
 
@@ -219,17 +204,12 @@ pub fn run_production(options: &ProductionLocationiqOptions) -> Result<(), Strin
             )
         })?;
     }
-    let admin1_map = match &options.tw_admin1_map {
-        Some(path) if path.exists() => read_admin1_map(path)?,
-        _ => HashMap::new(),
-    };
     let mut client = LocationiqHttpClient::new(options.api_key.clone(), options.qps)?;
-    run_production_with_client(options, &admin1_map, &mut client)
+    run_production_with_client(options, &mut client)
 }
 
 pub fn run_production_with_client<C: ReverseGeocoder>(
     options: &ProductionLocationiqOptions,
-    admin1_map: &HashMap<String, String>,
     client: &mut C,
 ) -> Result<(), String> {
     let mut rows = read_existing_meta(&options.output_file)?;
@@ -279,12 +259,7 @@ pub fn run_production_with_client<C: ReverseGeocoder>(
                     address.suburb,
                     address.neighbourhood,
                 ];
-                batch.push(build_geodata_row(
-                    &options.country_code,
-                    &city,
-                    &response,
-                    admin1_map,
-                )?);
+                batch.push(build_geodata_row(&response));
                 existing_coords.insert((latitude, longitude));
                 if batch.len() >= options.batch_size.max(1) {
                     rows.append(&mut batch);
@@ -343,15 +318,6 @@ fn save_metadata_rows(path: &Path, rows: &[Vec<String>]) -> Result<(), String> {
     write_geodata_rows_with_header(path, rows)
 }
 
-fn read_admin1_map(path: &Path) -> Result<HashMap<String, String>, String> {
-    let rows = read_string_rows(path, b',', true, &["new_id", "name"])?;
-    Ok(rows
-        .into_iter()
-        .filter(|row| row.len() >= 2)
-        .map(|row| (row[0].clone(), row[1].clone()))
-        .collect())
-}
-
 fn read_responses(path: &Path) -> Result<HashMap<(String, String), Vec<String>>, String> {
     let rows = read_delimited(path, ',', true)?;
     let mut responses = HashMap::new();
@@ -369,45 +335,28 @@ fn read_responses(path: &Path) -> Result<HashMap<(String, String), Vec<String>>,
     Ok(responses)
 }
 
-fn build_geodata_row(
-    country: &str,
-    city: &[String],
-    response: &[String],
-    admin1_map: &HashMap<String, String>,
-) -> Result<Vec<String>, String> {
-    let latitude = response[0].clone();
-    let longitude = response[1].clone();
-    let response_country = response[2].clone();
-    let mut admin1 = response[3].clone();
-    let mut admin2 = if response[4].is_empty() {
+/// 將 LocationIQ 回應欄位轉為 geodata 列。
+///
+/// Reason: 有官方圖資 handler 的國家（TW/JP/KR/TH/ID）在 CLI 已由
+/// `filter_country_codes_without_handler` 濾掉，不會進入本階段，因此這裡不做
+/// 任何國家特化對應，一律沿用 LocationIQ 回應的行政區層級。
+fn build_geodata_row(response: &[String]) -> Vec<String> {
+    // Reason: LocationIQ 對部分國家只回傳 county 而不回傳 city，兩者同屬二級行政區。
+    let admin2 = if response[4].is_empty() {
         response[5].clone()
     } else {
         response[4].clone()
     };
-    let mut admin3 = response[6].clone();
-    let mut admin4 = response[7].clone();
 
-    if country == "TW" {
-        let key = format!("TW.{}", city[10]);
-        if let Some(mapped) = admin1_map.get(&key) {
-            admin1 = mapped.clone();
-        }
-        if MUNICIPALITIES.contains(&admin2.as_str()) {
-            admin2 = admin3;
-            admin3 = admin4;
-            admin4 = String::new();
-        }
-    }
-
-    Ok(vec![
-        latitude,
-        longitude,
-        response_country,
-        admin1,
+    vec![
+        response[0].clone(),
+        response[1].clone(),
+        response[2].clone(),
+        response[3].clone(),
         admin2,
-        admin3,
-        admin4,
-    ])
+        response[6].clone(),
+        response[7].clone(),
+    ]
 }
 
 fn parse_locationiq_address(body: &str) -> Result<LocationiqAddress, String> {
@@ -519,21 +468,19 @@ mod tests {
         let cities = temp.path.join("cities500_optimized.txt");
         fs::write(
             &cities,
-            "1\tA\tA\t\t25.00000000\t121.00000000\tP\tPPL\tTW\t\t01\t\t\t\t0\t\t\tAsia/Taipei\t2026-01-01\n2\tB\tB\t\t24.00000000\t120.00000000\tP\tPPL\tTW\t\t02\t\t\t\t0\t\t\tAsia/Taipei\t2026-01-01\n",
+            "1\tA\tA\t\t40.00000000\t-74.00000000\tP\tPPL\tUS\t\tNY\t\t\t\t0\t\t\tAmerica/New_York\t2026-01-01\n2\tB\tB\t\t41.00000000\t-73.00000000\tP\tPPL\tUS\t\tNY\t\t\t\t0\t\t\tAmerica/New_York\t2026-01-01\n",
         )
         .unwrap();
-        let output = temp.path.join("TW.csv");
-        let mut admin1 = HashMap::new();
-        admin1.insert("TW.01".to_string(), "臺北市".to_string());
+        let output = temp.path.join("US.csv");
         let mut client = StubClient {
             responses: vec![
                 Ok(Some(LocationiqAddress {
-                    country: "臺灣".to_string(),
-                    state: "Taiwan".to_string(),
-                    city: "臺北市".to_string(),
+                    country: "美國".to_string(),
+                    state: "紐約州".to_string(),
+                    city: "紐約".to_string(),
                     county: String::new(),
-                    suburb: "信義區".to_string(),
-                    neighbourhood: "西村里".to_string(),
+                    suburb: "曼哈頓".to_string(),
+                    neighbourhood: "蘇活區".to_string(),
                 })),
                 Err("quota".to_string()),
             ],
@@ -541,19 +488,69 @@ mod tests {
         let options = ProductionLocationiqOptions {
             cities_file: cities,
             output_file: output.clone(),
-            country_code: "TW".to_string(),
+            country_code: "US".to_string(),
             batch_size: 10,
             qps: 2,
             api_key: "test".to_string(),
             overwrite: false,
-            tw_admin1_map: None,
         };
 
-        let error = run_production_with_client(&options, &admin1, &mut client).unwrap_err();
+        let error = run_production_with_client(&options, &mut client).unwrap_err();
 
         assert!(error.contains("已 flush"));
         let saved = fs::read_to_string(output).unwrap();
-        assert!(saved.contains("臺北市"));
-        assert!(saved.contains("信義區"));
+        assert!(saved.contains("紐約"));
+        assert!(saved.contains("曼哈頓"));
+    }
+
+    #[test]
+    fn build_geodata_row_keeps_response_admin_levels() {
+        // Reason: 舊版對 TW 會把直轄市層級整列上移，TW 改由官方圖資 handler 產生後
+        // 這個階段不得再做任何國家特化搬移，否則會與 handler 產出的層級不一致。
+        let response = vec![
+            "25.03396400".to_string(),
+            "121.56446800".to_string(),
+            "臺灣".to_string(),
+            "Taipei".to_string(),
+            "臺北市".to_string(),
+            String::new(),
+            "信義區".to_string(),
+            "西村里".to_string(),
+        ];
+
+        let row = build_geodata_row(&response);
+
+        assert_eq!(
+            row,
+            vec![
+                "25.03396400",
+                "121.56446800",
+                "臺灣",
+                "Taipei",
+                "臺北市",
+                "信義區",
+                "西村里",
+            ]
+        );
+    }
+
+    #[test]
+    fn build_geodata_row_falls_back_to_county_when_city_is_empty() {
+        let response = vec![
+            "40.00000000".to_string(),
+            "-74.00000000".to_string(),
+            "美國".to_string(),
+            "紐約州".to_string(),
+            String::new(),
+            "威徹斯特郡".to_string(),
+            "郊區".to_string(),
+            String::new(),
+        ];
+
+        let row = build_geodata_row(&response);
+
+        assert_eq!(row[4], "威徹斯特郡");
+        assert_eq!(row[5], "郊區");
+        assert_eq!(row[6], "");
     }
 }
