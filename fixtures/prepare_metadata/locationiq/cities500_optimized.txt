@@ -1,2 +1,2 @@
-92000000	信義區	信義區		25.033964	121.564468	A	ADM2	TW		01				0		0	Asia/Taipei	2026-01-01
-92000001	中區	中區		24.147736	120.673648	A	ADM2	TW		04				0		0	Asia/Taipei	2026-01-01
+92000000	Manhattan	Manhattan		40.783060	-73.971249	A	ADM2	US		NY				0		0	America/New_York	2026-01-01
+92000001	Brooklyn	Brooklyn		40.678178	-73.944160	A	ADM2	US		NY				0		0	America/New_York	2026-01-01

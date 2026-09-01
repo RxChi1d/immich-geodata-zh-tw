@@ -1,7 +1,7 @@
 use crate::cli::RunOptions;
 use crate::pipeline::fixtures::{Fixture, load_fixtures};
 use crate::pipeline::geodata::{admin1_mapping, normalize_admin_fields, read_geodata};
-use crate::pipeline::polars_table::{read_admin1_rows, write_string_rows};
+use crate::pipeline::polars_table::read_admin1_rows;
 use crate::pipeline::table::write_delimited;
 use crate::pipeline::transform_cities_schema::country_profile;
 use std::path::{Path, PathBuf};
@@ -70,9 +70,6 @@ pub fn run_production(options: &ProductionAdmin1Options) -> Result<i64, String> 
             continue;
         }
         replace_country_admin1(country, &input, &mut rows, &mut max_id)?;
-        if country == "TW" {
-            write_tw_admin1_map(&input, &options.output)?;
-        }
     }
 
     write_admin1_rows_direct(&options.output, &rows)?;
@@ -87,26 +84,6 @@ pub fn run_production(options: &ProductionAdmin1Options) -> Result<i64, String> 
 
 fn write_admin1_rows_direct(output: &Path, rows: &[Vec<String>]) -> Result<(), String> {
     write_delimited(output, '\t', None, rows)
-}
-
-fn write_tw_admin1_map(input: &Path, admin1_output: &Path) -> Result<(), String> {
-    let Some(output_dir) = admin1_output.parent() else {
-        return Ok(());
-    };
-    let mut records = read_geodata(input)?;
-    normalize_admin_fields(&mut records);
-    let mapping = admin1_mapping(&records, "TW");
-    let rows: Vec<Vec<String>> = mapping
-        .into_iter()
-        .map(|(name, code)| vec![code, name])
-        .collect();
-    write_string_rows(
-        &output_dir.join("tw_admin1_map.csv"),
-        b',',
-        true,
-        &["new_id", "name"],
-        &rows,
-    )
 }
 
 fn replace_country_admin1(

@@ -1,0 +1,1 @@
+92000002	Manhattan	Manhattan		40.783060	-73.971249	A	ADM2	US		NY				0		0	America/New_York	2026-01-01

@@ -293,7 +293,6 @@ fn run_locationiq_production(options: &ProductionOptions) -> Result<(), String> 
             qps: options.qps,
             api_key: api_key.clone(),
             overwrite: options.overwrite,
-            tw_admin1_map: Some(options.output_folder.join("tw_admin1_map.csv")),
         })?;
     }
     Ok(())
