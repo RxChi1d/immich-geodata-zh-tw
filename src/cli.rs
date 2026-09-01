@@ -89,6 +89,7 @@ struct ProductionOptions {
     output_file: Option<PathBuf>,
     alternate_name_file: Option<PathBuf>,
     metadata_folder: PathBuf,
+    locationiq_cache_folder: PathBuf,
     min_population: u32,
     batch_size: u32,
     qps: u32,
@@ -119,6 +120,12 @@ impl Default for ProductionOptions {
             output_file: None,
             alternate_name_file: None,
             metadata_folder: PathBuf::from("./meta_data"),
+            // Reason: LocationIQ 產物與 handler extract 產物欄位相同但語義相反——
+            // 前者是可重建的逆地理查詢快取，後者是 canonical production metadata
+            // （CLAUDE.md 資料保護規則禁止重新產生）。放同一目錄時只靠檔名大小寫
+            // 區分，清快取的人無從判斷哪些檔案可動，因此以目錄分隔兩種生命週期。
+            // 刻意不跟隨 --metadata-folder：兩者本就不該一起搬移。
+            locationiq_cache_folder: PathBuf::from("./cache/locationiq"),
             min_population: 100,
             batch_size: 100,
             qps: 2,
@@ -277,14 +284,16 @@ fn run_locationiq_production(options: &ProductionOptions) -> Result<(), String> 
         .api_key
         .clone()
         .ok_or_else(|| "locationiq 需要 --locationiq-api-key 或 LOCATIONIQ_API_KEY".to_string())?;
-    fs::create_dir_all(&options.metadata_folder).map_err(|error| {
+    fs::create_dir_all(&options.locationiq_cache_folder).map_err(|error| {
         format!(
-            "無法建立 metadata folder {}：{error}",
-            options.metadata_folder.display()
+            "無法建立 LocationIQ cache folder {}：{error}",
+            options.locationiq_cache_folder.display()
         )
     })?;
     for country in &options.country_codes {
-        let output_file = options.metadata_folder.join(format!("{country}.csv"));
+        let output_file = options
+            .locationiq_cache_folder
+            .join(format!("{country}.csv"));
         locationiq::run_production(&locationiq::ProductionLocationiqOptions {
             cities_file: options.output_folder.join("cities500_optimized.txt"),
             output_file,
@@ -302,7 +311,9 @@ fn run_locationiq_production(options: &ProductionOptions) -> Result<(), String> 
 fn run_translate_production(options: &ProductionOptions) -> Result<(), String> {
     // Reason: 統計已由 run_production 內部 log，CLI 不需回傳值。
     translate::run_production(&translate::ProductionTranslateOptions {
-        metadata_dir: options.metadata_folder.clone(),
+        // Reason: translate 的查表只認 LocationIQ 產物；handler 的
+        // {cc}_geodata.csv 由 enhance 以明確檔名消費，不參與此處。
+        metadata_dir: options.locationiq_cache_folder.clone(),
         data_dir: options.data_folder.clone(),
         cities_file: options.output_folder.join("cities500_optimized.txt"),
         admin1_file: options.output_folder.join("admin1CodesASCII_optimized.txt"),
@@ -815,6 +826,24 @@ mod tests {
         assert_eq!(options.country_codes, vec!["TW", "JP"]);
         assert_eq!(options.data_folder, PathBuf::from("/tmp/geoname-data"));
         assert!(validate_production_contract("prepare", &options).is_ok());
+    }
+
+    /// LocationIQ 快取與 handler metadata 分屬不同生命週期，`--metadata-folder`
+    /// 只能搬動後者。若哪天讓快取跟隨該旗標，清 handler metadata 的操作會連帶
+    /// 移動或刪掉付費 API 換來的快取，本測試守住這個分界。
+    #[test]
+    fn locationiq_cache_folder_is_separate_from_metadata_folder() {
+        let options = parse_production_options(&[
+            "--metadata-folder".to_string(),
+            "/tmp/custom-meta".to_string(),
+        ])
+        .unwrap();
+
+        assert_eq!(options.metadata_folder, PathBuf::from("/tmp/custom-meta"));
+        assert_eq!(
+            options.locationiq_cache_folder,
+            PathBuf::from("./cache/locationiq")
+        );
     }
 
     #[test]

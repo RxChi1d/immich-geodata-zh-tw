@@ -211,7 +211,7 @@ cargo run --release -- release \
 > [!WARNING]
 > LocationIQ API 有請求次數限制（可登入後於後台查看），請留意要處理的國家的地名數量。
 >
-> 查詢進度記錄在 `meta_data/<國碼>.csv`，超過當日限制時更換 API key 或隔日重跑同一條指令即可續查，已查過的座標會自動跳過。加上 `--pass-cleanup` 可保留 `output/` 既有的中間產物，省去重新下載與前處理：
+> 查詢進度記錄在 `cache/locationiq/<國碼>.csv`，超過當日限制時更換 API key 或隔日重跑同一條指令即可續查，已查過的座標會自動跳過。加上 `--pass-cleanup` 可保留 `output/` 既有的中間產物，省去重新下載與前處理：
 >
 > ```bash
 > cargo run --release -- release --locationiq-api-key "YOUR_API_KEY" --country-code "US" --pass-cleanup
