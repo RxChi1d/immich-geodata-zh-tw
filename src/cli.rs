@@ -266,6 +266,13 @@ fn run_enhance_production(options: &ProductionOptions) -> Result<i64, String> {
 }
 
 fn run_locationiq_production(options: &ProductionOptions) -> Result<(), String> {
+    // Reason: 國家清單為空代表沒有任何需要 LocationIQ 的國家，整個階段不會發出請求。
+    // 守衛必須放在取用 api_key 之前，否則單獨執行 locationiq 命令時會因為缺 key 而
+    // 失敗，即使實際上一次 API 都不會呼叫。
+    if options.country_codes.is_empty() {
+        println!("stage=locationiq mode=production status=skip reason=no_non_handler_country");
+        return Ok(());
+    }
     let api_key = options
         .api_key
         .clone()
@@ -364,15 +371,9 @@ fn run_release_production(options: &ProductionOptions) -> Result<(), String> {
         run_profiled_stage(options, "enhance", || run_enhance_production(options))?;
     }
     if !options.pass_locationiq {
-        let mut locationiq_options = options.clone();
-        locationiq_options.country_codes = non_handler_country_codes(&options.country_codes);
-        if locationiq_options.country_codes.is_empty() {
-            println!("stage=locationiq mode=production status=skip reason=no_non_handler_country");
-        } else {
-            run_profiled_stage(options, "locationiq", || {
-                run_locationiq_production(&locationiq_options)
-            })?;
-        }
+        // Reason: country_codes 進到這裡前已由 filter_country_codes_without_handler 濾掉
+        // handler 國家，不需要（也不應該）再過濾一次，否則同一條規則會有兩份實作。
+        run_profiled_stage(options, "locationiq", || run_locationiq_production(options))?;
     }
     if !options.pass_translate {
         run_profiled_stage(options, "translate", || run_translate_production(options))?;
@@ -549,6 +550,10 @@ fn validate_production_contract(command: &str, options: &ProductionOptions) -> R
         && !options.pass_locationiq
         && options.api_key.is_none()
         && !options.fixture_mode
+        // Reason: country_codes 已由 filter_country_codes_without_handler 濾掉 handler 國家；
+        // 清單為空時 locationiq 階段只會印出 no_non_handler_country 並跳過，不會呼叫 API，
+        // 此時要求 API key 會讓純 handler 國家的 release 無謂失敗。
+        && !options.country_codes.is_empty()
     {
         return Err(
             "locationiq/release 需要 --locationiq-api-key 或 LOCATIONIQ_API_KEY".to_string(),
@@ -832,6 +837,47 @@ mod tests {
         filter_country_codes_without_handler("release", &mut options);
 
         assert_eq!(options.country_codes, vec!["US"]);
+    }
+
+    #[test]
+    fn production_release_without_non_handler_country_skips_api_key_requirement() {
+        let mut options =
+            parse_production_options(&["--country-code".to_string(), "TW".to_string()]).unwrap();
+        // Reason: 預設值會讀取 LOCATIONIQ_API_KEY 環境變數，測試需固定為未提供 key。
+        options.api_key = None;
+        filter_country_codes_without_handler("release", &mut options);
+
+        assert!(options.country_codes.is_empty());
+        assert!(validate_production_contract("release", &options).is_ok());
+    }
+
+    #[test]
+    fn production_release_with_non_handler_country_still_requires_api_key() {
+        let mut options = parse_production_options(&[
+            "--country-code".to_string(),
+            "TW".to_string(),
+            "US".to_string(),
+        ])
+        .unwrap();
+        options.api_key = None;
+        filter_country_codes_without_handler("release", &mut options);
+
+        assert_eq!(options.country_codes, vec!["US"]);
+        let error = validate_production_contract("release", &options).unwrap_err();
+        assert!(error.contains("--locationiq-api-key"));
+    }
+
+    #[test]
+    fn production_locationiq_command_without_non_handler_country_skips_without_api_key() {
+        let mut options =
+            parse_production_options(&["--country-code".to_string(), "JP".to_string()]).unwrap();
+        options.api_key = None;
+        filter_country_codes_without_handler("locationiq", &mut options);
+
+        assert!(options.country_codes.is_empty());
+        assert!(validate_production_contract("locationiq", &options).is_ok());
+        // Reason: 光通過 pre-flight 檢查不夠，階段本身也必須在沒有 key 時安全跳過。
+        assert!(run_locationiq_production(&options).is_ok());
     }
 
     #[test]
