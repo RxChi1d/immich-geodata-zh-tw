@@ -45,7 +45,7 @@ For the resulting directory layout, see step 2 of [Manual Deployment in the READ
 
 If the latest release causes problems, or you need to stay on a specific version, use `--tag` to pick the data version to install. Available tag names are listed on the [Releases page](https://github.com/RxChi1d/immich-geodata-zh-tw/releases), for example `v3.2.0` or `nightly`.
 
-`nightly` is the automatically published data version. This project checks upstream boundary data once a week and regenerates the data only when something changed, overwriting the `nightly` tag, so its update frequency varies. Its contents have not gone through the full validation of a formal release, and later automatic publishes overwrite the same tag. Use it when you want new boundary data early; for long-term stability, pin a `vX.Y.Z` tag.
+`nightly` is the automatically published data version. This project regenerates the data once a week and overwrites the `nightly` tag, using whatever upstream boundary data is available at that time. Its contents have not gone through the full validation of a formal release, and later automatic publishes overwrite the same tag. Use it when you want new boundary data early; for long-term stability, pin a `vX.Y.Z` tag.
 
 The script itself always comes from the latest release; `--tag` only selects the data version. For integrated deployment:
 

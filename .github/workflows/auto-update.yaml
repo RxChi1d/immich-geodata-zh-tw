@@ -11,6 +11,13 @@ on:
   schedule:
     - cron: "33 3 * * 5"
 
+# Reason: 發布改為每次排程都執行後，排程、手動觸發與 re-run 可能重疊。
+# 兩個 run 同時搬移 nightly tag 與更新同一個 release 會互相覆蓋，
+# 因此序列化；發布途中不可取消，否則會留下只上傳一半 assets 的 release。
+concurrency:
+  group: auto-update
+  cancel-in-progress: false
+
 defaults:
   run:
     shell: bash
@@ -30,7 +37,6 @@ jobs:
     permissions:
       actions: read
       contents: write
-      pull-requests: write
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -38,8 +44,6 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true' && github.ref || 'main' }}
-      - name: Create nightly-build branch
-        run: git checkout -B nightly-build
       - name: Download Rust binary
         uses: actions/download-artifact@v8
         with:
@@ -78,24 +82,26 @@ jobs:
       - name: Build with Rust
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         run: |
+          # TH 已改由 handler 處理（消耗 meta_data/th_geodata.csv），
+          # 不需再以 --country-code 走 LocationIQ 流程；
+          # 無 non-handler 國家時 locationiq 階段會自動 skip。
           ".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}" release \
-            --locationiq-api-key "${{ secrets.LOCATIONIQ_API_KEY }}" \
-            --country-code "TH"
-      - uses: stefanzweifel/git-auto-commit-action@v5
+            --locationiq-api-key "${{ secrets.LOCATIONIQ_API_KEY }}"
+      - name: Point nightly tag at built commit
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
-        id: auto-commit
-        with:
-          branch: nightly-build
-          commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
-          file_pattern: meta_data/*
-          push_options: '--force'
-      - name: Delete existing nightly release
-        if: steps.auto-commit.outputs.changes_detected == 'true'
-        run: gh release delete nightly --yes --cleanup-tag || true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Reason: nightly release 改為就地更新（allowUpdates），而 ncipollo 只在
+        # 建立時使用 commit 參數，既有 tag 不會被移動。若不主動搬移，nightly tag
+        # 會永遠停在第一次建立時的 commit，與 artifacts 不同源。
+        run: |
+          git tag -f nightly
+          git push --force origin refs/tags/nightly
       - name: Create Release
-        if: steps.auto-commit.outputs.changes_detected == 'true'
+        # Reason: 每次排程都重新發布 nightly。上游 GeoNames 由 prepare 於執行時
+        # 重新下載、產物含當日 geodata-date.txt，兩者都不在 git 追蹤範圍內，
+        # 因此「git 有無變更」無法代表產物有無變更。先前以 auto-commit 的
+        # changes_detected 當發布條件，在所有國家改為 handler、meta_data/
+        # 不再變動後恆為 false，nightly 自 2026-05-29 起停止發布。
+        if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         uses: ncipollo/release-action@v1
         with:
           name: Automated Nightly Build ${{ env.TODAY }}
@@ -106,6 +112,10 @@ jobs:
             output/release.*
             .rust-binary/${{ needs.rust-binary.outputs.binary_filename }}.tar.gz
             .rust-binary/${{ needs.rust-binary.outputs.binary_filename }}.tar.gz.sha256
+          # Reason: 預設只在 glob 無匹配或 asset 上傳失敗時發出 warning，
+          # 會發出缺少檔案的 release。nightly 缺 release.tar.gz 會讓
+          # update_data.sh 下載失敗，必須讓 workflow 直接失敗。
+          artifactErrorsFailBuild: true
           body: |
             這是自動發布的 nightly 版本，包含最新的地理資料，未經正式版本的完整驗證。
             需要穩定版本請選擇標示 "Latest" 的 [release](https://github.com/RxChi1d/immich-geodata-zh-tw/releases/latest)。
@@ -114,23 +124,10 @@ jobs:
             遇到問題歡迎回報 [issue](https://github.com/RxChi1d/immich-geodata-zh-tw/issues)。
           draft: false
           generateReleaseNotes: false
-          commit: nightly-build
+          # Reason: 就地更新既有 release，不先刪除。update_data.sh 會先以
+          # releases/tags/nightly 驗證 tag，404 即中止安裝；delete→create
+          # 之間有數十秒的上傳空窗，且 create 失敗時 nightly 會整週消失。
+          allowUpdates: true
           tag: nightly
           makeLatest: false
           prerelease: true
-      - name: Create PR to main
-        if: steps.auto-commit.outputs.changes_detected == 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          existing=$(gh pr list --head nightly-build --state open --json number --jq 'length')
-          if [ "$existing" -eq 0 ]; then
-            gh pr create \
-              --base main \
-              --head nightly-build \
-              --title "chore(geodata): 自動更新 ${{ env.TODAY }}" \
-              --label "data-update" \
-              --body "這是 nightly 自動更新產生的 geodata 變更，請審核後合併。"
-          else
-            echo "已有開啟中的 PR，跳過建立。"
-          fi
