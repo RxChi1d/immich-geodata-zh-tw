@@ -86,7 +86,7 @@ jobs:
             release
             --profile
             --data-folder geoname_data
-            --metadata-folder meta_data
+            --metadata-folder data/handler
             --output-folder output
           )
 
@@ -97,7 +97,7 @@ jobs:
             args+=(--pass-locationiq)
           fi
 
-          # handler 國家（TW/JP/KR/TH）由 meta_data/*_geodata.csv 自動帶入，
+          # handler 國家（TW/JP/KR/TH）由 data/handler/*_geodata.csv 自動帶入，
           # 只有 non-handler 國家需要透過 --country-code 指定。
           read -r -a countries <<< "${COUNTRY_CODES}"
           if [[ "${#countries[@]}" -gt 0 ]]; then

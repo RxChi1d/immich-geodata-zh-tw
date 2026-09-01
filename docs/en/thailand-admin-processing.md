@@ -33,7 +33,7 @@ This project uses `tha_admin3` as the extract source. The output columns are:
 | `admin_3` | `adm3_name` / `adm3_name1` | Sub-district / Tambon official English; falls back to official Thai when English is missing |
 | `admin_4` | Empty | This COD-AB dataset does not provide admin4 |
 
-> **Row count**: Thai extract emits exactly one row per feature, so the row count of `meta_data/th_geodata.csv` matches the number of tambons in `tha_admin3`. A multipart polygon is merged into a single centroid rather than split across rows — per-part splitting is enabled only for Indonesia, see [Indonesia Administrative Processing](indonesia-admin-processing.md).
+> **Row count**: Thai extract emits exactly one row per feature, so the row count of `data/handler/th_geodata.csv` matches the number of tambons in `tha_admin3`. A multipart polygon is merged into a single centroid rather than split across rows — per-part splitting is enabled only for Indonesia, see [Indonesia Administrative Processing](indonesia-admin-processing.md).
 
 ## Naming Strategy
 

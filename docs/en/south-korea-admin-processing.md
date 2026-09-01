@@ -62,7 +62,7 @@ South Korea uses a three-level administrative system (excluding the country leve
 | **Admin 3** | Dong / Eup / Myeon | 행정동/법정동 | 3,534 rows (2,802 distinct names) | Parsed from `adm_nm` |
 | **Admin 4** | Original Admin 3 | - | Only when a city-district split occurs (492 rows) | Preserves the original value |
 
-> **Statistical baseline**: `meta_data/kr_geodata.csv` generated from the `HangJeongDong_ver20260701` boundary data (3,558 rows in total).
+> **Statistical baseline**: `data/handler/kr_geodata.csv` generated from the `HangJeongDong_ver20260701` boundary data (3,558 rows in total).
 
 > **Note**: Admin 4 is used only when a city-district split occurs (for example, `성남시분당구` splits into `성남시` + `분당구`), preserving the original Admin 3 value. Immich's reverse geocoding ignores this column; it exists for data completeness and debugging.
 

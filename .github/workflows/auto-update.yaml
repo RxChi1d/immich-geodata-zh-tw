@@ -82,7 +82,7 @@ jobs:
       - name: Build with Rust
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         run: |
-          # TW/JP/KR/TH/ID 皆由 handler 消耗 meta_data/*_geodata.csv，
+          # TW/JP/KR/TH/ID 皆由 handler 消耗 data/handler/*_geodata.csv，
           # 不需再以 --country-code 走 LocationIQ 流程；無 non-handler 國家時
           # locationiq 階段會自動 skip，因此也不需要 LOCATIONIQ_API_KEY。
           ".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}" release
@@ -98,7 +98,7 @@ jobs:
         # Reason: 每次排程都重新發布 nightly。上游 GeoNames 由 prepare 於執行時
         # 重新下載、產物含當日 geodata-date.txt，兩者都不在 git 追蹤範圍內，
         # 因此「git 有無變更」無法代表產物有無變更。先前以 auto-commit 的
-        # changes_detected 當發布條件，在所有國家改為 handler、meta_data/
+        # changes_detected 當發布條件，在所有國家改為 handler、圖資中繼目錄
         # 不再變動後恆為 false，nightly 自 2026-05-29 起停止發布。
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         uses: ncipollo/release-action@v1

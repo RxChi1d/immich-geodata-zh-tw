@@ -46,7 +46,7 @@
 
 1. **NAER 官方譯名（高信心）**：覆寫層級插入優先序首位
 2. LocationIQ metadata（既有；載入 `data/locationiq/{國碼}.csv`。handler
-   國家的 `meta_data/{國碼小寫}_geodata.csv` 位於不同目錄，由 enhance 階段以
+   國家的 `data/handler/{國碼小寫}_geodata.csv` 位於不同目錄，由 enhance 階段以
    明確檔名消費，不參與此處查表。正式 release 目前無非 handler 國家，因此此層
    為 no-op）
 3. GeoNames alternateNames zh 系 + OpenCC（既有）

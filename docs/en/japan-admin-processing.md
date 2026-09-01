@@ -100,7 +100,7 @@ Each type of Japanese administrative division gets the display form that suits i
 
 - **Applies when**: The record provides only an upper-level division name other than a district, with no municipality (`N03_004` and `N03_005` are both empty, and `N03_003` has a value that does not end with 「郡」)
 - **Display**: The upper-level division name
-- **Note**: This is a fallback for incomplete data. The current N03 dataset contains no such records (zero rows in `meta_data/jp_geodata.csv`)
+- **Note**: This is a fallback for incomplete data. The current N03 dataset contains no such records (zero rows in `data/handler/jp_geodata.csv`)
 
 > [!NOTE]
 > If the upper-level name ends with 「郡」 and the municipality is empty, the record falls into the district-governed rule (rule 4) first. `admin_2` is then empty, so the translation stage drops the record and it never reaches Immich.

@@ -5,7 +5,7 @@ use immich_geodata::pipeline::translate::{ProductionTranslateOptions, run_produc
 
 /// translate 只載入 LocationIQ 產物 `{CC}.csv`（production 位於
 /// `data/locationiq/`），handler extract 產物 `{cc}_geodata.csv`（位於
-/// `meta_data/`）不參與查表。目錄雖已分離，檔名守衛仍需擋住誤放或路徑指錯的
+/// `data/handler/`）不參與查表。目錄雖已分離，檔名守衛仍需擋住誤放或路徑指錯的
 /// 檔案，以下測試即針對該守衛，以「城市名是否被 metadata 的 admin_2 取代」
 /// 觀測實際載入結果。
 struct TranslateCase {
@@ -16,7 +16,7 @@ struct TranslateCase {
 impl TranslateCase {
     fn new() -> Self {
         let dir = tempfile::tempdir().unwrap();
-        let metadata_dir = dir.path().join("meta_data");
+        let metadata_dir = dir.path().join("locationiq");
         std::fs::create_dir_all(&metadata_dir).unwrap();
         Self { dir, metadata_dir }
     }

@@ -216,7 +216,7 @@ src/pipeline/
 - **入口**：`cargo run --release -- extract`
 - **功能**：從 Shapefile、GeoJSON 或已正規化 CSV 提取資料並轉換為標準化 CSV。
 - **輸入**：原始 Shapefile、GeoJSON 或 normalized geodata CSV
-- **輸出**：`meta_data/{country}_geodata.csv`
+- **輸出**：`data/handler/{country}_geodata.csv`
 - **處理內容**：
   - 讀取 Shapefile/GeoJSON
   - 計算多邊形中心點（使用適當的投影）
@@ -237,7 +237,7 @@ src/pipeline/
 cargo run --release -- extract \
   --country TW \
   --shapefile <path_to_tw_shapefile> \
-  --output meta_data/tw_geodata.csv
+  --output data/handler/tw_geodata.csv
 
 # LocationIQ 流程僅用於非 handler 國家（TW/JP/KR/TH/ID 已由官方圖資 handler 產生）
 cargo run --release -- release \
@@ -290,17 +290,17 @@ cargo test
   訊息需避免輸出 API key、暫存路徑中敏感資訊或不可重現的 runtime metadata。
 
 ### 資料保護規則
-- **`meta_data/*_geodata.csv` 為 canonical production metadata**：由各國官方圖資
+- **`data/handler/*_geodata.csv` 為 canonical production metadata**：由各國官方圖資
   經 extract 生成、由 release workflow 自動驗證與更新。除明確的資料更新任務外，
   不得刪除、重新產生或正規化這些檔案；任何清理或重構工作都不應視其為可再生的
   build 產物。
 - **`data/` 為餵給 release pipeline 的持久化輸入**：與 `output/`、`geoname_data/`
-  這類可隨時清空的執行期目錄不同，`data/` 底下的內容納入 git 追蹤。目前收納
-  `data/locationiq/{國碼}.csv`（LocationIQ 逆地理查詢產物）；handler 產物與
-  vendored 資料的收攏另案處理。
+  這類可隨時清空的執行期目錄不同，`data/` 底下的內容納入 git 追蹤，並依產生方式
+  分類：`data/handler/`（各國 extract handler 產物）、`data/locationiq/`
+  （LocationIQ 逆地理查詢產物）。vendored 外部資料的收攏另案處理。
 - **`data/locationiq/*.csv` 可重建但有代價**：由 locationiq 階段逐點查詢產生，
   刪除後重跑即可復原，但會消耗 LocationIQ 的付費請求額度。git 追蹤是它跨次執行
-  存活的預期方式，但 release workflow 的 auto-commit 目前只涵蓋 `meta_data/*`
+  存活的預期方式，但 release workflow 的 auto-commit 目前只涵蓋 `data/handler/*`
   （`.github/workflows/release.yaml`）。新增非 handler 國家前需一併決定 CI 端
   如何保存查詢進度，否則每次排程都會從零重查。
 

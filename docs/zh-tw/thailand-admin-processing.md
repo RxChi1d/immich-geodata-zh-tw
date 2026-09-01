@@ -34,7 +34,7 @@ COD-AB Thailand 提供下列行政層級：
 | `admin_3` | `adm3_name` / `adm3_name1` | Sub-district / Tambon 官方英文；英文缺少時回退官方泰文 |
 | `admin_4` | 空值 | COD-AB 此資料集未提供 admin4 |
 
-> **筆數說明**：泰國 extract 為每個 feature 輸出一列，`meta_data/th_geodata.csv` 的列數與 `tha_admin3` 的 tambon 數一致。multipart polygon 會合併計算單一中心點，不會拆成多列（逐 part 拆列只在印尼啟用，詳見[印尼行政區處理](indonesia-admin-processing.md)）。
+> **筆數說明**：泰國 extract 為每個 feature 輸出一列，`data/handler/th_geodata.csv` 的列數與 `tha_admin3` 的 tambon 數一致。multipart polygon 會合併計算單一中心點，不會拆成多列（逐 part 拆列只在印尼啟用，詳見[印尼行政區處理](indonesia-admin-processing.md)）。
 
 ## 名稱策略
 

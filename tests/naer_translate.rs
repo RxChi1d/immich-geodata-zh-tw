@@ -54,7 +54,7 @@ fn naer_layer_fills_overrides_and_demotes() {
          fillville,菲爾維爾,US,30.0,-87.0,false\n\
          overridetown,歐弗萊鎮,US,31.0,-86.0,false\n",
     );
-    let metadata_dir = dir.path().join("meta_data");
+    let metadata_dir = dir.path().join("locationiq");
     std::fs::create_dir_all(&metadata_dir).unwrap();
     let output_dir = dir.path().join("out");
 
@@ -141,7 +141,7 @@ fn naer_applied_name_bypasses_inversion_replacement() {
         "name_norm,name_zh,country_code,latitude,longitude,feature_hint\n\
          innerton,裏鎮,US,40.0,-100.0,false\n",
     );
-    let metadata_dir = dir.path().join("meta_data");
+    let metadata_dir = dir.path().join("locationiq");
     std::fs::create_dir_all(&metadata_dir).unwrap();
     let output_dir = dir.path().join("out");
 
@@ -189,7 +189,7 @@ fn handler_country_skips_naer_end_to_end() {
         "name_norm,name_zh,country_code,latitude,longitude,feature_hint\n\
          handlertown,韓德勒鎮,JP,35.7,139.7,false\n",
     );
-    let metadata_dir = dir.path().join("meta_data");
+    let metadata_dir = dir.path().join("locationiq");
     std::fs::create_dir_all(&metadata_dir).unwrap();
     let output_dir = dir.path().join("out");
 
@@ -217,14 +217,14 @@ fn handler_country_skips_naer_end_to_end() {
 #[test]
 fn missing_naer_file_fails_fast() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::create_dir_all(dir.path().join("meta_data")).unwrap();
+    std::fs::create_dir_all(dir.path().join("locationiq")).unwrap();
     let touch = |name: &str, content: &str| {
         let path = dir.path().join(name);
         std::fs::write(&path, content).unwrap();
         path
     };
     let error = run_production(&ProductionTranslateOptions {
-        metadata_dir: dir.path().join("meta_data"),
+        metadata_dir: dir.path().join("locationiq"),
         data_dir: dir.path().to_path_buf(),
         cities_file: touch("cities500_optimized.txt", ""),
         admin1_file: touch("admin1CodesASCII_optimized.txt", ""),
