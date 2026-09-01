@@ -393,27 +393,78 @@ fn alternate_name_dataframe_to_rows(df: &DataFrame) -> Result<Vec<Vec<String>>, 
     Ok(rows)
 }
 
+/// 由檔名解析 LocationIQ metadata 的國碼。
+///
+/// `meta_data/` 同時放兩種語義不同、欄位卻相同的檔案：LocationIQ 逆地理查詢
+/// 產物 `{CC}.csv`（ISO-3166-1 alpha-2）與各國 handler 的 extract 產物
+/// `{cc}_geodata.csv`。translate 的查表只認前者；後者由 enhance 階段
+/// （`admin1_load` / `cities500_load`）以明確檔名消費，其內容早已寫入
+/// cities500，不應在此重複載入。
+///
+/// Reason: 舊版直接把檔名 stem 當國碼，handler geodata 檔自 2025-04 進入
+/// `meta_data/` 後被當成國碼 `tw_geodata` 的 metadata 載入——25 萬列永不
+/// 命中、不影響輸出，也沒有任何 log。大小寫一併正規化，因為
+/// `--country-code us` 會產出 `us.csv`，而 cities500 國碼為大寫，
+/// 不正規化同樣會靜默失效。
+fn locationiq_country_code(file_path: &Path) -> Option<String> {
+    let stem = file_path.file_stem().and_then(|value| value.to_str())?;
+    (stem.len() == 2 && stem.chars().all(|value| value.is_ascii_alphabetic()))
+        .then(|| stem.to_ascii_uppercase())
+}
+
 fn load_metadata_dataframe(path: &Path) -> Result<DataFrame, String> {
     let mut metadata = empty_metadata_dataframe()?;
     if !path.exists() {
+        println!(
+            "stage=translate metadata_dir_missing path={} metadata_files=0 metadata_rows=0",
+            path.display()
+        );
         return Ok(metadata);
     }
 
-    for entry in fs::read_dir(path)
+    // Reason: read_dir 順序由檔案系統決定，而 vstack 順序會經由 unique_stable
+    // 的 KeepStrategy::First 影響保留的列。排序後載入順序、log 行與輸出才可重現。
+    let mut files: Vec<PathBuf> = fs::read_dir(path)
         .map_err(|error| format!("無法讀取 metadata 目錄 {}：{error}", path.display()))?
-    {
-        let file_path = entry
-            .map_err(|error| format!("無法讀取 metadata 項目：{error}"))?
-            .path();
-        if file_path.extension().and_then(|value| value.to_str()) != Some("csv") {
+        .map(|entry| {
+            entry
+                .map(|entry| entry.path())
+                .map_err(|error| format!("無法讀取 metadata 項目：{error}"))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    files.sort();
+
+    let mut loaded: Vec<String> = Vec::new();
+    let mut skipped: Vec<String> = Vec::new();
+    let mut duplicates: Vec<String> = Vec::new();
+    for file_path in files {
+        // Reason: 副檔名比對不分大小寫——LocationIQ 匯出檔若寫成 US.CSV，
+        // 大小寫敏感的比對會讓它連 skip log 都沒有，正是本次要消除的靜默 no-op。
+        if !file_path
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case("csv"))
+        {
             continue;
         }
-        let country_code = file_path
-            .file_stem()
-            .and_then(|value| value.to_str())
-            .ok_or_else(|| format!("metadata 檔名格式錯誤：{}", file_path.display()))?
-            .to_string();
+        // Reason: 非 UTF-8 檔名以 lossy 轉換保留可辨識字元，不讓 skip log 出現空項目。
+        let file_name = file_path
+            .file_name()
+            .map(|value| value.to_string_lossy().into_owned())
+            .unwrap_or_else(|| file_path.display().to_string());
+        let Some(country_code) = locationiq_country_code(&file_path) else {
+            skipped.push(file_name);
+            continue;
+        };
+        // Reason: 檔名正規化為大寫後，US.csv 與 us.csv 會落在同一個國碼上，
+        // 兩者的列會在後續 unique_stable 互相遮蔽。排序後取字典序第一個檔案，
+        // 其餘略過並記錄，避免同一棵檔案樹在不同機器上翻出不同結果。
+        if loaded.contains(&country_code) {
+            duplicates.push(file_name);
+            continue;
+        }
         let rows = read_string_rows(&file_path, b',', true, &GEODATA_COLUMNS)?;
+        loaded.push(country_code.clone());
         let file_df = metadata_rows_to_dataframe(&country_code, &rows)?;
         metadata
             .vstack_mut(&file_df)
@@ -424,9 +475,29 @@ fn load_metadata_dataframe(path: &Path) -> Result<DataFrame, String> {
         "latitude".to_string(),
         "longitude".to_string(),
     ];
-    metadata
+    let metadata = metadata
         .unique_stable(Some(&subset), UniqueKeepStrategy::First, None)
-        .map_err(|error| format!("Polars metadata unique 失敗：{error}"))
+        .map_err(|error| format!("Polars metadata unique 失敗：{error}"))?;
+    // Reason: 列數取去重後的實際查表列數，與 metadata_lookup 的規模一致。
+    println!(
+        "stage=translate metadata_files={} metadata_rows={} countries=[{}]",
+        loaded.len(),
+        metadata.height(),
+        loaded.join(",")
+    );
+    if !skipped.is_empty() {
+        println!(
+            "translate_metadata_skip reason=not_locationiq_metadata files=[{}]",
+            skipped.join(",")
+        );
+    }
+    if !duplicates.is_empty() {
+        println!(
+            "translate_metadata_skip reason=duplicate_country_code files=[{}]",
+            duplicates.join(",")
+        );
+    }
+    Ok(metadata)
 }
 
 fn empty_metadata_dataframe() -> Result<DataFrame, String> {
