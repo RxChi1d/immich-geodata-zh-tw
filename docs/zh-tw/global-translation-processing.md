@@ -45,8 +45,9 @@
 ### cities500（城市層級）
 
 1. **NAER 官方譯名（高信心）**：覆寫層級插入優先序首位
-2. meta_data metadata（既有；正式 release 的 `meta_data/` 僅含 handler
-   國家檔案，對非 handler 記錄為 no-op）
+2. meta_data metadata（既有；僅載入 LocationIQ 產物 `meta_data/{國碼}.csv`。
+   handler 國家的 `{國碼小寫}_geodata.csv` 由 enhance 階段以明確檔名消費，
+   不參與此處查表。正式 release 目前無非 handler 國家，因此此層為 no-op）
 3. GeoNames alternateNames zh 系 + OpenCC（既有）
 4. 內嵌中文 alternatenames（既有）
 5. **NAER 官方譯名（中信心）**：僅在上述 2–4 皆無結果時補洞
