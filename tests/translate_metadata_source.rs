@@ -3,9 +3,11 @@ use std::path::{Path, PathBuf};
 
 use immich_geodata::pipeline::translate::{ProductionTranslateOptions, run_production};
 
-/// meta_data/ 同時放 LocationIQ 產物 `{CC}.csv` 與 handler extract 產物
-/// `{cc}_geodata.csv`；translate 只能載入前者。以下測試以「城市名是否被
-/// metadata 的 admin_2 取代」觀測實際載入結果。
+/// translate 只載入 LocationIQ 產物 `{CC}.csv`（production 位於
+/// `data/locationiq/`），handler extract 產物 `{cc}_geodata.csv`（位於
+/// `meta_data/`）不參與查表。目錄雖已分離，檔名守衛仍需擋住誤放或路徑指錯的
+/// 檔案，以下測試即針對該守衛，以「城市名是否被 metadata 的 admin_2 取代」
+/// 觀測實際載入結果。
 struct TranslateCase {
     dir: tempfile::TempDir,
     metadata_dir: PathBuf,

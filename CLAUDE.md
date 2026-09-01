@@ -294,6 +294,15 @@ cargo test
   經 extract 生成、由 release workflow 自動驗證與更新。除明確的資料更新任務外，
   不得刪除、重新產生或正規化這些檔案；任何清理或重構工作都不應視其為可再生的
   build 產物。
+- **`data/` 為餵給 release pipeline 的持久化輸入**：與 `output/`、`geoname_data/`
+  這類可隨時清空的執行期目錄不同，`data/` 底下的內容納入 git 追蹤。目前收納
+  `data/locationiq/{國碼}.csv`（LocationIQ 逆地理查詢產物）；handler 產物與
+  vendored 資料的收攏另案處理。
+- **`data/locationiq/*.csv` 可重建但有代價**：由 locationiq 階段逐點查詢產生，
+  刪除後重跑即可復原，但會消耗 LocationIQ 的付費請求額度。git 追蹤是它跨次執行
+  存活的預期方式，但 release workflow 的 auto-commit 目前只涵蓋 `meta_data/*`
+  （`.github/workflows/release.yaml`）。新增非 handler 國家前需一併決定 CI 端
+  如何保存查詢進度，否則每次排程都會從零重查。
 
 ### 模組化設計原則
 - **單一檔案不得超過 500 行程式碼**
