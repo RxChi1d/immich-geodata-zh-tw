@@ -58,11 +58,11 @@ low confidence is not used at all.
 
 1. **NAER official translation (high confidence)**: inserted at the head of
    the priority chain as an override layer
-2. meta_data metadata (existing; only LocationIQ output
-   `meta_data/{CC}.csv` is loaded. Handler countries' `{cc}_geodata.csv` is
-   consumed by the enhance stage under its explicit filename and never takes
-   part in this lookup. The production release currently has no non-handler
-   country, so this layer is a no-op)
+2. LocationIQ metadata (existing; `data/locationiq/{CC}.csv` is loaded.
+   Handler countries' `meta_data/{cc}_geodata.csv` lives in a separate
+   directory and is consumed by the enhance stage under its explicit
+   filename, never taking part in this lookup. The production release
+   currently has no non-handler country, so this layer is a no-op)
 3. GeoNames alternateNames zh-family + OpenCC (existing)
 4. Embedded Chinese alternatenames (existing)
 5. **NAER official translation (medium confidence)**: fills gaps only when

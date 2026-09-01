@@ -23,6 +23,8 @@ use crate::unicode_han::{includes_han, is_han_name};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProductionTranslateOptions {
+    /// LocationIQ 逆地理查詢產物的目錄（production 為 `data/locationiq/`）。
+    /// 不是 handler 的 `meta_data/`——後者由 enhance 階段消費。
     pub metadata_dir: PathBuf,
     pub data_dir: PathBuf,
     pub cities_file: PathBuf,
@@ -395,17 +397,16 @@ fn alternate_name_dataframe_to_rows(df: &DataFrame) -> Result<Vec<Vec<String>>, 
 
 /// 由檔名解析 LocationIQ metadata 的國碼。
 ///
-/// `meta_data/` 同時放兩種語義不同、欄位卻相同的檔案：LocationIQ 逆地理查詢
-/// 產物 `{CC}.csv`（ISO-3166-1 alpha-2）與各國 handler 的 extract 產物
-/// `{cc}_geodata.csv`。translate 的查表只認前者；後者由 enhance 階段
-/// （`admin1_load` / `cities500_load`）以明確檔名消費，其內容早已寫入
-/// cities500，不應在此重複載入。
+/// production 的 LocationIQ 產物 `{CC}.csv`（ISO-3166-1 alpha-2）位於
+/// `data/locationiq/`，與 handler extract 產物 `meta_data/{cc}_geodata.csv`
+/// 分屬不同目錄。後者由 enhance 階段（`admin1_load` / `cities500_load`）以
+/// 明確檔名消費，其內容早已寫入 cities500，不應在此重複載入。
 ///
-/// Reason: 舊版直接把檔名 stem 當國碼，handler geodata 檔自 2025-04 進入
-/// `meta_data/` 後被當成國碼 `tw_geodata` 的 metadata 載入——25 萬列永不
-/// 命中、不影響輸出，也沒有任何 log。大小寫一併正規化，因為
-/// `--country-code us` 會產出 `us.csv`，而 cities500 國碼為大寫，
-/// 不正規化同樣會靜默失效。
+/// Reason: 目錄雖已分離，檔名守衛仍保留——它擋住誤放或路徑指錯的檔案，並負責
+/// 大小寫正規化（`--country-code us` 會產出 `us.csv`，而 cities500 國碼為大寫，
+/// 不正規化會靜默失效）。歷史背景：兩種檔案曾共用 `meta_data/`，舊版直接把檔名
+/// stem 當國碼，handler geodata 檔被當成國碼 `tw_geodata` 的 metadata 載入——
+/// 25 萬列永不命中、不影響輸出，也沒有任何 log。
 fn locationiq_country_code(file_path: &Path) -> Option<String> {
     let stem = file_path.file_stem().and_then(|value| value.to_str())?;
     (stem.len() == 2 && stem.chars().all(|value| value.is_ascii_alphabetic()))

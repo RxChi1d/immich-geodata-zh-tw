@@ -222,7 +222,7 @@ cargo run --release -- release \
 > [!WARNING]
 > The LocationIQ API enforces a request quota (check it in the dashboard after logging in), so watch the number of place names in the countries you plan to process.
 >
-> Lookup progress is recorded in `meta_data/<country_code>.csv`. When you hit the daily limit, switch to another API key or rerun the same command the next day; coordinates already looked up are skipped automatically. Add `--pass-cleanup` to keep the existing intermediate files in `output/` and skip re-downloading and re-preprocessing them:
+> Lookup progress is recorded in `data/locationiq/<country_code>.csv` (use `--locationiq-folder` to point elsewhere; earlier versions recorded it in `meta_data/<country_code>.csv`, so move existing files into the new directory to reuse them). When you hit the daily limit, switch to another API key or rerun the same command the next day; coordinates already looked up are skipped automatically. Add `--pass-cleanup` to keep the existing intermediate files in `output/` and skip re-downloading and re-preprocessing them:
 >
 > ```bash
 > cargo run --release -- release --locationiq-api-key "YOUR_API_KEY" --country-code "US" --pass-cleanup
