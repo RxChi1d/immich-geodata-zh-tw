@@ -99,10 +99,10 @@ NAER 在 cities500 命中後依下表判定信心等級（實作見
   見[研究文檔](../research/chinese-translation-sources.md)）；經
   `naer-prepare` 清理後的 vendored 檔為 64,075 筆，差額 412 筆是座標不可
   解析、座標欄為空或名稱不可用而丟棄的列
-- **vendored 檔**：清理後的 6 欄 CSV 存放於 `naer/naer_place_names.csv`，
+- **vendored 檔**：清理後的 6 欄 CSV 存放於 `data/vendor/naer/naer_place_names.csv`，
   對應 192 個 ISO 3166-1 alpha-2 國碼，另有 1,798 筆國名未對應
   （`country_code` 留空）；欄位說明見
-  [`naer/README.md`](../../naer/README.md)
+  [`data/vendor/naer/README.md`](../../data/vendor/naer/README.md)
 
 ## 為什麼選 NAER（研究結論摘要）
 
@@ -172,7 +172,7 @@ NAER 原始資料的下載與清理屬於**離線路徑**，不在 release path 
 # 2. 執行 naer-prepare 子指令清理並輸出 vendored 檔
 cargo run --release -- naer-prepare \
   --input <原始CSV路徑> \
-  --output naer/naer_place_names.csv
+  --output data/vendor/naer/naer_place_names.csv
 
 # 3. 檢視統計報告與 git diff，確認無異常後 commit
 ```

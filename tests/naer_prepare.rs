@@ -72,7 +72,7 @@ fn run_produces_six_column_vendored_file() {
     let report = run(&NaerPrepareOptions {
         input: input.clone(),
         output: output.clone(),
-        country_names_file: "i18n-iso-countries/langs/zh-tw.json".into(),
+        country_names_file: "data/vendor/i18n-iso-countries/langs/zh-tw.json".into(),
     })
     .unwrap();
 
@@ -126,7 +126,7 @@ fn conflict_detection_groups_non_adjacent_rows() {
     let report = run(&NaerPrepareOptions {
         input,
         output,
-        country_names_file: "i18n-iso-countries/langs/zh-tw.json".into(),
+        country_names_file: "data/vendor/i18n-iso-countries/langs/zh-tw.json".into(),
     })
     .unwrap();
     // 兩個 US 列因排序不相鄰，windows(2) 會漏報；分組檢查應偵測到 1 組衝突。
@@ -148,7 +148,7 @@ fn suspicious_zero_coordinate_is_counted_and_kept() {
     let report = run(&NaerPrepareOptions {
         input,
         output: output.clone(),
-        country_names_file: "i18n-iso-countries/langs/zh-tw.json".into(),
+        country_names_file: "data/vendor/i18n-iso-countries/langs/zh-tw.json".into(),
     })
     .unwrap();
     assert_eq!(report.suspicious_zero_coordinates, 1);
@@ -178,7 +178,7 @@ fn country_aliases_map_naer_terms_to_iso_codes() {
     let report = run(&NaerPrepareOptions {
         input: input.clone(),
         output: output.clone(),
-        country_names_file: "i18n-iso-countries/langs/zh-tw.json".into(),
+        country_names_file: "data/vendor/i18n-iso-countries/langs/zh-tw.json".into(),
     })
     .unwrap();
 

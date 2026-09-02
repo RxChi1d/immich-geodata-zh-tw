@@ -154,8 +154,15 @@ pub fn run_production(options: &ProductionPackOptions) -> Result<(), String> {
             &options.project_dir.join("NOTICE.md"),
             &release.join("NOTICE.md"),
         )?;
+        // Reason: 來源改為 data/vendor/，但 release 內的目的地必須維持
+        // `i18n-iso-countries`——update_data.sh 依該名稱把 langs/ 掛進使用者
+        // 容器的 node_modules，改名會讓所有既有部署失效。
         copy_dir(
-            &options.project_dir.join("i18n-iso-countries"),
+            &options
+                .project_dir
+                .join("data")
+                .join("vendor")
+                .join("i18n-iso-countries"),
             &release.join("i18n-iso-countries"),
         )?;
         fs::write(
