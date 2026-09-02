@@ -24,7 +24,7 @@ license: MIT
 git status --short --branch
 ```
 
-2. 若需要更新 upstream TW/JP/KR/TH/ID 原始圖資，從官方來源下載完整資料：
+2. 若需要更新 upstream 原始圖資，從官方來源下載完整資料：
    - TW：NLSC 村(里)界（TWD97 經緯度）Shapefile。
    - JP：MLIT N03 全國行政區 Shapefile。
    - KR：admdongkor `HangJeongDong_ver*.geojson`。
@@ -45,7 +45,7 @@ cargo run --release -- extract --country TW \
   --output data/handler/tw_geodata.csv
 ```
 
-5. 使用 Rust CLI 產生 release artifacts。若只更新 handler countries（TW/JP/KR/TH），跳過 LocationIQ：
+5. 使用 Rust CLI 產生 release artifacts。若只更新 handler countries，跳過 LocationIQ：
 
 ```bash
 cargo run --release -- release \

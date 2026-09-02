@@ -14,7 +14,7 @@ on:
         type: boolean
         default: true
       country_codes:
-        description: 'GeoNames extra data 國家代碼；有 handler 的國家（TW/JP/KR/TH）不需要列入'
+        description: 'GeoNames extra data 國家代碼（ISO 3166-1 alpha-2，多國以空白分隔）；有 handler 的國家不需要列入'
         required: false
         type: string
         default: ''
@@ -97,7 +97,7 @@ jobs:
             args+=(--pass-locationiq)
           fi
 
-          # handler 國家（TW/JP/KR/TH）由 data/handler/*_geodata.csv 自動帶入，
+          # handler 國家由 data/handler/*_geodata.csv 自動帶入，
           # 只有 non-handler 國家需要透過 --country-code 指定。
           read -r -a countries <<< "${COUNTRY_CODES}"
           if [[ "${#countries[@]}" -gt 0 ]]; then
