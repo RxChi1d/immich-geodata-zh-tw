@@ -255,10 +255,7 @@ fn run_enhance_production(options: &ProductionOptions) -> Result<i64, String> {
         })
         .collect();
     cities500_load::run_production(&cities500_load::ProductionCities500Options {
-        input: options
-            .cities_file
-            .clone()
-            .unwrap_or_else(|| options.data_folder.join("cities500.txt")),
+        input: resolved_cities_file(options),
         output: options
             .output_file
             .clone()
@@ -587,12 +584,41 @@ fn validate_production_contract(command: &str, options: &ProductionOptions) -> R
     Ok(())
 }
 
+/// enhance 實際讀取的 base cities 檔案。
+///
+/// Reason: `--cities-file` 可覆寫來源，而 handler 合成 ID 的起點取自這份檔案的
+/// 最大值。若上限計算與實際輸入取自不同路徑，指定自訂 cities file 時就會撞號。
+fn resolved_cities_file(options: &ProductionOptions) -> PathBuf {
+    options
+        .cities_file
+        .clone()
+        .unwrap_or_else(|| options.data_folder.join("cities500.txt"))
+}
+
+/// 掃描所有會進入 cities500 的來源，取得既有 geoname_id 的最大值。
+///
+/// handler 合成 ID 自此值 +1 起配置，因此凡是最終會被寫進 cities500 的檔案都必須
+/// 納入掃描範圍。
+///
+/// Reason: `extra_data/{CC}.txt`（非 handler 國家的 GeoNames 完整 dump）由
+/// `merge_extra_rows` 併入 cities500，但它的 ID 由上游 GeoNames 配發，會隨新地點
+/// 加入而持續成長。漏掉這些檔案時，只要某筆 extra 列的 ID 超過 `cities500.txt`
+/// 的最大值，就會落進 handler 合成 ID 的區間而重複——目前沒有重複 ID 守衛，
+/// 且每週自動更新正是會逐步觸發這個情況的路徑。
 fn calculate_global_max_geoname_id(options: &ProductionOptions) -> Result<i64, String> {
     let mut max_id = 0_i64;
-    for path in [
-        options.data_folder.join("cities500.txt"),
+    let extra_data_dir = options.data_folder.join("extra_data");
+    let paths = [
+        resolved_cities_file(options),
         options.data_folder.join("admin1CodesASCII.txt"),
-    ] {
+    ]
+    .into_iter()
+    .chain(
+        non_handler_country_codes(&options.country_codes)
+            .into_iter()
+            .map(|country| extra_data_dir.join(format!("{country}.txt"))),
+    );
+    for path in paths {
         if !path.exists() {
             continue;
         }
@@ -789,6 +815,61 @@ fn parse_options(args: &[String]) -> Result<RunOptions, String> {
 
 #[cfg(test)]
 mod tests {
+    /// handler 合成 ID 的起點必須高於所有會併入 cities500 的來源。
+    ///
+    /// Reason: `extra_data/{CC}.txt` 的 ID 由上游 GeoNames 配發並持續成長，
+    /// 漏掉它就會與 handler 合成 ID 撞號，且沒有守衛會攔下。
+    #[test]
+    fn global_max_geoname_id_includes_non_handler_extra_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path().to_path_buf();
+        std::fs::create_dir_all(data.join("extra_data")).unwrap();
+        std::fs::write(
+            data.join("cities500.txt"),
+            "100\tA\tA\t\t1.0\t2.0\tP\tPPL\tMY\t\t\t\t\t\t0\t\t\tAsia/Kuala_Lumpur\t2026-01-01\n",
+        )
+        .unwrap();
+        std::fs::write(
+            data.join("extra_data").join("MY.txt"),
+            "999\tB\tB\t\t1.0\t2.0\tP\tPPL\tMY\t\t\t\t\t\t0\t\t\tAsia/Kuala_Lumpur\t2026-01-01\n",
+        )
+        .unwrap();
+
+        let options = super::ProductionOptions {
+            data_folder: data,
+            country_codes: vec!["MY".to_string()],
+            ..Default::default()
+        };
+
+        assert_eq!(
+            super::calculate_global_max_geoname_id(&options).unwrap(),
+            999,
+            "extra_data 的 ID 必須納入，否則 handler 合成 ID 會從 100 起而撞號"
+        );
+    }
+
+    /// `--cities-file` 覆寫來源時，上限計算必須跟著改讀同一份檔案。
+    #[test]
+    fn global_max_geoname_id_follows_cities_file_override() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path().to_path_buf();
+        std::fs::write(data.join("cities500.txt"), "100\tA\tA\n").unwrap();
+        let custom = data.join("custom_cities.txt");
+        std::fs::write(&custom, "555\tB\tB\n").unwrap();
+
+        let options = super::ProductionOptions {
+            data_folder: data,
+            cities_file: Some(custom),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            super::calculate_global_max_geoname_id(&options).unwrap(),
+            555,
+            "上限必須取自 enhance 實際讀取的 cities file"
+        );
+    }
+
     use super::*;
 
     #[test]
