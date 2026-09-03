@@ -242,7 +242,7 @@ cargo run --release -- extract \
 # LocationIQ 流程僅用於非 handler 國家（TW/JP/KR/TH/ID 已由官方圖資 handler 產生）
 cargo run --release -- release \
   --locationiq-api-key "<api_key>" \
-  --country-code US
+  --country-code MY
 
 cargo run --release -- release \
   --fixture-mode \
@@ -300,10 +300,28 @@ cargo test
   （LocationIQ 逆地理查詢產物）、`data/vendor/`（vendored 外部資料，如 NAER
   譯名表與 i18n-iso-countries）。
 - **`data/locationiq/*.csv` 可重建但有代價**：由 locationiq 階段逐點查詢產生，
-  刪除後重跑即可復原，但會消耗 LocationIQ 的付費請求額度。git 追蹤是它跨次執行
-  存活的預期方式，但 release workflow 的 auto-commit 目前只涵蓋 `data/handler/*`
-  （`.github/workflows/release.yaml`）。新增非 handler 國家前需一併決定 CI 端
-  如何保存查詢進度，否則每次排程都會從零重查。
+  刪除後重跑即可復原，但會再次消耗 LocationIQ 的付費額度。git 追蹤是查詢進度
+  跨執行存活的方式：`release.yaml` 的 auto-commit 收 `data/handler/*` 與
+  `data/locationiq/*`，每週排程的 `auto-update.yaml` 只收 `data/locationiq/*`。
+  兩者都以 PR 回寫，**合併回 main 後**下次執行才看得到。
+- **`data/locationiq/README.md` 不可刪除**：該目錄至少要有一個會被 `*` 匹配的
+  追蹤檔案（dotfile 不算），否則 `git add` 會以 pathspec 錯誤（exit 128）讓
+  workflow 失敗。該檔同時記錄各國評估結果與新增國家的完整流程。
+
+#### 非 handler 國家的維護規則
+
+1. **新增國家前先抽樣驗證粒度**。locationiq 階段取 Nominatim 回應的 `city`
+   當城市名（`city` 為空時退回 `county`）。聚落標記稀疏的國家會退回行政區，
+   使城市名變成轄區名。準則與已評估國家見 `data/locationiq/README.md`。
+2. **在本地跑滿再提交 CSV**，CI 只做增量。從零跑一個國家可能撞上 job 時限
+   與每日額度，且失敗時難以除錯。
+3. **`release.yaml` 與 `auto-update.yaml` 都要改**：`--country-code` 加上該國，
+   並在 step 層的 `env:` 注入 `LOCATIONIQ_API_KEY`。`environment: Action Env`
+   不會自動把 secret 變成環境變數。每週排程跑的是 `auto-update.yaml`。
+4. **某國改用 handler 時**：刪除 `data/locationiq/{CC}.csv`（`filter_country_codes_without_handler`
+   只擋 locationiq 階段，殘留的 CSV 仍會被 translate 載入並與 handler 資料重疊），
+   從兩個 workflow 的 `--country-code` 移除該國，並確認清單沒有變空——清單為空時
+   locationiq 階段會 skip 而 release 仍然成功，整條路線沒有錯誤訊息就此失效。
 
 #### metadata 是補位，不是覆蓋
 

@@ -37,6 +37,8 @@ jobs:
     permissions:
       actions: read
       contents: write
+      # Reason: 保存 LocationIQ 查詢進度需開 PR（見底部 auto-commit）。
+      pull-requests: write
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -81,11 +83,16 @@ jobs:
         run: echo "TODAY=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
       - name: Build with Rust
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
+        env:
+          # Reason: environment: Action Env 只讓 secret 可被引用，不會自動變成環境
+          # 變數；locationiq 階段讀 LOCATIONIQ_API_KEY，缺這段會在啟動時就失敗。
+          LOCATIONIQ_API_KEY: ${{ secrets.LOCATIONIQ_API_KEY }}
         run: |
-          # TW/JP/KR/TH/ID 皆由 handler 消耗 data/handler/*_geodata.csv，
-          # 不需再以 --country-code 走 LocationIQ 流程；無 non-handler 國家時
-          # locationiq 階段會自動 skip，因此也不需要 LOCATIONIQ_API_KEY。
-          ".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}" release
+          # TW/JP/KR/TH/ID 由 handler 消耗 data/handler/*_geodata.csv，不走
+          # LocationIQ；MY 為 non-handler 國家，以 data/locationiq/MY.csv 續跑，
+          # 每次只補查 cities500 新增的座標。
+          ".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}" release \
+            --country-code MY
       - name: Point nightly tag at built commit
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         # Reason: nightly release 改為就地更新（allowUpdates），而 ncipollo 只在
@@ -130,3 +137,40 @@ jobs:
           tag: nightly
           makeLatest: false
           prerelease: true
+      # Reason: 每週排程是 LocationIQ 唯一的增量補查時機。data/locationiq/*.csv
+      # 是付費逐點查詢的結果，不寫回 git 就等於每週從零重查；#67 移除 auto-commit
+      # 時全部國家已改走 handler，MY 加入後這段必須回來。
+      # data/handler/* 不由 release 產生（run_release_production 不含 extract），
+      # 因此此處只收 data/locationiq/*。
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
+        id: auto-commit
+        with:
+          # Reason: 分支名必須逐次唯一。日期分支在同日的第二次執行會撞上既有遠端
+          # 分支：一般 push 以 non-fast-forward 失敗，force push 則會沖掉前一個
+          # 未合併 PR 裡的 LocationIQ 查詢結果（那是付費查詢，重跑要再花額度）。
+          # 兩次執行的座標集合也不保證是包含關係——release 由 tag 觸發，checkout
+          # 的是該 tag 而非 main，上游 GeoNames 也可能在兩次下載之間變動。
+          # run_attempt 一併納入：re-run 會沿用同一個 run_id。
+          branch: chore/update-locationiq-${{ env.TODAY }}-${{ github.run_id }}-${{ github.run_attempt }}
+          create_branch: true
+          commit_message: Auto update LocationIQ query cache on ${{ env.TODAY }}
+          file_pattern: data/locationiq/*
+      - name: Create PR for LocationIQ query cache
+        if: steps.auto-commit.outputs.changes_detected == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Reason: 進度要合併回 main 才會被下次執行看見——每次 run 都從 main
+          # checkout，不會取用未合併的分支。
+          branch="chore/update-locationiq-${{ env.TODAY }}-${{ github.run_id }}-${{ github.run_attempt }}"
+          existing=$(gh pr list --head "$branch" --state open --json number --jq 'length')
+          if [ "$existing" -eq 0 ]; then
+            gh pr create \
+              --base main \
+              --head "$branch" \
+              --title "chore(locationiq): 更新查詢結果 ${{ env.TODAY }}" \
+              --body "nightly 流程補查到的 LocationIQ 新座標。合併後下次排程才會跳過這些點，不合併會重複消耗付費額度。"
+          else
+            echo "已有開啟中的 PR，跳過建立。"
+          fi

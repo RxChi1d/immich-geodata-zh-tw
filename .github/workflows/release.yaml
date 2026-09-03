@@ -103,11 +103,16 @@ jobs:
         run: echo "TODAY=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
       - name: Build with Rust
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
+        env:
+          # Reason: environment: Action Env 只讓 secret 可被引用，不會自動變成環境
+          # 變數；locationiq 階段讀 LOCATIONIQ_API_KEY，缺這段會在啟動時就失敗。
+          LOCATIONIQ_API_KEY: ${{ secrets.LOCATIONIQ_API_KEY }}
         run: |
-          # TW/JP/KR/TH/ID 皆由 handler 消耗 data/handler/*_geodata.csv，
-          # 不需再以 --country-code 走 LocationIQ 流程；無 non-handler 國家時
-          # locationiq 階段會自動 skip，因此也不需要 LOCATIONIQ_API_KEY。
-          ".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}" release
+          # TW/JP/KR/TH/ID 由 handler 消耗 data/handler/*_geodata.csv，不走
+          # LocationIQ；MY 為 non-handler 國家，以 data/locationiq/MY.csv 續跑，
+          # 每次只補查 cities500 新增的座標。
+          ".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}" release \
+            --country-code MY
       - name: Generate release notes from CHANGELOG
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         run: |
@@ -152,23 +157,32 @@ jobs:
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         id: auto-commit
         with:
-          branch: chore/update-meta-data-${{ env.TODAY }}
+          # Reason: 分支名必須逐次唯一。日期分支在同日的第二次執行會撞上既有遠端
+          # 分支：一般 push 以 non-fast-forward 失敗，force push 則會沖掉前一個
+          # 未合併 PR 裡的 LocationIQ 查詢結果（那是付費查詢，重跑要再花額度）。
+          # 兩次執行的座標集合也不保證是包含關係——release 由 tag 觸發，checkout
+          # 的是該 tag 而非 main，上游 GeoNames 也可能在兩次下載之間變動。
+          # run_attempt 一併納入：re-run 會沿用同一個 run_id。
+          branch: chore/update-meta-data-${{ env.TODAY }}-${{ github.run_id }}-${{ github.run_attempt }}
           create_branch: true
           commit_message: Auto update reverse geocoding data on ${{ env.TODAY }}
-          file_pattern: data/handler/*
-      - name: Create PR for handler geodata
+          # Reason: data/locationiq/* 是 LocationIQ 逐點付費查詢的結果，重跑會再次
+          # 消耗額度；寫回 git 是它跨次執行存活的唯一方式。2026-09-01 收窄
+          # file_pattern 時被一併移除，此處復原。
+          file_pattern: data/handler/* data/locationiq/*
+      - name: Create PR for geodata updates
         if: steps.auto-commit.outputs.changes_detected == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          branch="chore/update-meta-data-${{ env.TODAY }}"
+          branch="chore/update-meta-data-${{ env.TODAY }}-${{ github.run_id }}-${{ github.run_attempt }}"
           existing=$(gh pr list --head "$branch" --state open --json number --jq 'length')
           if [ "$existing" -eq 0 ]; then
             gh pr create \
               --base main \
               --head "$branch" \
-              --title "chore(geodata): 發布後更新 handler 圖資 ${{ env.TODAY }}" \
-              --body "這是 release 流程產生的 handler 圖資更新，請審核後合併。"
+              --title "chore(geodata): 發布後更新圖資 ${{ env.TODAY }}" \
+              --body "這是 release 流程產生的圖資更新（handler 圖資與 LocationIQ 查詢結果），請審核後合併。"
           else
             echo "已有開啟中的 PR，跳過建立。"
           fi
