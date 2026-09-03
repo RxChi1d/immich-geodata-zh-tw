@@ -360,61 +360,36 @@ fn build_geodata_row(response: &[String]) -> Vec<String> {
 }
 
 fn parse_locationiq_address(body: &str) -> Result<LocationiqAddress, String> {
-    let address = json_object(body, "address")
+    let response: serde_json::Value = serde_json::from_str(body)
+        .map_err(|error| format!("LocationIQ 回應不是合法 JSON：{error}"))?;
+    let address = response
+        .get("address")
         .ok_or_else(|| "LocationIQ 回應缺少 address 物件".to_string())?;
+    let field = |key: &str| {
+        address
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .map(primary_name_variant)
+            .unwrap_or_default()
+    };
     Ok(LocationiqAddress {
-        country: json_string(&address, "country").unwrap_or_default(),
-        state: json_string(&address, "state").unwrap_or_default(),
-        city: json_string(&address, "city").unwrap_or_default(),
-        county: json_string(&address, "county").unwrap_or_default(),
-        suburb: json_string(&address, "suburb").unwrap_or_default(),
-        neighbourhood: json_string(&address, "neighbourhood").unwrap_or_default(),
+        country: field("country"),
+        state: field("state"),
+        city: field("city"),
+        county: field("county"),
+        suburb: field("suburb"),
+        neighbourhood: field("neighbourhood"),
     })
 }
 
-fn json_object(body: &str, key: &str) -> Option<String> {
-    let marker = format!("\"{key}\"");
-    let start = body.find(&marker)?;
-    let open_offset = body[start..].find('{')?;
-    let open = start + open_offset;
-    let mut depth = 0_i32;
-    for (offset, char) in body[open..].char_indices() {
-        match char {
-            '{' => depth += 1,
-            '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(body[open..open + offset + 1].to_string());
-                }
-            }
-            _ => {}
-        }
-    }
-    None
-}
-
-fn json_string(body: &str, key: &str) -> Option<String> {
-    let marker = format!("\"{key}\"");
-    let start = body.find(&marker)?;
-    let colon_offset = body[start..].find(':')?;
-    let after_colon = start + colon_offset + 1;
-    let quote_offset = body[after_colon..].find('"')?;
-    let value_start = after_colon + quote_offset + 1;
-    let mut value = String::new();
-    let mut escaped = false;
-    for char in body[value_start..].chars() {
-        if escaped {
-            value.push(char);
-            escaped = false;
-            continue;
-        }
-        match char {
-            '\\' => escaped = true,
-            '"' => return Some(value),
-            _ => value.push(char),
-        }
-    }
-    None
+/// 取 OSM 名稱的第一個變體。
+///
+/// Reason: OSM 的 `name:zh` 有時同時塞入簡繁兩種寫法，英國全境即如此
+/// （`"country":"\u82f1\u56fd;\u82f1\u570b"` → `英国;英國`）。原樣保留會讓
+/// 行政區名變成「英国;英國」這種不可用字串；只取第一個變體，繁化交給
+/// translate 階段既有的 OpenCC s2t 統一處理，與歷史資料（泰國存為「泰国」）一致。
+fn primary_name_variant(value: &str) -> String {
+    value.split(';').next().unwrap_or(value).trim().to_string()
 }
 
 #[cfg(test)]
@@ -460,6 +435,32 @@ mod tests {
         ) -> Result<Option<LocationiqAddress>, String> {
             self.responses.remove(0)
         }
+    }
+
+    /// LocationIQ 以 `\uXXXX` 逃逸回傳非 ASCII 名稱，且英國全境的 OSM `name:zh`
+    /// 同時含簡繁兩種寫法。此測試以真實回應片段固定兩種行為。
+    #[test]
+    fn parse_locationiq_address_decodes_unicode_escapes_and_takes_first_variant() {
+        // 真實回應片段：LocationIQ 以 \uXXXX 逃逸輸出非 ASCII，直接寫中文字元的
+        // 測試無法覆蓋解碼路徑。
+        let body = r#"{"place_id":"279655027","display_name":"x","address":{"city":"Royal Wootton Bassett","county":"Wiltshire","state":"\u82f1\u683c\u5170;\u82f1\u683c\u862d","country":"\u82f1\u56fd;\u82f1\u570b","country_code":"gb"}}"#;
+        assert!(
+            body.contains(r"\u82f1"),
+            "測試輸入必須是逃逸形式，否則等於沒測"
+        );
+        let address = parse_locationiq_address(body).unwrap();
+        assert_eq!(address.country, "英国");
+        assert_eq!(address.state, "英格兰");
+        assert_eq!(address.city, "Royal Wootton Bassett");
+        assert_eq!(address.county, "Wiltshire");
+        assert_eq!(address.suburb, "");
+        assert_eq!(address.neighbourhood, "");
+    }
+
+    #[test]
+    fn parse_locationiq_address_rejects_invalid_json() {
+        assert!(parse_locationiq_address("not json").is_err());
+        assert!(parse_locationiq_address(r#"{"lat":"1"}"#).is_err());
     }
 
     #[test]

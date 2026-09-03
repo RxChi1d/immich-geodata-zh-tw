@@ -91,6 +91,10 @@ pub struct NaerMatch {
     pub distance_km: f64,
 }
 
+// Reason: 空的查表只在單元測試中用來建構 translate_cities_rows 的參數。
+// production 一律經 load() 讀 vendored 檔；若 Default 對 production 可見，
+// 誤用會靜默退化成「NAER 完全沒有比對到」而無任何訊號。
+#[cfg_attr(test, derive(Default))]
 pub struct NaerLookup {
     entries: HashMap<String, Vec<NaerEntry>>,
     handler_countries: HashSet<String>,
