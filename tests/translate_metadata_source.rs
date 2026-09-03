@@ -42,6 +42,22 @@ impl TranslateCase {
 
     /// 以單一城市列執行 production translate，回傳翻譯後的該列名稱。
     fn translate_single_city(&self, country_code: &str, latitude: &str, longitude: &str) -> String {
+        self.translate_single_city_with_alternate(
+            country_code,
+            latitude,
+            longitude,
+            "geoname_id,name\n",
+        )
+    }
+
+    /// 同上，但可指定 GeoNames 中文別名表的內容，用於驗證 metadata 與別名的優先序。
+    fn translate_single_city_with_alternate(
+        &self,
+        country_code: &str,
+        latitude: &str,
+        longitude: &str,
+        alternate_csv: &str,
+    ) -> String {
         let mut row = vec![String::new(); 19];
         row[0] = "1".into();
         row[1] = "Untranslated".into();
@@ -60,7 +76,7 @@ impl TranslateCase {
         );
         let alternate_file = self.write(
             &self.dir.path().join("alternate_chinese_name.csv"),
-            "geoname_id,name\n",
+            alternate_csv,
         );
         let naer_file = self.write(
             &self.dir.path().join("naer_place_names.csv"),
@@ -170,5 +186,24 @@ fn uppercase_csv_extension_is_recognized() {
     assert_eq!(
         case.translate_single_city("US", "30.0", "-87.0"),
         "菲爾維爾"
+    );
+}
+
+// 回歸情境：metadata 只在 GeoNames 沒有中文名時補位，不得覆蓋既有譯名。
+// Reason: LocationIQ 回的是 Nominatim 的 `city`／`county`，聚落標記稀疏處會退回
+// 轄區，把城市名塌成上一層（馬來西亞實測：蕉賴→吉隆坡、浮羅山背→喬治市）。
+#[test]
+fn metadata_does_not_override_existing_alternate_name() {
+    let case = TranslateCase::new();
+    case.write_metadata("MY.csv", "3.1", "101.7", "吉隆坡");
+
+    assert_eq!(
+        case.translate_single_city_with_alternate(
+            "MY",
+            "3.1",
+            "101.7",
+            "geoname_id,name\n1,蕉賴\n"
+        ),
+        "蕉賴"
     );
 }

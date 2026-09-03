@@ -305,6 +305,16 @@ cargo test
   （`.github/workflows/release.yaml`）。新增非 handler 國家前需一併決定 CI 端
   如何保存查詢進度，否則每次排程都會從零重查。
 
+#### metadata 是補位，不是覆蓋
+
+`translate_cities_rows` 的城市名優先序為 **GeoNames 中文別名 → LocationIQ
+metadata → alternatenames 內的中文**（`src/pipeline/translate.rs`）。
+
+Reason: metadata 來自 Nominatim 的 `city`／`county`，在聚落標記稀疏處會退回轄區。
+若讓 metadata 優先，精確的城市名會被塌成上一層（蕉賴 → 吉隆坡）。此優先序只影響
+非 handler 國家：TW/JP/KR/TH/ID 的資料由 handler 寫入 cities500，不經 metadata
+lookup。
+
 ### 模組化設計原則
 - **單一檔案不得超過 500 行程式碼**
 - **每個模組都有清楚的職責分工**

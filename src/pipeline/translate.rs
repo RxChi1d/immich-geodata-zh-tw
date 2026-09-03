@@ -922,15 +922,21 @@ fn translate_cities_rows(
         let final_name = if city.country_code() == "TW" {
             Some(city.name().to_string())
         } else {
-            let existing = metadata
-                .get_city_name(&city)
+            // Reason: GeoNames 中文別名對應的是城市本身，LocationIQ metadata 回的是
+            // Nominatim 的 `city`／`county`——在聚落標記稀疏處會退回轄區，把城市名
+            // 塌成上一層（馬來西亞實測：蕉賴→吉隆坡、浮羅山背→喬治市）。因此
+            // metadata 只作為「GeoNames 沒有中文名時」的補位來源，不再覆蓋既有譯名。
+            // 此優先序只影響非 handler 國家：TW/JP/KR/TH/ID 的資料由 handler 寫入
+            // cities500，不會進到 metadata lookup。
+            let existing = alternate_names
+                .get(city.geoname_id())
                 .filter(|value| !value.is_empty())
-                .and_then(|name| translate_metadata_name(name, converter))
+                .map(|name| translate_alternate_name(name, converter))
                 .or_else(|| {
-                    alternate_names
-                        .get(city.geoname_id())
+                    metadata
+                        .get_city_name(&city)
                         .filter(|value| !value.is_empty())
-                        .map(|name| translate_alternate_name(name, converter))
+                        .and_then(|name| translate_metadata_name(name, converter))
                 })
                 .or_else(|| extract_chinese_name(city.alternatenames(), converter));
             let naer_match = match (
@@ -1032,36 +1038,33 @@ fn translate_admin1_rows(
     Ok(translated)
 }
 
+/// 測試用薄包裝：把 HashMap 形式的測試資料轉成 production 型別後，直接呼叫
+/// `translate_cities_rows`。
+///
+/// Reason: 此處原本複製了一份優先序邏輯，導致 production 改為「metadata 補位」
+/// 後，斷言舊行為的測試仍然通過。包裝只做型別轉換，不再重述任何規則。
 #[cfg(test)]
 fn translate_cities(
-    rows: &mut [Vec<String>],
+    rows: &mut Vec<Vec<String>>,
     metadata: &HashMap<(String, String, String), String>,
-    alternate_names: &HashMap<String, String>,
+    alternate_names: &AlternateLookup,
     converter: &OpenCcConverter,
 ) {
-    for row in rows {
-        let final_name = if row[8] == "TW" {
-            Some(row[1].clone())
-        } else {
-            metadata
-                .get(&(row[8].clone(), row[4].clone(), row[5].clone()))
-                .and_then(|name| translate_metadata_name(name, converter))
-                .or_else(|| {
-                    alternate_names
-                        .get(&row[0])
-                        .filter(|value| !value.is_empty())
-                        .map(|name| translate_alternate_name(name, converter))
-                })
-                .or_else(|| extract_chinese_name(&row[3], converter))
-        };
-
-        if let Some(name) = final_name {
-            let name = name.replacen('裏', "里", 1);
-            row[1] = name.clone();
-            row[2] = name;
-        }
-        row[2] = row[1].clone();
+    let mut lookup = MetadataLookup::with_capacity(metadata.len());
+    for ((country_code, latitude, longitude), name) in metadata {
+        lookup.insert_first(country_code, latitude, longitude, name);
     }
+    let naer = NaerLookup::default();
+    let mut naer_stats = NaerStats::default();
+    *rows = translate_cities_rows(
+        std::mem::take(rows),
+        &lookup,
+        alternate_names,
+        converter,
+        &naer,
+        &mut naer_stats,
+    )
+    .unwrap();
 }
 
 #[cfg(test)]
@@ -1141,8 +1144,12 @@ fn is_chinese_name(text: &str) -> bool {
 mod tests {
     use super::*;
 
+    /// metadata 是補位而非覆蓋：GeoNames 中文別名存在時優先採用。
+    ///
+    /// Reason: metadata 來自 Nominatim 的 `city`／`county`，聚落標記稀疏處會退回
+    /// 轄區，讓它覆蓋既有譯名會把城市名塌成上一層（蕉賴 → 吉隆坡）。
     #[test]
-    fn translate_city_prefers_metadata_over_alternate_name() {
+    fn translate_city_prefers_alternate_name_over_metadata() {
         let mut rows = vec![city_row("4000", "Redwood Preferred", "US")];
         let mut metadata = HashMap::new();
         metadata.insert(
@@ -1159,8 +1166,8 @@ mod tests {
 
         translate_cities(&mut rows, &metadata, &alternate_names, &converter);
 
-        assert_eq!(rows[0][1], "紅木市");
-        assert_eq!(rows[0][2], "紅木市");
+        assert_eq!(rows[0][1], "紅木備用");
+        assert_eq!(rows[0][2], "紅木備用");
     }
 
     #[test]
