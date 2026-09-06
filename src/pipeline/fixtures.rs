@@ -8,7 +8,6 @@ pub struct Manifest {
     pub countries: Vec<String>,
     pub extra_files: Vec<String>,
     pub base_geoname_id: i64,
-    pub min_population: u32,
     pub modification_date: String,
 }
 
@@ -81,7 +80,6 @@ fn read_manifest(path: &Path) -> Result<Manifest, String> {
         countries: json_string_array(&content, "countries")?,
         extra_files: json_string_array(&content, "extra_files")?,
         base_geoname_id: json_i64(&content, "base_geoname_id")?,
-        min_population: json_i64(&content, "min_population")? as u32,
         modification_date: json_string(&content, "modification_date")?,
     })
 }

@@ -90,7 +90,6 @@ struct ProductionOptions {
     alternate_name_file: Option<PathBuf>,
     metadata_folder: PathBuf,
     locationiq_folder: PathBuf,
-    min_population: u32,
     batch_size: u32,
     qps: u32,
     api_key: Option<String>,
@@ -126,7 +125,6 @@ impl Default for ProductionOptions {
             // 大小寫區分，清理者無從判斷哪些檔案可動，因此以目錄分隔。刻意不跟隨
             // --metadata-folder：搬移 handler metadata 時不應連帶移動付費查詢結果。
             locationiq_folder: PathBuf::from("./data/locationiq"),
-            min_population: 100,
             batch_size: 100,
             qps: 2,
             api_key: std::env::var("LOCATIONIQ_API_KEY").ok(),
@@ -263,7 +261,7 @@ fn run_enhance_production(options: &ProductionOptions) -> Result<i64, String> {
         extra_files,
         metadata_dir: options.metadata_folder.clone(),
         handler_countries,
-        min_population: options.min_population,
+        admin1_file: options.data_folder.join("admin1CodesASCII.txt"),
         current_max_id: admin1_max,
         modification_date: current_date_iso()?,
     })
@@ -515,10 +513,6 @@ fn parse_production_options(args: &[String]) -> Result<ProductionOptions, String
             }
             "--batch-size" => {
                 options.batch_size = parse_u32_arg(args, index, "--batch-size")?;
-                index += 2;
-            }
-            "--min-population" => {
-                options.min_population = parse_u32_arg(args, index, "--min-population")?;
                 index += 2;
             }
             "--locationiq-qps" => {
