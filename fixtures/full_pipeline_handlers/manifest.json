@@ -6,7 +6,6 @@
     "KR"
   ],
   "extra_files": [],
-  "min_population": 0,
   "modification_date": "2026-01-01",
   "name": "full_pipeline_handlers",
   "stages": [
