@@ -7,6 +7,31 @@
 `(latitude, longitude)` 去重，重跑時自動跳過已查座標。查詢會消耗 LocationIQ
 的付費額度，因此這些檔案納入 git 追蹤，讓進度跨執行存活。
 
+## 額度與節流
+
+免費方案同時有三條限制：**2 req/s、60 req/min、5,000 req/day**。前兩條互相
+矛盾——照 2 req/s 打滿是 120 req/min，必然撞上分鐘上限，因此節流以較嚴的
+60 req/min 為準（`--locationiq-qps` 預設 1，間隔 1020 ms ≈ 58.8 req/min）。
+
+額度用完時（HTTP 429，response body 為 `Rate Limited Second` / `Minute` /
+`Day`）行為依情境分開：
+
+| 情境 | 旗標 | 行為 |
+| :--- | :--- | :--- |
+| 本地補查 | 預設 | 保留已查結果後**中止**，不讓半套資料往下發布 |
+| CI 增量補查 | `--locationiq-allow-partial` | 保留已查結果後**正常結束**，nightly 照常發布，剩餘座標留待下次 |
+
+`--locationiq-allow-partial` 只容忍「有推進但沒查完」。第一筆就被限速代表這一輪
+零進度（金鑰失效、帳號被限制、或當日額度已被其他執行用光），一律失敗——否則
+nightly 會照發、auto-commit 因無變更而不開 PR，整條補查路線沉默停擺。
+
+本地跑滿一個國家的作法是重跑同一道指令——已查座標會自動跳過，所以換一把
+金鑰或等額度重置後接續即可：
+
+```bash
+cargo run --release -- release --country-code MY --locationiq-api-key <key>
+```
+
 目前只有馬來西亞（`MY.csv`）走此流程。TW/JP/KR/TH/ID 由官方圖資 handler 產生，
 產物位於 `data/handler/`。
 

@@ -1,3 +1,4 @@
+use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -5,6 +6,53 @@ use std::time::Duration;
 use reqwest::StatusCode;
 use reqwest::blocking::{Client, Response};
 use reqwest::header::RETRY_AFTER;
+
+/// HTTP 請求失敗的原因。
+///
+/// Reason: 呼叫端需要區分「被伺服器限速」與其他失敗。前者是可預期的額度耗盡，
+/// 已取得的結果應保留；後者（金鑰錯誤、網路中斷、格式異常）代表流程有問題，
+/// 必須往上拋。純字串錯誤無法讓呼叫端安全地做這個判斷。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HttpFailure {
+    /// 429 且重試已耗盡。
+    ///
+    /// `body` 保留伺服器回應內容：LocationIQ 以 body 區分
+    /// `Rate Limited Second` / `Rate Limited Minute` / `Rate Limited Day`，
+    /// 那是唯一能判斷撞到哪一條限制的資訊。
+    RateLimited {
+        body: String,
+    },
+    Other(String),
+}
+
+/// 錯誤訊息中保留的 response body 上限，避免 HTML 錯誤頁灌爆日誌。
+const FAILURE_BODY_LIMIT: usize = 200;
+
+impl fmt::Display for HttpFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RateLimited { body } => {
+                write!(formatter, "HTTP 請求被限速 status=429 body={body}")
+            }
+            Self::Other(message) => write!(formatter, "{message}"),
+        }
+    }
+}
+
+impl From<HttpFailure> for String {
+    fn from(failure: HttpFailure) -> Self {
+        failure.to_string()
+    }
+}
+
+/// 截斷 response body，只保留診斷所需的開頭。
+fn truncate_body(body: &str) -> String {
+    let trimmed = body.trim();
+    match trimmed.char_indices().nth(FAILURE_BODY_LIMIT) {
+        Some((index, _)) => format!("{}…", &trimmed[..index]),
+        None => trimmed.to_string(),
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct HttpRequestPolicy {
@@ -126,22 +174,27 @@ impl HttpClient {
     }
 
     pub fn get_text(&self, url: &str) -> Result<String, String> {
+        self.get_text_detailed(url).map_err(String::from)
+    }
+
+    /// 與 `get_text` 相同，但保留 `HttpFailure` 以便呼叫端辨識限速。
+    pub fn get_text_detailed(&self, url: &str) -> Result<String, HttpFailure> {
         let response = self.get_response(url)?;
         response
             .text()
-            .map_err(|error| format!("無法讀取 HTTP 文字回應 {url}：{error}"))
+            .map_err(|error| HttpFailure::Other(format!("無法讀取 HTTP 文字回應 {url}：{error}")))
     }
 
     pub fn get_bytes(&self, url: &str) -> Result<Vec<u8>, String> {
-        let response = self.get_response(url)?;
+        let response = self.get_response(url).map_err(String::from)?;
         response
             .bytes()
             .map(|bytes| bytes.to_vec())
             .map_err(|error| format!("無法讀取 HTTP 位元組回應 {url}：{error}"))
     }
 
-    fn get_response(&self, url: &str) -> Result<Response, String> {
-        let mut last_error: Option<String> = None;
+    fn get_response(&self, url: &str) -> Result<Response, HttpFailure> {
+        let mut last_error: Option<HttpFailure> = None;
         let attempts = self.policy.max_retries.max(1);
         for attempt in 1..=attempts {
             match self
@@ -167,7 +220,17 @@ impl HttpClient {
                 Ok(response) => {
                     let status = response.status();
                     if !is_retryable_status(status) || attempt == attempts {
-                        return Err(format!("HTTP 請求失敗 status={status} url={url}"));
+                        // Reason: 限速要讓呼叫端可辨識，且 body 帶著 LocationIQ
+                        // 「撞到哪一條限制」的唯一線索，不能在這裡丟掉。
+                        if status == StatusCode::TOO_MANY_REQUESTS {
+                            let body = response.text().unwrap_or_default();
+                            return Err(HttpFailure::RateLimited {
+                                body: truncate_body(&body),
+                            });
+                        }
+                        return Err(HttpFailure::Other(format!(
+                            "HTTP 請求失敗 status={status} url={url}"
+                        )));
                     }
                     let retry_after = response
                         .headers()
@@ -190,11 +253,15 @@ impl HttpClient {
                             "http_retry status={status} attempt={attempt} retry_after={retry_after:?}"
                         );
                     }
-                    last_error = Some(format!("HTTP 請求暫時失敗 status={status} url={url}"));
+                    last_error = Some(HttpFailure::Other(format!(
+                        "HTTP 請求暫時失敗 status={status} url={url}"
+                    )));
                     self.sleep_before_retry(attempt, retry_after);
                 }
                 Err(error) => {
-                    last_error = Some(format!("HTTP 請求失敗 url={url}：{error}"));
+                    last_error = Some(HttpFailure::Other(format!(
+                        "HTTP 請求失敗 url={url}：{error}"
+                    )));
                     if attempt == attempts {
                         break;
                     }
@@ -202,7 +269,7 @@ impl HttpClient {
                 }
             }
         }
-        Err(last_error.unwrap_or_else(|| format!("HTTP 請求失敗 url={url}")))
+        Err(last_error.unwrap_or_else(|| HttpFailure::Other(format!("HTTP 請求失敗 url={url}"))))
     }
 
     fn sleep_before_retry(&self, attempt: usize, retry_after: Option<Duration>) {
@@ -295,6 +362,38 @@ mod tests {
 
         assert_eq!(body, "ok");
         assert_eq!(server.request_count(), 2);
+    }
+
+    /// 429 重試耗盡時必須回報 `RateLimited` 並保留 response body。
+    ///
+    /// Reason: LocationIQ 只在 body 區分 `Rate Limited Second` / `Minute` / `Day`，
+    /// 過去這裡把 body 丟掉，撞到哪一條限制只能靠日誌時間戳反推。
+    #[test]
+    fn exhausted_429_reports_rate_limited_with_body() {
+        let body = r#"{"error":"Rate Limited Day"}"#;
+        let replies = (0..HttpRequestPolicy::default().max_retries)
+            .map(|_| HttpReply::new(429, "", body))
+            .collect();
+        let server = TestServer::new(replies);
+        let client = test_client();
+
+        let failure = client.get_text_detailed(&server.url()).unwrap_err();
+
+        assert_eq!(
+            failure,
+            HttpFailure::RateLimited {
+                body: body.to_string()
+            }
+        );
+        assert!(failure.to_string().contains("Rate Limited Day"));
+    }
+
+    #[test]
+    fn truncate_body_caps_length_without_splitting_characters() {
+        let long = "額".repeat(FAILURE_BODY_LIMIT + 10);
+        let truncated = truncate_body(&long);
+        assert!(truncated.ends_with('…'));
+        assert_eq!(truncated.chars().count(), FAILURE_BODY_LIMIT + 1);
     }
 
     #[test]

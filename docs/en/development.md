@@ -220,7 +220,9 @@ cargo run --release -- release \
 > - Taiwan, Japan, South Korea, Thailand, and Indonesia (TW/JP/KR/TH/ID) are produced by official boundary data handlers and must not be processed through LocationIQ; this flow only generates metadata for other countries.
 
 > [!WARNING]
-> The LocationIQ API enforces a request quota (check it in the dashboard after logging in), so watch the number of place names in the countries you plan to process.
+> The LocationIQ API enforces a request quota (check it in the dashboard after logging in), so watch the number of place names in the countries you plan to process. The free plan enforces **2 req/s, 60 req/min, and 5,000 req/day** at the same time. The first two contradict each other, so throttling follows the stricter per-minute cap: `--locationiq-qps` defaults to 1 (a 1020 ms interval, about 58.8 req/min). Raise it only on a paid plan.
+>
+> When the daily quota runs out, the CLI saves what it has already looked up and then **aborts**, so a partially filled dataset is never published. CI uses `--locationiq-allow-partial` for incremental top-ups, which treats an exhausted quota as a normal finish: results so far are committed and the remaining coordinates wait for the next run. Do not pass that flag when filling a country locally.
 >
 > Lookup progress is recorded in `data/locationiq/<country_code>.csv` (use `--locationiq-folder` to point elsewhere; earlier versions recorded it in `meta_data/<country_code>.csv`, so move existing files into the new directory to reuse them). When you hit the daily limit, switch to another API key or rerun the same command the next day; coordinates already looked up are skipped automatically. Add `--pass-cleanup` to keep the existing intermediate files in `output/` and skip re-downloading and re-preprocessing them:
 >
@@ -240,7 +242,7 @@ cargo run -- release \
   --locationiq-api-key "fixture" \
   --country-code "KR" "TH" \
   --batch-size 100 \
-  --locationiq-qps 2
+  --locationiq-qps 1
 ```
 
 To validate the release archive and the directory layout that `update_data.sh` expects, use fixture mode to produce a local smoke artifact:

@@ -314,11 +314,23 @@ cargo test
    當城市名（`city` 為空時退回 `county`）。聚落標記稀疏的國家會退回行政區，
    使城市名變成轄區名。準則與已評估國家見 `data/locationiq/README.md`。
 2. **在本地跑滿再提交 CSV**，CI 只做增量。從零跑一個國家可能撞上 job 時限
-   與每日額度，且失敗時難以除錯。
-3. **`release.yaml` 與 `auto-update.yaml` 都要改**：`--country-code` 加上該國，
+   與每日額度，且失敗時難以除錯。額度用完時 CLI 會保留已查結果並中止，換一把
+   金鑰或等額度重置後重跑同一道指令即可續查——已查過的座標會自動跳過。
+3. **節流以每分鐘上限為準，不是每秒**。免費方案同時有 2 req/s 與 60 req/min，
+   照 2 req/s 打滿等於 120 req/min，必然撞上分鐘上限。`--locationiq-qps` 預設
+   為 1（1020 ms 間隔 ≈ 58.8 req/min）；付費方案才調高。
+4. **收點條件變動會連帶放大 LocationIQ 的待查量**。cities500 的收錄規則一改，
+   非 handler 國家的待查座標可能翻好幾倍（#78 把 MY 從 772 點變成 21,874 點）。
+   改收錄規則時要一併估算受影響國家的新增待查量。
+5. **`release.yaml` 與 `auto-update.yaml` 都要改**：`--country-code` 加上該國，
    並在 step 層的 `env:` 注入 `LOCATIONIQ_API_KEY`。`environment: Action Env`
    不會自動把 secret 變成環境變數。每週排程跑的是 `auto-update.yaml`。
-4. **某國改用 handler 時**：刪除 `data/locationiq/{CC}.csv`（`filter_country_codes_without_handler`
+   兩者都帶 `--locationiq-allow-partial`：CI 是增量補查，額度用完屬預期結果，
+   若讓它失敗，nightly 不會發布，且該輪已查到的付費結果不會被 auto-commit 收走。
+   本地補查**不要**加這個旗標——那邊要的是「沒跑滿就不往下走」。該旗標只容忍
+   「有推進但沒查完」；第一筆就被限速代表這一輪零進度，一律失敗，避免金鑰失效
+   變成「CI 全綠但永遠查不到」的沉默停擺。
+6. **某國改用 handler 時**：刪除 `data/locationiq/{CC}.csv`（`filter_country_codes_without_handler`
    只擋 locationiq 階段，殘留的 CSV 仍會被 translate 載入並與 handler 資料重疊），
    從兩個 workflow 的 `--country-code` 移除該國，並確認清單沒有變空——清單為空時
    locationiq 階段會 skip 而 release 仍然成功，整條路線沒有錯誤訊息就此失效。

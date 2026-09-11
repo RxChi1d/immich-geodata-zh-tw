@@ -91,8 +91,15 @@ jobs:
           # TW/JP/KR/TH/ID 由 handler 消耗 data/handler/*_geodata.csv，不走
           # LocationIQ；MY 為 non-handler 國家，以 data/locationiq/MY.csv 續跑，
           # 每次只補查 cities500 新增的座標。
+          #
+          # Reason: --locationiq-allow-partial 讓「當日額度用完」算正常結束。免費
+          # 方案一天 5,000 次，補查量大時本來就跨不完一天；若讓它失敗，job 會中止
+          # 在 locationiq 階段，nightly 不會發布，且這一輪已查到的付費結果不會被
+          # 底下的 auto-commit 收走，下次得重花額度再查一次。本地補查不加這個旗標
+          # ——那邊要的是「沒跑滿就不要往下走」。
           ".rust-binary/${{ needs.rust-binary.outputs.binary_filename }}" release \
-            --country-code MY
+            --country-code MY \
+            --locationiq-allow-partial
       - name: Point nightly tag at built commit
         if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.validate_only == 'true') }}
         # Reason: nightly release 改為就地更新（allowUpdates），而 ncipollo 只在

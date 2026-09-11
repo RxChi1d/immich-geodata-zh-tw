@@ -7,7 +7,7 @@ use std::time::Duration;
 use reqwest::Url;
 
 use crate::cli::RunOptions;
-use crate::http::{HttpClient, HttpRequestPolicy};
+use crate::http::{HttpClient, HttpFailure, HttpRequestPolicy};
 use crate::observability::ProgressReporter;
 use crate::pipeline::fixtures::{Fixture, load_fixtures};
 use crate::pipeline::polars_table::{
@@ -24,6 +24,21 @@ pub struct ProductionLocationiqOptions {
     pub qps: u32,
     pub api_key: String,
     pub overwrite: bool,
+    /// 額度用完時是否視為正常結束。
+    ///
+    /// Reason: 本地補查與 CI 增量補查對「沒查完」的期待相反。本地是要把一國跑滿
+    /// 才提交 CSV，中途停下必須讓流程失敗、不能繼續往下發布；CI 每週只補一段，
+    /// 額度用完是預期中的結果，若讓它失敗，這一輪已查到的付費結果不會被 commit。
+    pub allow_partial: bool,
+}
+
+/// LocationIQ 階段的結束狀態。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocationiqOutcome {
+    /// 所有待查座標都查完。
+    Completed,
+    /// 額度用完，已查結果已寫回輸出檔，剩餘座標留給下次執行。
+    RateLimited,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,11 +52,14 @@ pub struct LocationiqAddress {
 }
 
 pub trait ReverseGeocoder {
+    /// Reason: 錯誤型別直接沿用 `HttpFailure` 而不另立一套。呼叫端唯一需要分辨的
+    /// 是「被限速」與「其他失敗」，那正是 `HttpFailure` 已經表達的區分；多包一層
+    /// 只是把同一個二分法換個名字再寫一次。
     fn reverse(
         &mut self,
         latitude: &str,
         longitude: &str,
-    ) -> Result<Option<LocationiqAddress>, String>;
+    ) -> Result<Option<LocationiqAddress>, HttpFailure>;
 }
 
 pub struct LocationiqHttpClient {
@@ -111,15 +129,22 @@ impl ReverseGeocoder for LocationiqHttpClient {
         &mut self,
         latitude: &str,
         longitude: &str,
-    ) -> Result<Option<LocationiqAddress>, String> {
-        let url = build_locationiq_url(latitude, longitude, &self.api_key)?;
-        let body = self.http.get_text(url.as_str()).map_err(|error| {
-            format!(
-                "LocationIQ 查詢失敗 url={}：{error}",
-                redact_locationiq_key(url.as_str())
-            )
-        })?;
-        Ok(Some(parse_locationiq_address(&body)?))
+    ) -> Result<Option<LocationiqAddress>, HttpFailure> {
+        let url =
+            build_locationiq_url(latitude, longitude, &self.api_key).map_err(HttpFailure::Other)?;
+        let body = self
+            .http
+            .get_text_detailed(url.as_str())
+            .map_err(|error| match error {
+                HttpFailure::RateLimited { .. } => error,
+                other => HttpFailure::Other(format!(
+                    "LocationIQ 查詢失敗 url={}：{other}",
+                    redact_locationiq_key(url.as_str())
+                )),
+            })?;
+        parse_locationiq_address(&body)
+            .map(Some)
+            .map_err(HttpFailure::Other)
     }
 }
 
@@ -195,7 +220,7 @@ fn run_fixture(fixture: &Fixture, options: &RunOptions) -> Result<(), String> {
     Ok(())
 }
 
-pub fn run_production(options: &ProductionLocationiqOptions) -> Result<(), String> {
+pub fn run_production(options: &ProductionLocationiqOptions) -> Result<LocationiqOutcome, String> {
     if options.overwrite && options.output_file.exists() {
         fs::remove_file(&options.output_file).map_err(|error| {
             format!(
@@ -211,7 +236,7 @@ pub fn run_production(options: &ProductionLocationiqOptions) -> Result<(), Strin
 pub fn run_production_with_client<C: ReverseGeocoder>(
     options: &ProductionLocationiqOptions,
     client: &mut C,
-) -> Result<(), String> {
+) -> Result<LocationiqOutcome, String> {
     let mut rows = read_existing_meta(&options.output_file)?;
     let mut existing_coords: HashSet<(String, String)> = rows
         .iter()
@@ -278,6 +303,36 @@ pub fn run_production_with_client<C: ReverseGeocoder>(
                     save_metadata_rows(&options.output_file, &rows)?;
                 }
                 progress.finish();
+                if let HttpFailure::RateLimited { body } = &error {
+                    let done = processed.saturating_sub(1);
+                    println!(
+                        "stage=locationiq stop=rate_limited country={} done={done} remaining={} body={body}",
+                        options.country_code,
+                        total.saturating_sub(done)
+                    );
+                    // Reason: allow_partial 只容忍「這一輪有推進但沒查完」。第一筆
+                    // 就被限速代表這一輪完全沒有進度——金鑰失效、帳號被限制，或當日
+                    // 額度已被別處用光。若連這種情況也算正常結束，CI 會是綠的、
+                    // nightly 照發，但 auto-commit 沒有變更可收因此不開 PR，整條補查
+                    // 路線就此永久停擺且沒有任何錯誤訊息。誤判只有「同一把金鑰當天已
+                    // 被本地跑光」一種，那本來就該重跑，代價遠小於沉默失效。
+                    if options.allow_partial && done > 0 {
+                        return Ok(LocationiqOutcome::RateLimited);
+                    }
+                    if done == 0 {
+                        return Err(format!(
+                            "LocationIQ 第一筆查詢就被限速，這一輪沒有任何進度。\
+                             請確認金鑰是否有效、當日額度是否已被其他執行用光。body={body}"
+                        ));
+                    }
+                    return Err(format!(
+                        "LocationIQ 額度用完，已查結果保留在 {}（完成 {done}/{total}）。\
+                         換金鑰或等額度重置後重跑會自動從第 {} 點續查；\
+                         若要讓額度用完算正常結束，加上 --locationiq-allow-partial。body={body}",
+                        options.output_file.display(),
+                        done + 1
+                    ));
+                }
                 return Err(format!(
                     "LocationIQ API 錯誤，已 flush 目前批次；geoname_id={} latitude={} longitude={}：{error}",
                     city[0], latitude, longitude
@@ -299,7 +354,7 @@ pub fn run_production_with_client<C: ReverseGeocoder>(
         options.output_file.display(),
         rows.len()
     );
-    Ok(())
+    Ok(LocationiqOutcome::Completed)
 }
 
 fn read_existing_meta(path: &Path) -> Result<Vec<Vec<String>>, String> {
@@ -424,7 +479,7 @@ mod tests {
     }
 
     struct StubClient {
-        responses: Vec<Result<Option<LocationiqAddress>, String>>,
+        responses: Vec<Result<Option<LocationiqAddress>, HttpFailure>>,
     }
 
     impl ReverseGeocoder for StubClient {
@@ -432,9 +487,164 @@ mod tests {
             &mut self,
             _latitude: &str,
             _longitude: &str,
-        ) -> Result<Option<LocationiqAddress>, String> {
+        ) -> Result<Option<LocationiqAddress>, HttpFailure> {
             self.responses.remove(0)
         }
+    }
+
+    /// 兩列 US 測試資料，第二列用來觸發指定的失敗。
+    fn two_city_fixture(temp: &TestDir) -> PathBuf {
+        let cities = temp.path.join("cities500_optimized.txt");
+        fs::write(
+            &cities,
+            "1\tA\tA\t\t40.00000000\t-74.00000000\tP\tPPL\tUS\t\tNY\t\t\t\t0\t\t\tAmerica/New_York\t2026-01-01\n2\tB\tB\t\t41.00000000\t-73.00000000\tP\tPPL\tUS\t\tNY\t\t\t\t0\t\t\tAmerica/New_York\t2026-01-01\n",
+        )
+        .unwrap();
+        cities
+    }
+
+    fn stub_success() -> Result<Option<LocationiqAddress>, HttpFailure> {
+        Ok(Some(LocationiqAddress {
+            country: "美國".to_string(),
+            state: "紐約州".to_string(),
+            city: "紐約".to_string(),
+            county: String::new(),
+            suburb: "曼哈頓".to_string(),
+            neighbourhood: "蘇活區".to_string(),
+        }))
+    }
+
+    fn rate_limit_options(
+        cities: PathBuf,
+        output: PathBuf,
+        allow_partial: bool,
+    ) -> ProductionLocationiqOptions {
+        ProductionLocationiqOptions {
+            cities_file: cities,
+            output_file: output,
+            country_code: "US".to_string(),
+            batch_size: 10,
+            qps: 1,
+            api_key: "test".to_string(),
+            overwrite: false,
+            allow_partial,
+        }
+    }
+
+    /// 額度用完且允許部分完成時，必須回報 RateLimited 並保留已查結果。
+    #[test]
+    fn production_locationiq_stops_gracefully_on_rate_limit_when_allowed() {
+        let temp = TestDir::new("rate-limit-allowed");
+        let cities = two_city_fixture(&temp);
+        let output = temp.path.join("US.csv");
+        let mut client = StubClient {
+            responses: vec![
+                stub_success(),
+                Err(HttpFailure::RateLimited {
+                    body: r#"{"error":"Rate Limited Day"}"#.to_string(),
+                }),
+            ],
+        };
+
+        let outcome = run_production_with_client(
+            &rate_limit_options(cities, output.clone(), true),
+            &mut client,
+        )
+        .unwrap();
+
+        assert_eq!(outcome, LocationiqOutcome::RateLimited);
+        let saved = fs::read_to_string(output).unwrap();
+        assert!(saved.contains("紐約"), "已查結果必須保留");
+    }
+
+    /// 預設（本地補查）不得把「沒查完」當成功，否則會拿半套資料往下發布。
+    #[test]
+    fn production_locationiq_fails_on_rate_limit_by_default() {
+        let temp = TestDir::new("rate-limit-default");
+        let cities = two_city_fixture(&temp);
+        let output = temp.path.join("US.csv");
+        let mut client = StubClient {
+            responses: vec![
+                stub_success(),
+                Err(HttpFailure::RateLimited {
+                    body: r#"{"error":"Rate Limited Day"}"#.to_string(),
+                }),
+            ],
+        };
+
+        let error = run_production_with_client(
+            &rate_limit_options(cities, output.clone(), false),
+            &mut client,
+        )
+        .unwrap_err();
+
+        assert!(
+            error.contains("額度用完"),
+            "錯誤訊息要說明是額度問題：{error}"
+        );
+        assert!(
+            error.contains("--locationiq-allow-partial"),
+            "錯誤訊息要指出 CI 該怎麼改：{error}"
+        );
+        let saved = fs::read_to_string(output).unwrap();
+        assert!(saved.contains("紐約"), "失敗路徑也必須保留已查結果");
+    }
+
+    /// 第一筆就被限速代表這一輪零進度，即使開了 allow_partial 也必須失敗。
+    ///
+    /// Reason: 若這種情況算正常結束，CI 會綠、nightly 照發，但沒有新資料所以
+    /// auto-commit 不開 PR——金鑰失效會變成永遠查不到的沉默失效。
+    #[test]
+    fn production_locationiq_fails_when_rate_limited_with_zero_progress() {
+        let temp = TestDir::new("rate-limit-no-progress");
+        let cities = two_city_fixture(&temp);
+        let output = temp.path.join("US.csv");
+        let mut client = StubClient {
+            responses: vec![Err(HttpFailure::RateLimited {
+                body: r#"{"error":"Rate Limited Day"}"#.to_string(),
+            })],
+        };
+
+        let error =
+            run_production_with_client(&rate_limit_options(cities, output, true), &mut client)
+                .unwrap_err();
+
+        assert!(
+            error.contains("第一筆查詢就被限速"),
+            "錯誤訊息要點出零進度：{error}"
+        );
+    }
+
+    /// 非限速錯誤即使開了 allow_partial 也必須失敗。
+    #[test]
+    fn production_locationiq_still_fails_on_non_rate_limit_error_when_partial_allowed() {
+        let temp = TestDir::new("rate-limit-other");
+        let cities = two_city_fixture(&temp);
+        let output = temp.path.join("US.csv");
+        let mut client = StubClient {
+            responses: vec![
+                stub_success(),
+                Err(HttpFailure::Other("金鑰無效".to_string())),
+            ],
+        };
+
+        let error =
+            run_production_with_client(&rate_limit_options(cities, output, false), &mut client);
+        assert!(error.is_err());
+
+        let mut client = StubClient {
+            responses: vec![
+                stub_success(),
+                Err(HttpFailure::Other("金鑰無效".to_string())),
+            ],
+        };
+        let temp = TestDir::new("rate-limit-other-allowed");
+        let cities = two_city_fixture(&temp);
+        let output = temp.path.join("US.csv");
+        let error =
+            run_production_with_client(&rate_limit_options(cities, output, true), &mut client)
+                .unwrap_err();
+        assert!(error.contains("金鑰無效"), "{error}");
     }
 
     /// LocationIQ 以 `\uXXXX` 逃逸回傳非 ASCII 名稱，且英國全境的 OSM `name:zh`
@@ -483,7 +693,7 @@ mod tests {
                     suburb: "曼哈頓".to_string(),
                     neighbourhood: "蘇活區".to_string(),
                 })),
-                Err("quota".to_string()),
+                Err(HttpFailure::Other("quota".to_string())),
             ],
         };
         let options = ProductionLocationiqOptions {
@@ -491,9 +701,10 @@ mod tests {
             output_file: output.clone(),
             country_code: "US".to_string(),
             batch_size: 10,
-            qps: 2,
+            qps: 1,
             api_key: "test".to_string(),
             overwrite: false,
+            allow_partial: false,
         };
 
         let error = run_production_with_client(&options, &mut client).unwrap_err();
