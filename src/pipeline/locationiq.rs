@@ -103,6 +103,26 @@ pub fn build_locationiq_url(latitude: &str, longitude: &str, api_key: &str) -> R
     Ok(url)
 }
 
+/// 把 HTTP 層的錯誤轉成帶遮蔽 URL 的 LocationIQ 錯誤。
+///
+/// Reason: `HttpFailure::Other` 的訊息由 HTTP 層組出，內嵌未遮蔽的原始 URL
+/// （query string 含 `key=<API key>`）。只遮外層的 `url=` 不夠——金鑰無效時的
+/// 401 會把完整金鑰印進日誌，而那正是額度錯誤訊息要使用者去查的路徑。這裡把
+/// 內層訊息中的原始 URL 一併換成遮蔽版本。限速錯誤原樣往上傳，呼叫端要靠它
+/// 辨識額度用完，且它的訊息不含 URL。
+fn redact_locationiq_failure(url: &str, failure: HttpFailure) -> HttpFailure {
+    match failure {
+        HttpFailure::RateLimited { .. } => failure,
+        other => {
+            let redacted = redact_locationiq_key(url);
+            HttpFailure::Other(format!(
+                "LocationIQ 查詢失敗 url={redacted}：{}",
+                other.to_string().replace(url, redacted.as_str())
+            ))
+        }
+    }
+}
+
 fn redact_locationiq_key(url: &str) -> String {
     match Url::parse(url) {
         Ok(mut parsed) => {
@@ -135,13 +155,7 @@ impl ReverseGeocoder for LocationiqHttpClient {
         let body = self
             .http
             .get_text_detailed(url.as_str())
-            .map_err(|error| match error {
-                HttpFailure::RateLimited { .. } => error,
-                other => HttpFailure::Other(format!(
-                    "LocationIQ 查詢失敗 url={}：{other}",
-                    redact_locationiq_key(url.as_str())
-                )),
-            })?;
+            .map_err(|error| redact_locationiq_failure(url.as_str(), error))?;
         parse_locationiq_address(&body)
             .map(Some)
             .map_err(HttpFailure::Other)
@@ -310,6 +324,11 @@ pub fn run_production_with_client<C: ReverseGeocoder>(
                         options.country_code,
                         total.saturating_sub(done)
                     );
+                    // Reason: 重試耗盡的 429 一律當成額度用完，不解析 body 區分是
+                    // 每分鐘還是每日上限——那是外部 API 未文件化的字串，比對錯了
+                    // 會把綠燈變紅燈。誤判的後果也不對稱：分鐘上限被誤當每日上限
+                    // 只是這一輪少補一些點（已查結果照常提交，下次接續），不是停擺。
+                    //
                     // Reason: allow_partial 只容忍「這一輪有推進但沒查完」。第一筆
                     // 就被限速代表這一輪完全沒有進度——金鑰失效、帳號被限制，或當日
                     // 額度已被別處用光。若連這種情況也算正常結束，CI 會是綠的、
@@ -490,6 +509,37 @@ mod tests {
         ) -> Result<Option<LocationiqAddress>, HttpFailure> {
             self.responses.remove(0)
         }
+    }
+
+    /// HTTP 層錯誤內嵌的原始 URL 含 API key，包裝後不得外洩。
+    ///
+    /// Reason: 只遮外層 `url=` 時，`{other}` 仍帶著完整金鑰；金鑰無效的 401
+    /// 是最常觸發的路徑，也正是錯誤訊息叫使用者去查的那一種。
+    #[test]
+    fn locationiq_failure_redacts_api_key_from_nested_http_message() {
+        let url = build_locationiq_url("25.0", "121.5", "pk.secret123").unwrap();
+        let failure = redact_locationiq_failure(
+            url.as_str(),
+            HttpFailure::Other(format!("HTTP 請求失敗 status=401 url={url}")),
+        );
+
+        let message = failure.to_string();
+        assert!(!message.contains("pk.secret123"), "金鑰不得出現：{message}");
+        assert!(message.contains("key=***"), "應保留遮蔽後的 URL：{message}");
+    }
+
+    /// 限速錯誤必須原樣往上傳，否則呼叫端無法辨識額度用完。
+    #[test]
+    fn locationiq_failure_passes_rate_limited_through() {
+        let url = build_locationiq_url("25.0", "121.5", "pk.secret123").unwrap();
+        let failure = redact_locationiq_failure(
+            url.as_str(),
+            HttpFailure::RateLimited {
+                body: r#"{"error":"Rate Limited Day"}"#.to_string(),
+            },
+        );
+
+        assert!(matches!(failure, HttpFailure::RateLimited { .. }));
     }
 
     /// 兩列 US 測試資料，第二列用來觸發指定的失敗。

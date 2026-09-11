@@ -78,6 +78,14 @@ pub struct HttpRequestPolicy {
     pub adaptive_throttle: bool,
 }
 
+/// 單次重試等待的上限，用於箝制伺服器回報的 `Retry-After`。
+///
+/// Reason: `Retry-After` 由伺服器決定，日配額型的端點可能回報到重置為止的秒數
+/// （例如 3600）。照著睡會讓 job 卡住數小時後被 CI 的時限砍掉——連帶砍掉
+/// 「限速就優雅停止」那條路徑，已 flush 的付費查詢結果也不會被 commit。等超過
+/// 一分鐘的重試不如直接結束這一輪，由續跑機制接手。
+const RETRY_AFTER_MAX: Duration = Duration::from_secs(60);
+
 /// 自適應節流上限，避免 429 連發時節流無限增長。
 const ADAPTIVE_THROTTLE_MAX: Duration = Duration::from_secs(8);
 /// 連續成功達此次數後，節流向基準值回落一半。
@@ -272,14 +280,21 @@ impl HttpClient {
         Err(last_error.unwrap_or_else(|| HttpFailure::Other(format!("HTTP 請求失敗 url={url}"))))
     }
 
+    /// 本次重試前應等待的時間。抽成純函式讓箝制行為可以不真的睡就測到。
+    fn retry_delay(&self, attempt: usize, retry_after: Option<Duration>) -> Duration {
+        retry_after
+            .map(|delay| delay.min(RETRY_AFTER_MAX))
+            .unwrap_or_else(|| {
+                let multiplier = u32::try_from(attempt).unwrap_or(u32::MAX).max(1);
+                self.policy.base_backoff.saturating_mul(multiplier)
+            })
+    }
+
     fn sleep_before_retry(&self, attempt: usize, retry_after: Option<Duration>) {
         if !self.policy.sleep_between_retries {
             return;
         }
-        let delay = retry_after.unwrap_or_else(|| {
-            let multiplier = u32::try_from(attempt).unwrap_or(u32::MAX).max(1);
-            self.policy.base_backoff.saturating_mul(multiplier)
-        });
+        let delay = self.retry_delay(attempt, retry_after);
         if !delay.is_zero() {
             thread::sleep(delay);
         }
@@ -386,6 +401,29 @@ mod tests {
             }
         );
         assert!(failure.to_string().contains("Rate Limited Day"));
+    }
+
+    /// 伺服器回報的 `Retry-After` 必須被箝制，否則 job 會睡到被 CI 時限砍掉。
+    #[test]
+    fn retry_delay_caps_server_reported_retry_after() {
+        let client = HttpClient::new(HttpRequestPolicy {
+            base_backoff: Duration::from_secs(2),
+            ..HttpRequestPolicy::default()
+        })
+        .unwrap();
+
+        assert_eq!(
+            client.retry_delay(1, Some(Duration::from_secs(3600))),
+            RETRY_AFTER_MAX,
+            "日配額型的 Retry-After 必須被箝制"
+        );
+        // 低於上限時照伺服器的值走。
+        assert_eq!(
+            client.retry_delay(1, Some(Duration::from_secs(5))),
+            Duration::from_secs(5)
+        );
+        // 沒有 Retry-After 時維持原本的線性退避。
+        assert_eq!(client.retry_delay(3, None), Duration::from_secs(6));
     }
 
     #[test]
