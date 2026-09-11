@@ -93,6 +93,7 @@ struct ProductionOptions {
     batch_size: u32,
     qps: u32,
     api_key: Option<String>,
+    allow_partial_locationiq: bool,
 }
 
 impl Default for ProductionOptions {
@@ -126,8 +127,14 @@ impl Default for ProductionOptions {
             // --metadata-folder：搬移 handler metadata 時不應連帶移動付費查詢結果。
             locationiq_folder: PathBuf::from("./data/locationiq"),
             batch_size: 100,
-            qps: 2,
+            // Reason: LocationIQ 免費方案同時有 2 req/s 與 60 req/min 兩條限制，
+            // 兩者互相矛盾——照 2 req/s 打滿是 120 req/min，必然撞上分鐘上限。
+            // 實際生效的是比較嚴的那條，因此節流要以 60 req/min 為準，也就是
+            // qps=1（1020 ms 間隔 ≈ 58.8 req/min，留 2% 邊際）。付費方案可用
+            // --locationiq-qps 調高。
+            qps: 1,
             api_key: std::env::var("LOCATIONIQ_API_KEY").ok(),
+            allow_partial_locationiq: false,
         }
     }
 }
@@ -287,7 +294,7 @@ fn run_locationiq_production(options: &ProductionOptions) -> Result<(), String> 
     })?;
     for country in &options.country_codes {
         let output_file = locationiq_output_path(options, country);
-        locationiq::run_production(&locationiq::ProductionLocationiqOptions {
+        let outcome = locationiq::run_production(&locationiq::ProductionLocationiqOptions {
             cities_file: options.output_folder.join("cities500_optimized.txt"),
             output_file,
             country_code: country.clone(),
@@ -295,7 +302,14 @@ fn run_locationiq_production(options: &ProductionOptions) -> Result<(), String> 
             qps: options.qps,
             api_key: api_key.clone(),
             overwrite: options.overwrite,
+            allow_partial: options.allow_partial_locationiq,
         })?;
+        // Reason: 每日額度是整把金鑰共用的，不是各國分開計。前一國撞到額度上限後，
+        // 後面每一國都只會重跑一輪重試退避再停下，白花時間也讓日誌難讀。
+        if outcome == locationiq::LocationiqOutcome::RateLimited {
+            println!("stage=locationiq stop=rate_limited skipped_remaining_countries=true");
+            break;
+        }
     }
     Ok(())
 }
@@ -522,6 +536,10 @@ fn parse_production_options(args: &[String]) -> Result<ProductionOptions, String
             "--locationiq-api-key" => {
                 options.api_key = Some(required_value(args, index, "--locationiq-api-key")?);
                 index += 2;
+            }
+            "--locationiq-allow-partial" => {
+                options.allow_partial_locationiq = true;
+                index += 1;
             }
             other => return Err(format!("未知 production 參數：{other}")),
         }

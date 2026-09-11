@@ -209,7 +209,9 @@ cargo run --release -- release \
 > - 臺灣、日本、南韓、泰國、印尼（TW/JP/KR/TH/ID）已改由官方圖資 handler 產生，不應以 LocationIQ 處理；此流程僅用於為其他國家產生 metadata。
 
 > [!WARNING]
-> LocationIQ API 有請求次數限制（可登入後於後台查看），請留意要處理的國家的地名數量。
+> LocationIQ API 有請求次數限制（可登入後於後台查看），請留意要處理的國家的地名數量。免費方案同時有 **2 req/s、60 req/min、5,000 req/day** 三條限制，前兩條互相矛盾，因此節流以較嚴的 60 req/min 為準：`--locationiq-qps` 預設為 1（間隔 1020 ms ≈ 58.8 req/min），付費方案才需調高。
+>
+> 當日額度用完時 CLI 會保留已查結果後**中止**，避免拿半套資料繼續往下發布。CI 的增量補查改用 `--locationiq-allow-partial`，讓額度用完算正常結束，已查結果照常提交、剩餘座標留待下次；本地跑滿一個國家時不要加這個旗標。
 >
 > 查詢進度記錄在 `data/locationiq/<國碼>.csv`（可用 `--locationiq-folder` 指定其他位置；舊版記錄在 `meta_data/<國碼>.csv`，將既有檔案移至新目錄即可續用），超過當日限制時更換 API key 或隔日重跑同一條指令即可續查，已查過的座標會自動跳過。加上 `--pass-cleanup` 可保留 `output/` 既有的中間產物，省去重新下載與前處理：
 >
@@ -229,7 +231,7 @@ cargo run -- release \
   --locationiq-api-key "fixture" \
   --country-code "KR" "TH" \
   --batch-size 100 \
-  --locationiq-qps 2
+  --locationiq-qps 1
 ```
 
 需要驗證 release archive 與 `update_data.sh` 所需的目錄結構時，可使用 fixture mode 產生本地 smoke artifact：
