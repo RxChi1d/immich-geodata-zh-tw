@@ -10,6 +10,16 @@ use crate::pipeline::prepare::ProductionPrepareOptions;
 pub const GEONAMES_BASE_URL: &str = "https://download.geonames.org/export/dump";
 pub const NATURAL_EARTH_URL: &str = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_0_countries.geojson";
 
+/// Natural Earth 10m admin-1（一級行政區）邊界，供 admin1 修正器判定點位歸屬。
+///
+/// Reason: 取 GeoJSON 而非 shapefile，沿用既有的下載與解析路徑。該檔帶 `gn_id`
+/// 欄位，與 `admin1CodesASCII` 第 4 欄精確對接；同檔另有的 `gn_a1_code` 不可用
+/// ——實測全球 42 筆與權威代碼不符（越南最嚴重）。
+pub const NATURAL_EARTH_ADMIN1_URL: &str = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_1_states_provinces.geojson";
+
+/// NE admin-1 圖資在 `geoname_data/` 下的檔名。
+pub const NATURAL_EARTH_ADMIN1_FILE: &str = "ne_10m_admin_1_states_provinces.geojson";
+
 /// 大檔下載的總逾時。
 ///
 /// Reason: 預設 policy 的 30 秒總逾時是為了 API 呼叫（回應僅數 KB）而設，
@@ -94,6 +104,11 @@ where
     download_plain_if_missing(
         &options.natural_earth_url,
         &options.target_dir.join("ne_10m_admin_0_countries.geojson"),
+        downloader,
+    )?;
+    download_plain_if_missing(
+        &options.natural_earth_admin1_url,
+        &options.target_dir.join(NATURAL_EARTH_ADMIN1_FILE),
         downloader,
     )?;
     download_zip_member_if_missing(
@@ -265,6 +280,7 @@ mod tests {
             update: false,
             geonames_base_url: "https://fixture.test".to_string(),
             natural_earth_url: "https://fixture.test/natural.geojson".to_string(),
+            natural_earth_admin1_url: "https://fixture.test/natural-admin1.geojson".to_string(),
         }
     }
 
@@ -295,6 +311,10 @@ mod tests {
                 Ok(b"{\"type\":\"FeatureCollection\"}\n".to_vec()),
             ),
             (
+                "https://fixture.test/natural-admin1.geojson",
+                Ok(b"{\"type\":\"FeatureCollection\",\"features\":[]}\n".to_vec()),
+            ),
+            (
                 "https://fixture.test/alternateNamesV2.zip",
                 Ok(zip_bytes("alternateNamesV2.txt", b"alternate\n")),
             ),
@@ -321,13 +341,20 @@ mod tests {
             fs::read_to_string(options.target_dir.join("admin1CodesASCII.txt")).unwrap(),
             "admin1\n"
         );
+        // Reason: admin1 修正器沒有這個檔案就整段略過，而略過是靜默的（只印一行
+        // log，translate 仍然成功）。在 prepare 這一層斷言它有被下載，缺檔才不會
+        // 變成「CI 全綠但修正從未發生」。
+        assert!(
+            options.target_dir.join(NATURAL_EARTH_ADMIN1_FILE).exists(),
+            "NE admin-1 圖資應被下載"
+        );
         assert!(!options.target_dir.join("cities500.zip").exists());
         assert!(!options.target_dir.join("alternateNamesV2.zip").exists());
-        assert_eq!(fixture.request_count(), 7);
+        assert_eq!(fixture.request_count(), 8);
 
         run_production_with_downloader(&options, &|url, path| fixture.download(url, path)).unwrap();
 
-        assert_eq!(fixture.request_count(), 7);
+        assert_eq!(fixture.request_count(), 8);
     }
 
     #[test]

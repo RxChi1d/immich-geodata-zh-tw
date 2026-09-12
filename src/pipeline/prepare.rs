@@ -13,6 +13,7 @@ pub struct ProductionPrepareOptions {
     pub update: bool,
     pub geonames_base_url: String,
     pub natural_earth_url: String,
+    pub natural_earth_admin1_url: String,
 }
 
 impl ProductionPrepareOptions {
@@ -23,6 +24,7 @@ impl ProductionPrepareOptions {
             update,
             geonames_base_url: prepare_download::GEONAMES_BASE_URL.to_string(),
             natural_earth_url: prepare_download::NATURAL_EARTH_URL.to_string(),
+            natural_earth_admin1_url: prepare_download::NATURAL_EARTH_ADMIN1_URL.to_string(),
         }
     }
 }

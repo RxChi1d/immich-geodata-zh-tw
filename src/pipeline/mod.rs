@@ -1,4 +1,8 @@
+pub mod admin1_apply;
+pub mod admin1_correct;
+pub mod admin1_correct_stage;
 pub mod admin1_load;
+pub mod admin1_report;
 pub mod cities500_load;
 pub mod extract;
 pub mod fixtures;
@@ -8,6 +12,7 @@ pub mod locationiq;
 pub mod naer_lookup;
 pub mod naer_prepare;
 pub mod naer_stats;
+pub mod ne_admin1;
 pub mod pack;
 pub mod polars_cities;
 pub mod polars_table;

@@ -330,7 +330,8 @@ cargo test
    本地補查**不要**加這個旗標——那邊要的是「沒跑滿就不往下走」。該旗標只容忍
    「有推進但沒查完」；第一筆就被限速代表這一輪零進度，一律失敗，避免金鑰失效
    變成「CI 全綠但永遠查不到」的沉默停擺。
-6. **某國改用 handler 時**：刪除 `data/locationiq/{CC}.csv`（`filter_country_codes_without_handler`
+6. **某國改用 handler 時**：刪除 `data/locationiq/{CC}.csv` 與
+   `data/locationiq/{CC}_admin1_fixes.csv`（`filter_country_codes_without_handler`
    只擋 locationiq 階段，殘留的 CSV 仍會被 translate 載入並與 handler 資料重疊），
    從兩個 workflow 的 `--country-code` 移除該國，並確認清單沒有變空——清單為空時
    locationiq 階段會 skip 而 release 仍然成功，整條路線沒有錯誤訊息就此失效。
