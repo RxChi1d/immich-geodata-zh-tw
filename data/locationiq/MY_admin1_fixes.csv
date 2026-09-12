@@ -1,0 +1,20 @@
+geoname_id,name,latitude,longitude,original_admin1,natural_earth_admin1,locationiq_admin1_name,locationiq_admin1,boundary_km,verdict,reasons
+12680194,Taman Melati,3.22124,101.72324,MY.14,MY.12,吉隆坡,MY.14,1.217,rejected,sources_do_not_agree(MY.12->MY.14)
+12750644,Taman Melawati,3.21083,101.74825,MY.12,MY.14,雪兰莪州,MY.12,0.058,rejected,sources_do_not_agree(MY.14->MY.12)
+13100287,Mukim Tioman,2.78250,104.17000,MY.01,MY.01,彭亨州,MY.06,3.085,rejected,sources_do_not_agree(MY.01->MY.06)
+13117900,Bandar Baru Enstek,2.75106,101.76544,MY.05,MY.12,森美兰州,,0.726,rejected,no_trusted_mapping
+13118198,SS2,3.12036,101.62246,MY.14,MY.12,雪兰莪州,MY.12,1.553,accepted,
+13118277,Bandar Utama,3.14818,101.61407,MY.14,MY.12,雪兰莪州,MY.12,1.150,accepted,
+13118370,Mutiara Damansara,3.15724,101.60822,MY.14,MY.12,雪兰莪州,MY.12,1.708,accepted,
+1734399,Selama,5.22360,100.69262,MY.07,MY.02,霹雳州,MY.07,0.117,rejected,sources_do_not_agree(MY.02->MY.07)
+1734407,Bandar Baharu,5.13428,100.49549,MY.02,MY.07,吉打州,MY.02,0.305,rejected,sources_do_not_agree(MY.07->MY.02)
+1734736,Lubok China,2.45360,102.06950,MY.04,MY.05,马六甲州,MY.04,0.426,rejected,sources_do_not_agree(MY.05->MY.04)
+1734738,Tampin,2.47010,102.23020,MY.05,MY.04,森美兰州,,0.111,rejected,no_trusted_mapping
+1734897,Padang Endau,2.65568,103.61504,MY.01,MY.06,柔佛州,MY.01,1.250,rejected,sources_do_not_agree(MY.06->MY.01)
+1734949,Kampung Tekek,2.81470,104.15920,MY.06,MY.01,彭亨州,MY.06,0.080,rejected,sources_do_not_agree(MY.01->MY.06)
+1735162,Setapak,3.20700,101.72700,MY.12,MY.14,吉隆坡,MY.14,0.308,accepted,
+1735168,Ampang,3.15000,101.76667,MY.14,MY.12,雪兰莪州,MY.12,1.751,accepted,
+1736283,Bukit Kayu Hitam,6.51668,100.41893,MY.02,TH.68,吉打州,MY.02,0.241,rejected,sources_do_not_agree(TH.68->MY.02);natural_earth_foreign_country(TH.68)
+1744366,Serdang,5.20372,100.62476,MY.07,MY.02,吉打州,MY.02,4.236,accepted,
+1769612,Kampong Dungun,3.21667,101.31667,MY.07,MY.12,雪兰莪州,MY.12,0.807,accepted,
+1777077,Cheras,3.10800,101.72600,MY.12,MY.14,吉隆坡,MY.14,2.042,accepted,

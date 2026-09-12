@@ -177,7 +177,7 @@ jobs:
               --base main \
               --head "$branch" \
               --title "chore(locationiq): 更新查詢結果 ${{ env.TODAY }}" \
-              --body "nightly 流程補查到的 LocationIQ 新座標。合併後下次排程才會跳過這些點，不合併會重複消耗付費額度。"
+              --body "nightly 流程補查到的 LocationIQ 新座標。合併後下次排程才會跳過這些點，不合併會重複消耗付費額度。異動若含 \`*_admin1_fixes.csv\`，那是 admin1 修正器本輪的判定紀錄（採納與未採納皆列出、唯寫、程式不讀回）；請比對列數與 verdict 是否與上週相近，暴增代表映射可能學歪了。"
           else
             echo "已有開啟中的 PR，跳過建立。"
           fi

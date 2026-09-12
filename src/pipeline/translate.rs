@@ -9,6 +9,7 @@ use opencc_rust::Converter;
 use polars::prelude::*;
 
 use crate::cli::RunOptions;
+use crate::pipeline::admin1_correct_stage::{self, MetadataAdmin1};
 use crate::pipeline::fixtures::{Fixture, load_fixtures};
 use crate::pipeline::naer_lookup::{NaerConfidence, NaerLookup, build_admin1_centroids};
 use crate::pipeline::naer_stats::NaerStats;
@@ -16,6 +17,7 @@ use crate::pipeline::polars_table::{
     read_admin1_rows, read_alternate_name_rows_with_header, read_cities_rows, read_string_rows,
     write_alternate_name_rows_with_header,
 };
+use crate::pipeline::prepare_download::NATURAL_EARTH_ADMIN1_FILE;
 use crate::pipeline::table::{GEODATA_COLUMNS, read_delimited, write_delimited};
 use crate::pipeline::transform_cities_schema::sort_city_rows_for_golden;
 use crate::pipeline::{admin1_load, cities500_load};
@@ -142,6 +144,23 @@ pub fn run_production(options: &ProductionTranslateOptions) -> Result<NaerStats,
         alternate_lookup_from_dataframe(&alternate_names)
     })?;
     let naer_lookup = profile.time("load_naer", || NaerLookup::load(&options.naer_file))?;
+
+    // Reason: 必須排在 build_admin1_centroids 之前。質心是依 admin1 分群算出來的，
+    // 若先算質心再改 admin1，被搬走的城市仍會計入原本那一州的質心，NAER 譯名
+    // 比對就會用到與輸出不一致的座標。
+    let mut cities_rows = cities_rows;
+    profile.time("admin1_correct", || {
+        let metadata_admin1 = metadata_admin1_from_dataframe(&metadata)?;
+        admin1_correct_stage::run(
+            &mut cities_rows,
+            &admin1_rows,
+            &metadata_admin1,
+            &options.data_dir.join(NATURAL_EARTH_ADMIN1_FILE),
+            &options.data_dir.join("admin2Codes.txt"),
+            &options.metadata_dir,
+        )
+    })?;
+
     // Reason: cities_rows 隨後被 translate_cities_rows by-value 消費並
     // shadow，admin1 質心索引必須在此之前以未翻譯列建立。
     let admin1_centroids = profile.time("build_admin1_centroids", || {
@@ -508,6 +527,7 @@ fn empty_metadata_dataframe() -> Result<DataFrame, String> {
             Series::new("country_code".into(), Vec::<String>::new()).into(),
             Series::new("latitude".into(), Vec::<String>::new()).into(),
             Series::new("longitude".into(), Vec::<String>::new()).into(),
+            Series::new("_meta_admin_1".into(), Vec::<String>::new()).into(),
             Series::new("_meta_admin_2".into(), Vec::<String>::new()).into(),
         ],
     )
@@ -542,6 +562,13 @@ fn metadata_rows_to_dataframe(
             Series::new(
                 "longitude".into(),
                 rows.iter().map(|row| row[1].clone()).collect::<Vec<_>>(),
+            )
+            .into(),
+            // Reason: admin_1（第 4 欄）供 admin1 修正器使用；在此之前它讀進來
+            // 就被丟掉，付費查到的行政區資訊從未被任何程式讀取。
+            Series::new(
+                "_meta_admin_1".into(),
+                rows.iter().map(|row| row[3].clone()).collect::<Vec<_>>(),
             )
             .into(),
             Series::new(
@@ -891,6 +918,27 @@ fn metadata_lookup_from_dataframe(df: &DataFrame) -> Result<MetadataLookup, Stri
             longitudes.get(index).unwrap_or_default(),
             admin2_names.get(index).unwrap_or_default(),
         );
+    }
+    Ok(lookup)
+}
+
+/// 由 metadata DataFrame 建出 admin1 修正器的 `(國碼, 緯度, 經度) → 行政區名稱`。
+fn metadata_admin1_from_dataframe(df: &DataFrame) -> Result<MetadataAdmin1, String> {
+    let country_codes = string_column(df, "country_code")?;
+    let latitudes = string_column(df, "latitude")?;
+    let longitudes = string_column(df, "longitude")?;
+    let admin1_names = string_column(df, "_meta_admin_1")?;
+    let mut lookup = MetadataAdmin1::with_capacity(df.height());
+    for index in 0..df.height() {
+        // Reason: 鍵與 `MetadataLookup::insert_first` 同構——同一座標重複出現時
+        // 保留第一筆，兩張表才會對同一個點給出一致的答案。
+        lookup
+            .entry((
+                country_codes.get(index).unwrap_or_default().to_string(),
+                latitudes.get(index).unwrap_or_default().to_string(),
+                longitudes.get(index).unwrap_or_default().to_string(),
+            ))
+            .or_insert_with(|| admin1_names.get(index).unwrap_or_default().to_string());
     }
     Ok(lookup)
 }
