@@ -1,5 +1,6 @@
 pub mod admin1_apply;
 pub mod admin1_correct;
+pub mod admin1_correct_stage;
 pub mod admin1_load;
 pub mod admin1_report;
 pub mod cities500_load;
