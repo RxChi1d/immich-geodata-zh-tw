@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 300" aria-label="T0、T1、T2 三個判準的示意圖" >
+  <!-- T0 -->
+  <text x="20" y="22" font-size="13" font-weight="600" fill="#6b7681">T0　鄰居全部同名</text>
+  <circle cx="90" cy="80" r="5" fill="#8E3A48"/>
+  <text x="82" y="104" font-size="11" fill="#8E3A48">p</text>
+  <g stroke="#1F5F5B" stroke-width="1.2" opacity="0.8">
+    <line x1="90" y1="80" x2="40" y2="52"/><line x1="90" y1="80" x2="142" y2="54"/>
+    <line x1="90" y1="80" x2="34" y2="112"/><line x1="90" y1="80" x2="146" y2="108"/>
+    <line x1="90" y1="80" x2="92" y2="28"/>
+  </g>
+  <g fill="#1F5F5B">
+    <circle cx="40" cy="52" r="4"/><circle cx="142" cy="54" r="4"/>
+    <circle cx="34" cy="112" r="4"/><circle cx="146" cy="108" r="4"/><circle cx="92" cy="28" r="4"/>
+  </g>
+  <text x="20" y="146" font-size="11" fill="#6b7681">刪 p 後答案換成某個鄰居，</text>
+  <text x="20" y="162" font-size="11" fill="#6b7681">而鄰居全部同名 → 名稱不變</text>
+
+  <!-- T1 -->
+  <text x="210" y="22" font-size="13" font-weight="600" fill="#6b7681">T1　整塊區域都被覆蓋</text>
+  <rect x="216" y="40" width="120" height="86" fill="#1F5F5B" opacity="0.08" stroke="#1F5F5B" stroke-dasharray="4 3"/>
+  <circle cx="300" cy="70" r="46" fill="#1F5F5B" opacity="0.10"/>
+  <circle cx="300" cy="70" r="46" fill="none" stroke="#1F5F5B" stroke-width="1.2"/>
+  <circle cx="300" cy="70" r="4.5" fill="#1F5F5B"/>
+  <text x="308" y="68" font-size="11" fill="#1F5F5B">s</text>
+  <text x="210" y="146" font-size="11" fill="#6b7681">區域內每個位置，25 km 內</text>
+  <text x="210" y="162" font-size="11" fill="#6b7681">都還有保留點 s → 等同最近鄰</text>
+
+  <!-- T2 -->
+  <text x="400" y="22" font-size="13" font-weight="600" fill="#6b7681">T2　被別的點壓制</text>
+  <rect x="408" y="40" width="106" height="86" fill="none" stroke="#6b7681" stroke-dasharray="4 3" opacity="0.5"/>
+  <circle cx="440" cy="84" r="4.5" fill="#1F5F5B"/>
+  <text x="426" y="104" font-size="11" fill="#1F5F5B">r</text>
+  <circle cx="500" cy="60" r="4.5" fill="#8E3A48"/>
+  <text x="506" y="56" font-size="11" fill="#8E3A48">p</text>
+  <line x1="408" y1="128" x2="440" y2="90" stroke="#1F5F5B" stroke-width="1.2"/>
+  <line x1="408" y1="128" x2="500" y2="66" stroke="#8E3A48" stroke-width="1.2" stroke-dasharray="3 3"/>
+  <text x="400" y="146" font-size="11" fill="#6b7681">r 一定在盒內且一定比 p 近</text>
+  <text x="400" y="162" font-size="11" fill="#6b7681">→ p 不可能勝出，刪了無所謂</text>
+
+  <line x1="20" y1="186" x2="540" y2="186" stroke="#6b7681" opacity="0.2"/>
+  <text x="20" y="212" font-size="12" fill="#6b7681">實際成立的條件是 <tspan font-weight="600">T0 ∧ T1</tspan> 或 <tspan font-weight="600">T2</tspan>。</text>
+  <text x="20" y="234" font-size="12" fill="#6b7681">T1 負責把盒語意轉成最近鄰語意（2.2 節的引理），T0 負責保證換人之後名稱不變。</text>
+  <text x="20" y="256" font-size="12" fill="#6b7681">T2 不需要 T0——它證明的是 p 根本不會被選中，與 p 存在與否無關。</text>
+  <text x="20" y="282" font-size="12" fill="#6b7681" opacity="0.75">兩條路都證不出來的區域，就保留 p。</text>
+</svg>

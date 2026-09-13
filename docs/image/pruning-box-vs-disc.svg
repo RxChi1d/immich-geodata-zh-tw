@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 260" aria-label="立方體與圓盤的差異：切向 20×20 公里的點距離 28.3 公里仍在盒內，軸向 25.5 公里的點在盒外" >
+  <defs>
+    <marker id="pp-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7681"/>
+    </marker>
+  </defs>
+  <rect x="130" y="40" width="180" height="180" fill="none" stroke="#9A6D18" stroke-width="2"/>
+  <circle cx="220" cy="130" r="90" fill="none" stroke="#6b7681" stroke-width="1" stroke-dasharray="4 3" opacity="0.55"/>
+  <circle cx="220" cy="130" r="3.5" fill="#6b7681"/>
+  <text x="220" y="150" text-anchor="middle" font-size="12" fill="#6b7681">查詢位置</text>
+  <circle cx="310" cy="40" r="4.5" fill="#1F5F5B"/>
+  <line x1="220" y1="130" x2="310" y2="40" stroke="#1F5F5B" stroke-width="1.4" marker-end="url(#pp-arrow)"/>
+  <text x="318" y="36" font-size="12" fill="#1F5F5B">28.3 km，在盒內</text>
+  <circle cx="220" cy="18" r="4.5" fill="#8E3A48"/>
+  <line x1="220" y1="130" x2="220" y2="22" stroke="#8E3A48" stroke-width="1.4" marker-end="url(#pp-arrow)"/>
+  <text x="228" y="16" font-size="12" fill="#8E3A48">25.5 km，在盒外</text>
+  <text x="136" y="234" font-size="12" fill="#9A6D18">earth_box 半邊 25 km</text>
+  <text x="330" y="205" font-size="12" fill="#6b7681" opacity="0.7">25 km 圓盤</text>
+</svg>
