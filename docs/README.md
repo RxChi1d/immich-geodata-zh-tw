@@ -21,6 +21,12 @@
 | 🇮🇩 印尼 | [印尼行政區處理](zh-tw/indonesia-admin-processing.md) |
 | 🌏 其他地區 | [全球翻譯處理](zh-tw/global-translation-processing.md) |
 
+## 跨地區的處理步驟
+
+| 文件 | 內容 |
+| :--- | :--- |
+| [地名點剪枝](zh-tw/point-pruning.md) | 發布前如何在不改變任何查詢結果的前提下刪除多餘地名點：判準、遞迴細分、多趟刪除與驗證方式 |
+
 ## 開發
 
 | 文件 | 內容 |
@@ -40,6 +46,7 @@
 | [印尼 handler 設計](research/indonesia-handler.md) | 印尼支援的來源選擇、行政層級與翻譯策略 |
 | [印尼投影與座標實驗](research/idn-handler-projection-coordinate-experiment.md) | 投影法與代表座標策略的實驗數據 |
 | [Python 至 Rust 遷移](history/python-to-rust-migration.md) | 資料處理工具鏈的遷移過程紀錄 |
+| [剪枝：被否決的最佳化](history/pruning-rejected-optimizations.md) | 兩個實作完成但未進主線的最佳化，含一個錯誤幾何命題的反例 |
 
 ## 語言版本
 

@@ -11,7 +11,7 @@
 
 [Immich](https://immich.app/) tags each photo with a location derived from its GPS coordinates, but its default geographic data leaves several gaps for users in Taiwan: place names are mostly English or local romanization, so searching in Chinese gets you nowhere; most Taiwanese city and county names are missing altogether, and administrative divisions are spelled differently from everyday usage; place-name points are sparse, so photos frequently land in a neighboring — sometimes entirely adjacent — administrative division.
 
-This project rebuilds the geographic data Immich uses. Taiwan, Japan, South Korea, Thailand, and Indonesia are rebuilt from each country's public administrative boundary data; everywhere else gets the Chinese place names used in Taiwan. On Docker Compose, installation takes one added line in `docker-compose.yml`.
+This project rebuilds the geographic data Immich uses. Taiwan, Japan, South Korea, Thailand, and Indonesia are rebuilt from each country's public administrative boundary data; everywhere else gets the Chinese place names used in Taiwan. Official boundary data raises point density sharply, so a pruning pass runs before each release to remove redundant points without changing any query result, keeping the database smaller and lookups faster. On Docker Compose, installation takes one added line in `docker-compose.yml`.
 
 ![Before and after comparison](./image/example.png)
 
@@ -30,9 +30,18 @@ This project rebuilds the geographic data Immich uses. Taiwan, Japan, South Kore
 
 ## Features
 
+**Place-name quality**
+
 - **Taiwan uses official boundary data**: Place names are rebuilt from the village boundary data of the National Land Surveying and Mapping Center (NLSC). Cities, counties, townships, districts, and villages all follow the official records, and every place name gets a recalculated representative point.
 - **Several countries use local boundary data**: Japan, South Korea, Thailand, and Indonesia are wired to each country's public administrative boundary data, with the same rebuilt names and representative points, so fewer photos land in a neighboring administrative division.
 - **Taiwan-style translations everywhere else**: The NAER *Translations of Foreign Place Names* supplies the Chinese names used in Taiwan for the places it covers. Where no official translation exists, GeoNames Chinese data is used; where neither exists, the original name stays, so obscure places may still appear in English.
+
+**Data size and lookup speed**
+
+- **Pruned before release**: Official boundary data raises point density sharply, so points that provably cannot change any query result are removed before release. Database footprint drops by about a quarter and lookups in dense regions get roughly three times faster, while the names shown stay exactly the same. See [Point Pruning](docs/en/point-pruning.md) for how it works.
+
+**Installation and maintenance**
+
 - **Updating means restarting**: With the automatic installation method (see [Installation](#installation)), the container fetches the latest data on every start — no manual downloads, no moving files around.
 - **Installation is reversible**: Run in install mode, the script backs up the existing data before overwriting it and restores the pre-install state if anything fails midway. Downloading and copying files by hand gives you no such protection.
 - **Works across deployments**: Docker Compose, the macOS native worker, LXC, and bare metal are all supported.
@@ -255,6 +264,14 @@ This happens when the `entrypoint` ends with `exec /bin/bash start.sh`. Use `exe
 **Some photos show a location that differs from where they were taken.**
 
 Immich matches place names by nearest distance, so coordinates close to an administrative boundary can be attributed to the neighboring division, and small islands or unusual terrain may not map precisely. That is how Immich resolves locations, not a data error.
+
+The pruning pass run before release does not make this worse — every removed point was verified to leave the resolved name unchanged for any coordinate.
+
+**Sparsely populated regions show only the country, with no city or administrative division.**
+
+Those regions simply lack place-name data: Immich searches only within 25 km of the coordinate and falls back to country boundaries when it finds nothing. In Canada, for instance, roughly 88% of the land has no covered place within 25 km.
+
+This reflects the coverage of upstream place-name data; improving it requires adding data for that region.
 
 ## Data sources
 

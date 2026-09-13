@@ -19,6 +19,10 @@ unicode-normalization = "0.1.25"
 shapefile = "0.8.0"
 tar = "0.4"
 zip = { version = "2.4", default-features = false, features = ["deflate"] }
+qhull = "0.4.1"
+sha2 = "0.11.0"
+kiddo = "6.3.0"
+rayon = "1.12.0"
 
 [lib]
 name = "immich_geodata"

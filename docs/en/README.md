@@ -23,6 +23,12 @@ The documentation is grouped by purpose. For installation steps and common quest
 | 🇮🇩 Indonesia | [Indonesia Administrative Division Processing](indonesia-admin-processing.md) |
 | 🌏 Other regions | [Global Translation Processing](global-translation-processing.md) |
 
+## Cross-Region Processing Steps
+
+| Document | Contents |
+| :--- | :--- |
+| [Point Pruning](point-pruning.md) | How redundant place points are removed before release without changing any query result: the criteria, recursive subdivision, multi-pass deletion and verification |
+
 ## Development
 
 | Document | Contents |
@@ -42,6 +48,7 @@ These documents record decisions as they were made and explain why things were d
 | [Indonesia handler Design (Chinese)](../research/indonesia-handler.md) | Source selection, administrative levels, and translation strategy for Indonesia support |
 | [Indonesia Projection and Coordinate Experiment (Chinese)](../research/idn-handler-projection-coordinate-experiment.md) | Experimental data on projection methods and representative point strategies |
 | [Python to Rust Migration (Chinese)](../history/python-to-rust-migration.md) | Record of the data pipeline migration |
+| [Pruning: Rejected Optimizations (Chinese)](../history/pruning-rejected-optimizations.md) | Two optimizations that were built and measured but not merged, including a counterexample to a false geometric claim |
 
 ## Languages
 
