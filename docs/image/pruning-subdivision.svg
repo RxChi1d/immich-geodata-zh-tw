@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 190" aria-label="遞迴細分：整塊、切四塊、再切四塊，未解區域逐步縮小" >
+  <g stroke="#6b7681" fill="none">
+    <rect x="30" y="40" width="100" height="100" stroke-width="1.5"/>
+    <rect x="30" y="40" width="100" height="100" fill="#9A6D18" opacity="0.18" stroke="none"/>
+    <text x="80" y="164" text-anchor="middle" font-size="11" fill="#6b7681">1 塊，未解</text>
+
+    <rect x="190" y="40" width="100" height="100" stroke-width="1.5"/>
+    <line x1="240" y1="40" x2="240" y2="140" stroke-width="1"/>
+    <line x1="190" y1="90" x2="290" y2="90" stroke-width="1"/>
+    <rect x="190" y="40" width="50" height="50" fill="#1F5F5B" opacity="0.18" stroke="none"/>
+    <rect x="240" y="90" width="50" height="50" fill="#1F5F5B" opacity="0.18" stroke="none"/>
+    <rect x="240" y="40" width="50" height="50" fill="#9A6D18" opacity="0.18" stroke="none"/>
+    <rect x="190" y="90" width="50" height="50" fill="#9A6D18" opacity="0.18" stroke="none"/>
+    <text x="240" y="164" text-anchor="middle" font-size="11" fill="#6b7681">2 塊已解</text>
+
+    <rect x="350" y="40" width="100" height="100" stroke-width="1.5"/>
+    <line x1="400" y1="40" x2="400" y2="140" stroke-width="1"/>
+    <line x1="350" y1="90" x2="450" y2="90" stroke-width="1"/>
+    <line x1="400" y1="40" x2="400" y2="90" stroke-width="0.8"/>
+    <line x1="375" y1="90" x2="375" y2="140" stroke-width="0.8"/>
+    <line x1="400" y1="65" x2="450" y2="65" stroke-width="0.8"/>
+    <line x1="350" y1="115" x2="400" y2="115" stroke-width="0.8"/>
+    <rect x="350" y="40" width="50" height="50" fill="#1F5F5B" opacity="0.18" stroke="none"/>
+    <rect x="240" y="90" width="0" height="0" stroke="none"/>
+    <rect x="400" y="90" width="50" height="50" fill="#1F5F5B" opacity="0.18" stroke="none"/>
+    <rect x="400" y="40" width="50" height="25" fill="#1F5F5B" opacity="0.18" stroke="none"/>
+    <rect x="350" y="115" width="25" height="25" fill="#9A6D18" opacity="0.18" stroke="none"/>
+    <text x="400" y="164" text-anchor="middle" font-size="11" fill="#6b7681">剩一小塊未解</text>
+  </g>
+  <text x="30" y="24" font-size="12" fill="#6b7681">深色＝已證明安全　　琥珀＝尚未解決，繼續細分</text>
+</svg>

@@ -17,7 +17,7 @@ USAGE:
   immich-geodata run-stage --stage <stage> [--fixture <name>] [--fixtures-dir <path>] [--output-dir <path>]
   immich-geodata full-pipeline [--fixture <name>] [--fixtures-dir <path>] [--output-dir <path>]
   immich-geodata prepare [--country-code <cc...>] [--data-folder <path>] [--update]
-  immich-geodata <cleanup|prepare|extract|enhance|locationiq|translate|pack|release|naer-prepare> [--dry-run|--fixture-mode|--profile] [options]
+  immich-geodata <cleanup|prepare|extract|enhance|locationiq|translate|prune|pack|release|naer-prepare> [--dry-run|--fixture-mode|--profile] [--threads <N|-1>] [options]
   immich-geodata naer-prepare --input <原始CSV> [--output <vendored_path>] [--country-names <json_path>]
 ";
 
@@ -59,8 +59,8 @@ pub fn run(args: Vec<String>) -> Result<(), String> {
             let options = parse_options(&args[2..])?;
             pipeline::run_full_pipeline(&options)
         }
-        "cleanup" | "prepare" | "extract" | "enhance" | "locationiq" | "translate" | "pack"
-        | "release" => run_production_command(command, &args[2..]),
+        "cleanup" | "prepare" | "extract" | "enhance" | "locationiq" | "translate" | "prune"
+        | "pack" | "release" => run_production_command(command, &args[2..]),
         "naer-prepare" => run_naer_prepare_command(&args[2..]),
         other => Err(format!("未知命令：{other}\n\n{HELP}")),
     }
@@ -78,7 +78,9 @@ struct ProductionOptions {
     pass_enhance: bool,
     pass_locationiq: bool,
     pass_translate: bool,
+    pass_prune: bool,
     pass_pack: bool,
+    prune_threads: i32,
     country_codes: Vec<String>,
     data_folder: PathBuf,
     output_folder: PathBuf,
@@ -109,7 +111,9 @@ impl Default for ProductionOptions {
             pass_enhance: false,
             pass_locationiq: false,
             pass_translate: false,
+            pass_prune: false,
             pass_pack: false,
+            prune_threads: 0,
             country_codes: vec!["TW".to_string()],
             data_folder: PathBuf::from("./geoname_data"),
             output_folder: PathBuf::from("./output"),
@@ -170,6 +174,7 @@ fn run_real_production_command(command: &str, options: &ProductionOptions) -> Re
         "translate" => {
             run_profiled_stage(options, "translate", || run_translate_production(options))
         }
+        "prune" => run_profiled_stage(options, "prune", || run_prune_production(options)),
         "pack" => run_profiled_stage(options, "pack", || run_pack_production(options)),
         "release" => run_release_production(options),
         other => Err(format!("未知 production 命令：{other}")),
@@ -343,6 +348,55 @@ fn run_translate_production(options: &ProductionOptions) -> Result<(), String> {
     .map(|_| ())
 }
 
+/// 剪枝：translate 之後、pack 之前，就地改寫 `cities500_translated.txt`。
+///
+/// Reason: 刪除的是「刪了也不改變任何 Immich 反向地理編碼答案」的點，
+/// 455 萬探測點對真實 PostgreSQL 驗證過零標籤改變、零新增空結果。
+fn run_prune_production(options: &ProductionOptions) -> Result<(), String> {
+    use crate::pipeline::prune::{multipass, stage};
+
+    let cities_file = options
+        .output_folder
+        .join("output")
+        .join("cities500_translated.txt");
+    let cities_file = if cities_file.exists() {
+        cities_file
+    } else {
+        options.output_folder.join("cities500_translated.txt")
+    };
+    let admin1_file = options.output_folder.join("admin1CodesASCII_optimized.txt");
+    if !cities_file.exists() {
+        return Err(format!(
+            "剪枝：找不到 translate 產物 {}",
+            cities_file.display()
+        ));
+    }
+    if !admin1_file.exists() {
+        return Err(format!("剪枝：找不到 admin1 表 {}", admin1_file.display()));
+    }
+
+    let report = stage::run(&stage::PruneOptions {
+        cities_file,
+        admin1_file,
+        output_file: None,
+        config: multipass::Config {
+            threads: options.prune_threads,
+            ..Default::default()
+        },
+    })?;
+    println!(
+        "prune: {} → {} 列（刪 {}，{:.1}%），{} 趟，{:.0}s（{} 執行緒）",
+        report.rows_out + report.deleted,
+        report.rows_out,
+        report.deleted,
+        100.0 * report.deleted as f64 / (report.rows_out + report.deleted) as f64,
+        report.passes,
+        report.seconds,
+        multipass::resolve_threads(options.prune_threads)
+    );
+    Ok(())
+}
+
 fn run_naer_prepare_command(args: &[String]) -> Result<(), String> {
     let mut input: Option<PathBuf> = None;
     let mut output = PathBuf::from("data/vendor/naer/naer_place_names.csv");
@@ -404,6 +458,9 @@ fn run_release_production(options: &ProductionOptions) -> Result<(), String> {
     if !options.pass_translate {
         run_profiled_stage(options, "translate", || run_translate_production(options))?;
     }
+    if !options.pass_prune {
+        run_profiled_stage(options, "prune", || run_prune_production(options))?;
+    }
     if !options.pass_pack {
         run_profiled_stage(options, "pack", || run_pack_production(options))?;
     }
@@ -453,6 +510,19 @@ fn parse_production_options(args: &[String]) -> Result<ProductionOptions, String
             }
             "--pass-translate" => {
                 options.pass_translate = true;
+                index += 1;
+            }
+            "--threads" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--threads 需要一個數值".to_string())?;
+                options.prune_threads = value
+                    .parse()
+                    .map_err(|_| format!("--threads 必須是整數，收到：{value}"))?;
+                index += 2;
+            }
+            "--pass-prune" => {
+                options.pass_prune = true;
                 index += 1;
             }
             "--pass-pack" => {
@@ -757,6 +827,7 @@ fn print_production_plan(command: &str, options: &ProductionOptions) {
             ("enhance", options.pass_enhance),
             ("locationiq", options.pass_locationiq),
             ("translate", options.pass_translate),
+            ("prune", options.pass_prune),
             ("pack", options.pass_pack),
         ];
         for (step, skipped) in steps {

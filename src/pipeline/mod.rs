@@ -18,6 +18,7 @@ pub mod polars_cities;
 pub mod polars_table;
 pub mod prepare;
 pub mod prepare_download;
+pub mod prune;
 pub mod table;
 pub mod transform_cities_schema;
 pub mod translate;

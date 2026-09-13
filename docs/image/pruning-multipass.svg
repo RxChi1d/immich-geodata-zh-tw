@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 170" aria-label="多趟獨立集刪除：每趟刪掉互不相鄰的一組點，重建圖後再刪一組" >
+  <g>
+    <text x="30" y="20" font-size="12" fill="#6b7681">第 1 趟</text>
+    <g stroke="#6b7681" stroke-width="0.8" opacity="0.35">
+      <line x1="40" y1="60" x2="90" y2="45"/><line x1="90" y1="45" x2="140" y2="62"/>
+      <line x1="40" y1="60" x2="65" y2="105"/><line x1="65" y1="105" x2="115" y2="110"/>
+      <line x1="115" y1="110" x2="140" y2="62"/><line x1="90" y1="45" x2="65" y2="105"/>
+      <line x1="90" y1="45" x2="115" y2="110"/>
+    </g>
+    <circle cx="40" cy="60" r="5" fill="#8E3A48"/><circle cx="115" cy="110" r="5" fill="#8E3A48"/>
+    <circle cx="90" cy="45" r="4.5" fill="#1F5F5B"/><circle cx="140" cy="62" r="4.5" fill="#1F5F5B"/>
+    <circle cx="65" cy="105" r="4.5" fill="#1F5F5B"/>
+    <text x="30" y="150" font-size="11" fill="#6b7681">刪紅色（互不相鄰）</text>
+  </g>
+  <g transform="translate(180,0)">
+    <text x="30" y="20" font-size="12" fill="#6b7681">重建圖</text>
+    <g stroke="#6b7681" stroke-width="0.8" opacity="0.35">
+      <line x1="90" y1="45" x2="140" y2="62"/><line x1="90" y1="45" x2="65" y2="105"/>
+      <line x1="65" y1="105" x2="140" y2="62"/>
+    </g>
+    <circle cx="90" cy="45" r="4.5" fill="#1F5F5B"/><circle cx="140" cy="62" r="4.5" fill="#1F5F5B"/>
+    <circle cx="65" cy="105" r="4.5" fill="#1F5F5B"/>
+    <text x="30" y="150" font-size="11" fill="#6b7681">以剩下的點重算鄰接</text>
+  </g>
+  <g transform="translate(340,0)">
+    <text x="30" y="20" font-size="12" fill="#6b7681">第 2 趟</text>
+    <g stroke="#6b7681" stroke-width="0.8" opacity="0.35">
+      <line x1="90" y1="45" x2="140" y2="62"/><line x1="90" y1="45" x2="65" y2="105"/>
+      <line x1="65" y1="105" x2="140" y2="62"/>
+    </g>
+    <circle cx="90" cy="45" r="5" fill="#8E3A48"/>
+    <circle cx="140" cy="62" r="4.5" fill="#1F5F5B"/><circle cx="65" cy="105" r="4.5" fill="#1F5F5B"/>
+    <text x="30" y="150" font-size="11" fill="#6b7681">再刪一組，直到刪不動</text>
+  </g>
+</svg>
