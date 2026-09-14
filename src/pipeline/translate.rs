@@ -976,6 +976,12 @@ fn translate_cities_rows(
             // metadata 只作為「GeoNames 沒有中文名時」的補位來源，不再覆蓋既有譯名。
             // 此優先序只影響非 handler 國家：TW/JP/KR/TH/ID 的資料由 handler 寫入
             // cities500，不會進到 metadata lookup。
+            //
+            // Reason: 「塌成上一層」指的是**跨出該座標所屬的 city 單位**，不是
+            // 「名字不等於該座標自己的名字」。多個座標共用一個 city 名是 handler
+            // 的常態（印尼平均 211 點共用一個 kabupaten 名），不是缺陷。city 層級
+            // 的判準與驗收指標見 `data/locationiq/README.md` 的「city 應該放哪一個
+            // 行政層級」。
             let existing = alternate_names
                 .get(city.geoname_id())
                 .filter(|value| !value.is_empty())
