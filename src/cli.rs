@@ -92,6 +92,13 @@ struct ProductionOptions {
     alternate_name_file: Option<PathBuf>,
     metadata_folder: PathBuf,
     locationiq_folder: PathBuf,
+    /// `address_fields.json` 的位置。
+    ///
+    /// Reason: 刻意不跟著 `--locationiq-folder` 走。那個旗標是用來搬移 **CSV 產物**
+    /// （相容舊的 `meta_data` 路徑），但欄位設定是 git 追蹤的**輸入**，隨著 repo
+    /// 走而非隨著輸出目錄走。綁在一起的話，照 `docs/*/development.md` 把 CSV 移到
+    /// 自訂目錄的使用者會因為那裡沒有設定檔而整個跑不動。
+    locationiq_address_fields: PathBuf,
     batch_size: u32,
     qps: u32,
     api_key: Option<String>,
@@ -130,6 +137,7 @@ impl Default for ProductionOptions {
             // 大小寫區分，清理者無從判斷哪些檔案可動，因此以目錄分隔。刻意不跟隨
             // --metadata-folder：搬移 handler metadata 時不應連帶移動付費查詢結果。
             locationiq_folder: PathBuf::from("./data/locationiq"),
+            locationiq_address_fields: PathBuf::from("./data/locationiq/address_fields.json"),
             batch_size: 100,
             // Reason: LocationIQ 免費方案同時有 2 req/s 與 60 req/min 兩條限制，
             // 兩者互相矛盾——照 2 req/s 打滿是 120 req/min，必然撞上分鐘上限。
@@ -302,6 +310,7 @@ fn run_locationiq_production(options: &ProductionOptions) -> Result<(), String> 
         let outcome = locationiq::run_production(&locationiq::ProductionLocationiqOptions {
             cities_file: options.output_folder.join("cities500_optimized.txt"),
             output_file,
+            address_fields_file: locationiq_address_fields_path(options),
             country_code: country.clone(),
             batch_size: options.batch_size as usize,
             qps: options.qps,
@@ -317,6 +326,15 @@ fn run_locationiq_production(options: &ProductionOptions) -> Result<(), String> 
         }
     }
     Ok(())
+}
+
+/// `address_fields.json` 的實際取用路徑。
+///
+/// Reason: 與 `locationiq_output_path` 同樣的理由抽成具名函式——只斷言預設值的
+/// 測試擋不住「呼叫端改成 join 到別的目錄」這種改動。設定是 git 追蹤的輸入，
+/// 不得跟著 `--locationiq-folder` 走，這一點必須可被測試直接斷言。
+fn locationiq_address_fields_path(options: &ProductionOptions) -> PathBuf {
+    options.locationiq_address_fields.clone()
 }
 
 /// 某國 LocationIQ 產物的輸出路徑。
@@ -1056,6 +1074,25 @@ mod tests {
         assert_eq!(
             locationiq_output_path(&options, "US"),
             PathBuf::from("./meta_data/US.csv")
+        );
+    }
+
+    /// `address_fields.json` 不跟著 `--locationiq-folder` 走。
+    ///
+    /// Reason: 那個旗標搬的是 CSV 產物，而欄位設定是 git 追蹤的輸入。兩者綁在
+    /// 一起時，照 `docs/*/development.md` 把 CSV 移到自訂目錄的使用者會因為那裡
+    /// 沒有設定檔而完全跑不動。
+    #[test]
+    fn address_fields_path_does_not_follow_locationiq_folder() {
+        let options = parse_production_options(&[
+            "--locationiq-folder".to_string(),
+            "./meta_data".to_string(),
+        ])
+        .unwrap();
+
+        assert_eq!(
+            locationiq_address_fields_path(&options),
+            PathBuf::from("./data/locationiq/address_fields.json")
         );
     }
 
