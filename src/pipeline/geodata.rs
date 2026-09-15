@@ -9,6 +9,12 @@ pub struct GeodataRecord {
     pub longitude: String,
     pub admin_1: String,
     pub admin_2: String,
+    /// 第三級行政區（印尼的 kecamatan、臺灣的村里、南韓的 읍면동）。
+    ///
+    /// Reason: 只有 city 層級設為 `Admin3` 的國家會用到它（見
+    /// `CountryProfile::city_level`）。其餘國家此欄多為空字串，讀進來
+    /// 是為了讓層級選擇可以逐國切換，而不必改讀檔邏輯。
+    pub admin_3: String,
 }
 
 pub fn read_geodata(path: &Path) -> Result<Vec<GeodataRecord>, String> {
@@ -27,6 +33,7 @@ pub fn read_geodata(path: &Path) -> Result<Vec<GeodataRecord>, String> {
                 longitude: row[1].clone(),
                 admin_1: row[3].clone(),
                 admin_2: row[4].clone(),
+                admin_3: row[5].clone(),
             })
         })
         .collect()
@@ -34,7 +41,11 @@ pub fn read_geodata(path: &Path) -> Result<Vec<GeodataRecord>, String> {
 
 pub fn normalize_admin_fields(records: &mut [GeodataRecord]) {
     for record in records {
-        for value in [&mut record.admin_1, &mut record.admin_2] {
+        for value in [
+            &mut record.admin_1,
+            &mut record.admin_2,
+            &mut record.admin_3,
+        ] {
             if matches!(value.as_str(), "" | "\"\"" | "nan" | "None") {
                 value.clear();
             }
@@ -78,12 +89,14 @@ mod tests {
                 longitude: String::new(),
                 admin_1: "臺北市".to_string(),
                 admin_2: String::new(),
+                admin_3: String::new(),
             },
             GeodataRecord {
                 latitude: String::new(),
                 longitude: String::new(),
                 admin_1: "臺中市".to_string(),
                 admin_2: String::new(),
+                admin_3: String::new(),
             },
         ];
 

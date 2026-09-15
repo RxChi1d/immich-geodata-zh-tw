@@ -27,7 +27,12 @@ BIG 圖資為印尼官方公開地理資料。本專案**僅將其作為衍生�
 ## 行政區層級
 
 > [!NOTE]
-> `admin_3` 與 `admin_4` 只存在於本專案的中介 CSV，用於保留來源行政層級供追溯與除錯，不會輸出到 Immich 使用的 cities500。Immich 顯示的最細層級是 `admin_2`。代表點密度取決於 extract 的來源 feature 顆粒度（印尼為 desa，且 multipart 圖徵會逐 part 拆列），與這兩個欄位無關。
+> Immich 顯示的「城市」取自 `admin_3`（Kecamatan，郡），不是 `admin_2`。
+> 選擇理由與四個判準見 [City 層級的選擇條件](city-level-criteria.md)——
+> kabupaten 平均 3,705 km²、每個名字涵蓋 53.6 萬人，三格無法定位座標
+> （烏布會顯示成「吉亞尼亞爾縣」）。`admin_4`（Desa）只存在於本專案的中介
+> CSV，用於保留來源層級供追溯與除錯。代表點密度取決於 extract 的來源 feature
+> 顆粒度（印尼為 desa，且 multipart 圖徵會逐 part 拆列），與顯示層級無關。
 
 
 BIG desa 圖資的屬性提供下列行政層級：
@@ -44,10 +49,24 @@ BIG desa 圖資的屬性提供下列行政層級：
 | `country` | 固定值 | `印尼` |
 | `admin_1` | Wikidata / `WADMPR` | 省的繁中翻譯；缺少中文時回退 BIG 官方印尼文 |
 | `admin_2` | Wikidata / `WADMKK` | 縣／市的繁中翻譯；缺少中文時回退 BIG 官方印尼文 |
-| `admin_3` | `WADMKC` | 郡（Kecamatan）官方印尼文原文 |
+| `admin_3` | 對照表 / `WADMKC` | 郡（Kecamatan）繁中譯名，查無時回退 BIG 原文。**Immich 顯示的城市名** |
 | `admin_4` | `WADMKD` | 村（Desa / Kelurahan）官方印尼文原文 |
 
-比照 TH / KR handler，`admin_1` / `admin_2` 為翻譯後繁中，`admin_3` 以下沿用印尼文原文。
+比照 TH / KR handler，`admin_1` / `admin_2` 走 Wikidata translator；`admin_3` 改走
+vendored 對照表（下段）；`admin_4` 不翻譯，沿用印尼文原文。
+
+**`admin_3` 是 Immich 顯示的城市名**，譯名取自
+`data/vendor/indonesia/kecamatan_zh.csv`（NAER → Wikidata → OSM，286 個
+kecamatan），查無則回退 BIG 印尼文原文。全國覆蓋 286/6,907（4.1%）、
+5,433/107,961 個代表點（5.0%），集中在會拍照的地方——雅加達 39/44 個
+kecamatan、峇里島 15/57、西加里曼丹 43/173。來源與收錄規則見該表的 README。
+
+改層級的代價記在 [City 層級的選擇條件](city-level-criteria.md) 第 4 節：印尼
+相異城市名由 514 增為 6,908，剪枝率由 71.5% 降到 23.2%，全球輸出多出 53,359 列。
+
+`admin_3` 為空的列（本批次 115 筆，全為「Area Tidak Terdefinisi」未定義區）在
+`transform_cities_schema` 階段跳過並計數輸出，不退回 `admin_2`——退回會讓同一
+國混用兩種層級。
 
 `admin_2` 的譯名查表分三段：先以（省, 縣市）配對查詢；查不到時改用全域同名後備表
 （同一個 `WADMKK` 在各省譯名一致者才收錄，譯名不一致者剔除以免張冠李戴）；仍無結果
@@ -71,6 +90,13 @@ BIG desa 圖資的屬性提供下列行政層級：
 與 Admin 2 走標準 P131 鏈驗證，並以 instance-of（P31）類別過濾候選**；缺少可靠
 中文時回退 BIG 官方印尼文。名稱決策同樣分為兩層：先決定是否信任 Wikidata 結果，
 再決定採用哪一個語言的 label。
+
+> [!NOTE]
+> **Admin 3 不走這條流程。** 它以 `data/vendor/indonesia/kecamatan_zh.csv`
+> 查表（名稱 + 座標消歧），原因是 kecamatan 的中文標籤多掛在同名的聚落實體上，
+> 本節的 `P31` 類別白名單會把它們擋掉——`乌布` 在 `P31=town` 的 `Q210654`，
+> kecamatan 實體 `Q3274172` 沒有中文標籤。該表的來源、優先序與收錄規則見
+> `data/vendor/indonesia/README.md`。
 
 ### 第一層：是否信任 Wikidata 結果（P131 行政隸屬驗證）
 
@@ -317,8 +343,13 @@ WIB，確保問題在發版前暴露。
 - 印尼 Admin 1 / Admin 2 會使用 Wikidata 繁中翻譯，兩級都須通過 P131 行政隸屬
   驗證（Admin 1 對印尼 `Q252`、Admin 2 對所屬省的 QID）；驗證失敗或 Wikidata
   沒有可靠中文結果時，回退至 BIG 官方印尼文。
-- 印尼 Admin 3（郡）/ Admin 4（村）保留 BIG 官方印尼文，避免大量低層級地名在
-  Wikidata 中出現錯配或不穩定翻譯。
+- 印尼 Admin 3（郡）/ Admin 4（村）目前保留 BIG 官方印尼文。2026-09-14 複查：
+  以名稱查 Wikidata（不限 `P31` 類別）有 440/6,908（6.4%）的 kecamatan 名稱
+  拿得到中文標籤，但中文標籤多掛在同名的聚落實體上（乌布在 `P31=town` 的
+  `Q210654`、水明漾在 kelurahan 的 `Q1026424`），而放寬類別會引入語言、族群
+  與上一層行政區的誤配（`Adonara → 阿多纳拉语`、`Bandung → 萬隆縣`），必須經
+  P131 驗證篩選。Admin 3 已成為 Immich 顯示的城市名，接上譯名的評估見
+  [City 層級的選擇條件](city-level-criteria.md) 第 4 節。
 - BIG 原始向量圖資不在本專案散布範圍內；僅散布反向地理編碼最佳化後的衍生 metadata。
 - 所有座標決策、命中率與搜尋語言實驗皆以 `seed=42` 固定隨機種子，結果可重現。
 - 在本機重現提取流程的指令請見[本地資料處理](development.md#2-提取原始地理資料)。

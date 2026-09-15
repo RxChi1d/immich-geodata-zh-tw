@@ -250,6 +250,28 @@ cargo run --release -- release \
   --output-folder /tmp/rust-release-smoke
 ```
 
+### City 層級的選擇條件（兩條路線共用）
+
+新增任何國家——官方圖資 handler 或 LocationIQ 路線——**都要先決定 city 放哪一個
+行政層級**，依 `docs/zh-tw/city-level-criteria.md` 的四個條件逐層檢驗，並把實測
+結果補進該文件：
+
+| 條件 | 門檻 |
+| :--- | :--- |
+| 辨識性 | 「國 + 一級行政區 + city」三格能讓人認出座標在哪裡（與中文無關） |
+| 密度 | 剪枝前每單位點數中位數 ≥ 5、只有 1 點的單位 < 10% |
+| 一致性 | 同一國只能用一個層級 |
+| 權威中文名可得 | 有中文名的單位 ≥ 80%，不接受機器音譯 |
+
+Reason: Immich 只讀 `name`、`admin1Name` 與國碼，`admin2_code` 以下完全不讀
+（`server/src/repositories/map.repository.ts`），所以層級選錯無法在後續階段補救。
+密度條件來自最近鄰查詢——標籤邊界就是這些點的 Voronoi 邊界，單位只有一個點時
+分界與真實行政區界無關；剪枝只刪內部點，故密度須在剪枝前衡量。
+
+兩條路線的實作位置不同：handler 由 `country_profile` 的 `city_level` 指定
+（`transform_cities_schema.rs`），LocationIQ 由 `data/locationiq/address_fields.json`
+的 `city_keys` 指定。
+
 ### 擴充新國家
 
 1. 在 `src/pipeline/extract/handlers.rs` 新增或拆分該國 handler。
@@ -312,7 +334,9 @@ cargo test
 
 1. **新增國家前先抽樣驗證粒度**。locationiq 階段取 Nominatim 回應的 `city`
    當城市名（`city` 為空時退回 `county`）。聚落標記稀疏的國家會退回行政區，
-   使城市名變成轄區名。準則與已評估國家見 `data/locationiq/README.md`。
+   使城市名變成轄區名。層級判準見「架構說明」的〈City 層級的選擇條件〉與
+   `docs/zh-tw/city-level-criteria.md`；抽樣流程與已評估國家見
+   `data/locationiq/README.md`。
 2. **在本地跑滿再提交 CSV**，CI 只做增量。從零跑一個國家可能撞上 job 時限
    與每日額度，且失敗時難以除錯。額度用完時 CLI 會保留已查結果並中止，換一把
    金鑰或等額度重置後重跑同一道指令即可續查——已查過的座標會自動跳過。
