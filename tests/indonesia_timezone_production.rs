@@ -18,7 +18,7 @@ use std::path::Path;
 
 /// cities500 schema 中 timezone 欄位的索引（第 18 欄，0-based 17）。
 const TIMEZONE_INDEX: usize = 17;
-/// cities500 schema 中 name 欄位（印尼為 kecamatan 原文）的索引。
+/// cities500 schema 中 name 欄位（印尼為 kecamatan 名，有譯名者為繁中）的索引。
 const NAME_INDEX: usize = 1;
 
 #[test]
@@ -65,10 +65,13 @@ fn production_id_geodata_resolves_all_timezones() {
     // Reason: 三個名稱都經查證在 id_geodata.csv 中跨省唯一，所以可以斷言
     // 「同名的每一列」都是該時區——若日後 BIG 圖資出現同名 kecamatan，
     // 這個斷言會失敗，而不是靜默抽到別省的列。
+    //
+    // 取譯名而非 BIG 原文（Ubud / Gambir / Abepura），因為 admin_3 現在會經
+    // data/vendor/indonesia/kecamatan_zh.csv 查表；這三筆都命中譯名表。
     let representative = [
-        ("Ubud", "Asia/Makassar"),    // 巴釐省（WITA）
-        ("Gambir", "Asia/Jakarta"),   // 雅加達（WIB）
-        ("Abepura", "Asia/Jayapura"), // 巴布亞省（WIT）
+        ("乌布", "Asia/Makassar"),     // 巴釐省（WITA），Ubud 的譯名
+        ("甘密埔", "Asia/Jakarta"),    // 雅加達（WIB），Gambir 的譯名
+        ("阿貝普拉", "Asia/Jayapura"), // 巴布亞省（WIT），Abepura 的譯名
     ];
     for (kecamatan, expected_timezone) in representative {
         let matched: Vec<&Vec<String>> = rows
