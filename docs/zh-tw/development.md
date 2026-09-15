@@ -137,7 +137,8 @@ mkdir -p geoname_data/idn_oid
 for ((lo=0; lo<93730; lo+=1000)); do
   hi=$((lo+1000))
   f="geoname_data/idn_oid/oid_$(printf '%06d' $lo).geojson"
-  [ -s "$f" ] && head -c 40 "$f" | grep -q '{' && continue
+  # 驗收條件是「能完整解析」，不是「開頭是 {」——截斷的檔案開頭也是 {
+  [ -s "$f" ] && python3 -c "import json,sys;json.load(open(sys.argv[1]))['features']" "$f" 2>/dev/null && continue
   curl -sS --max-time 300 -G "$L/query" \
     --data-urlencode "where=OBJECTID>$lo AND OBJECTID<=$hi" \
     --data-urlencode "outFields=WADMPR,WADMKK,WADMKC,WADMKD" \
@@ -147,16 +148,33 @@ for ((lo=0; lo<93730; lo+=1000)); do
 done
 
 # 3. 合併為單一 GeoJSON，並核對 feature 數與省份數
+# 逐檔解析、逐檔寫出，不把全部 features 讀進記憶體
+# Reason: 每個 feature 解析後約 167 KB，84,503 筆需約 13 GB，序列化時峰值再翻倍
 python3 - <<'EOF'
-import json, glob
-feats = []
-for f in sorted(glob.glob('geoname_data/idn_oid/*.geojson')):
-    feats.extend(json.load(open(f, encoding='utf-8'))['features'])
-print('feature 數:', len(feats),
-      '| 省份數:', len({x['properties']['WADMPR'] for x in feats}))
-json.dump({'type': 'FeatureCollection', 'features': feats},
-          open('geoname_data/idn_desa_<版本>.geojson', 'w', encoding='utf-8'),
-          ensure_ascii=False)
+import glob, json, os, sys
+OUT = 'geoname_data/idn_desa_<版本>.geojson'
+count, provinces, bad = 0, set(), []
+with open(OUT, 'w', encoding='utf-8') as out:
+    out.write('{"type":"FeatureCollection","features":[')
+    first = True
+    for path in sorted(glob.glob('geoname_data/idn_oid/*.geojson')):
+        try:
+            features = json.load(open(path, encoding='utf-8'))['features']
+        except (json.JSONDecodeError, KeyError):
+            bad.append(path)
+            continue
+        for feature in features:
+            if not first:
+                out.write(',')
+            first = False
+            out.write(json.dumps(feature, ensure_ascii=False, separators=(',', ':')))
+            count += 1
+            provinces.add(feature['properties']['WADMPR'])
+    out.write(']}')
+print('feature 數:', count, '| 省份數:', len(provinces), '| 無法解析:', len(bad))
+if bad or count != 84503:          # 總數請換成步驟 1 回報的值
+    os.remove(OUT)
+    sys.exit('核對不通過，已刪除輸出檔——重抓失敗批次後再合併')
 EOF
 
 # 4. 執行提取命令
@@ -166,10 +184,16 @@ cargo run --release -- extract --country ID \
 ```
 
 > [!IMPORTANT]
-> 服務端失敗時會回傳 HTTP 200 與一段 HTML 錯誤頁，而不是 HTTP 錯誤碼。每批下載後
-> 都必須確認檔案開頭是 `{`（上述迴圈已內含此檢查），合併前也要核對 feature 數與
-> 步驟 1 回報的總數一致，否則會靜默漏抓資料。單批 1000 筆仍持續失敗的區間，改以
-> 250 筆為單位重抓即可。
+> 這一步有兩種**靜默**失敗，兩種都必須擋：
+>
+> 1. **HTML 錯誤頁**：服務端失敗時回傳 HTTP 200 與一段 HTML，而不是 HTTP 錯誤碼。
+> 2. **截斷**：連線中途斷掉的檔案是合法的 JSON 前綴，**開頭也是 `{`**。2026-09-15
+>    實測 94 批中有 13 個 5–17 MB 的大檔屬此類，全部通過了「開頭是 `{`」的檢查，
+>    直到合併階段才被發現（少 10,750 個 feature、缺一個省）。
+>
+> 因此驗收條件是「**能被 `json.load` 完整解析且含 `features`**」，不是檔案開頭。
+> 合併前仍要核對 feature 數與省份數與步驟 1 回報的一致。單批 1000 筆持續失敗的
+> 區間改以 250 筆為單位重抓；仍失敗者再切半。
 >
 > OBJECTID 並非連續，上限（本次為 93730）大於 feature 總數（84503）屬正常現象。
 
