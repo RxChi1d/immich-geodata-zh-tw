@@ -11,6 +11,7 @@ use std::time::Instant;
 mod geometry;
 mod handlers;
 mod indonesia;
+mod indonesia_kecamatan;
 mod indonesia_normalize;
 mod indonesia_wikidata;
 mod korea_wikidata;

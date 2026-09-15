@@ -91,7 +91,9 @@ fn indonesia_geospatial_fixture_extracts_translated_rows() {
     //   (1) 雅加達城區「Kota Adm.」前綴正規化後翻譯（中雅加達）
     //   (2) 千島群島「Adm. Kep. Seribu」前綴正規化後翻譯（千島群島）
     //   (3) Kota/Kabupaten 同名對（萬隆市 vs 萬隆縣）以 parent-scoped 查詢區分
-    //   (4) admin1/admin2 走繁中翻譯、admin3/admin4 沿用 BIG 原文
+    //   (4) admin1/admin2 走 Wikidata 繁中翻譯；admin3 走 vendored 譯名表
+    //       （Gambir → 甘密埔 命中，其餘查無譯名者回退 BIG 原文，兩條路徑都涵蓋）；
+    //       admin4 一律不翻譯——表中雖有 Gambir 的譯名，admin_4 仍保持原文
     //   (5) MultiPolygon（馬魯古／安汶）每 part 各取 centroid 輸出一列
     //       （兩列座標不同，不落海）
     //   (6) WADMPR/WADMKK 空白者（未定義行政區）被過濾不輸出
@@ -104,7 +106,7 @@ fn indonesia_geospatial_fixture_extracts_translated_rows() {
             "-8.67999994,115.26,印尼,峇里省,登巴薩,Denpasar Selatan,Sanur",
             "-6.89999997,107.61,印尼,西爪哇省,萬隆市,Coblong,Lebak Siliwangi",
             "-6.91999997,107.6,印尼,西爪哇省,萬隆縣,Cicendo,Pasirkaliki",
-            "-6.16999998,106.82,印尼,雅加達,中雅加達,Gambir,Gambir",
+            "-6.16999998,106.82,印尼,雅加達,中雅加達,甘密埔,Gambir",
             "-5.72999999,106.58,印尼,雅加達,千島群島,Kepulauan Seribu Utara,Pulau Kelapa",
             "-3.70000002,128.19,印尼,馬魯古省,安汶,Sirimau,Batu Merah",
             "-3.64000002,128.31,印尼,馬魯古省,安汶,Sirimau,Batu Merah",

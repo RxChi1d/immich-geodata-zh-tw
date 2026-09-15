@@ -2,7 +2,14 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use super::indonesia::indonesia_feature_rows;
+use super::indonesia_kecamatan::KecamatanNames;
 use super::indonesia_wikidata::build_indonesia_wikidata_cache;
+
+/// 印尼 kecamatan 繁中譯名對照表（vendored）。
+///
+/// Reason: 與 NAER 譯名表同樣放在 data/vendor/——離線彙整、進 git、不在
+/// extract 當下打外部 API，避免譯名隨 Wikidata/OSM 當下狀態漂移。
+const INDONESIA_KECAMATAN_TABLE: &str = "data/vendor/indonesia/kecamatan_zh.csv";
 use super::korea_wikidata::build_korea_wikidata_cache;
 use super::label_sanitize::{
     is_mixed_script, is_valid_chinese_translation, strip_trailing_parenthetical,
@@ -63,8 +70,18 @@ impl Country {
                 } else {
                     build_indonesia_wikidata_cache(features, &wikidata_cache_path("ID"))?
                 };
+                let indonesia_kecamatan_names =
+                    KecamatanNames::load(Path::new(INDONESIA_KECAMATAN_TABLE))?;
+                if indonesia_kecamatan_names.is_empty() {
+                    // Reason: 表不存在時全部 kecamatan 回退印尼文，輸出不會壞但
+                    // 中文會整層消失；沉默失敗最難察覺，所以明確留下訊號。
+                    println!(
+                        "stage=extract country=ID kecamatan_table=missing path={INDONESIA_KECAMATAN_TABLE}"
+                    );
+                }
                 Ok(ExtractContext {
                     indonesia_translations,
+                    indonesia_kecamatan_names,
                     ..ExtractContext::default()
                 })
             }
@@ -87,7 +104,11 @@ impl Country {
                 .iter()
                 .map(|feature| thailand_feature_row(feature, &context.thailand_translations))
                 .collect(),
-            Self::Indonesia => indonesia_feature_rows(features, &context.indonesia_translations),
+            Self::Indonesia => indonesia_feature_rows(
+                features,
+                &context.indonesia_translations,
+                &context.indonesia_kecamatan_names,
+            ),
         }
     }
 }

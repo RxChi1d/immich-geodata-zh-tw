@@ -1,3 +1,4 @@
+use super::indonesia_kecamatan::KecamatanNames;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -284,6 +285,7 @@ pub(super) struct ExtractContext {
     pub(super) korea_translations: WikidataTranslations,
     pub(super) thailand_translations: WikidataTranslations,
     pub(super) indonesia_translations: WikidataTranslations,
+    pub(super) indonesia_kecamatan_names: KecamatanNames,
 }
 
 #[derive(Clone, Copy, Debug)]
