@@ -18,7 +18,7 @@ use std::path::Path;
 
 /// cities500 schema 中 timezone 欄位的索引（第 18 欄，0-based 17）。
 const TIMEZONE_INDEX: usize = 17;
-/// cities500 schema 中 name 欄位（admin_2 譯名）的索引。
+/// cities500 schema 中 name 欄位（印尼為 kecamatan 原文）的索引。
 const NAME_INDEX: usize = 1;
 
 #[test]
@@ -60,20 +60,30 @@ fn production_id_geodata_resolves_all_timezones() {
         "WIB 應為最大宗（實際分布：{by_timezone:?}）"
     );
 
-    // 代表省份歸屬抽查：以 admin_2 譯名（name 欄）找各時區代表列。
+    // 代表省份歸屬抽查：以 kecamatan 名（name 欄）找各時區代表列。
+    //
+    // Reason: 三個名稱都經查證在 id_geodata.csv 中跨省唯一，所以可以斷言
+    // 「同名的每一列」都是該時區——若日後 BIG 圖資出現同名 kecamatan，
+    // 這個斷言會失敗，而不是靜默抽到別省的列。
     let representative = [
-        ("丹帕沙", "Asia/Makassar"),    // 巴釐省（WITA）
-        ("中雅加達市", "Asia/Jakarta"), // 雅加達（WIB）
-        ("嘉雅浦拉", "Asia/Jayapura"),  // 巴布亞省（WIT）
+        ("Ubud", "Asia/Makassar"),    // 巴釐省（WITA）
+        ("Gambir", "Asia/Jakarta"),   // 雅加達（WIB）
+        ("Abepura", "Asia/Jayapura"), // 巴布亞省（WIT）
     ];
-    for (admin2, expected_timezone) in representative {
-        let row = rows
+    for (kecamatan, expected_timezone) in representative {
+        let matched: Vec<&Vec<String>> = rows
             .iter()
-            .find(|row| row[NAME_INDEX] == admin2)
-            .unwrap_or_else(|| panic!("應存在 admin_2 為「{admin2}」的列"));
-        assert_eq!(
-            row[TIMEZONE_INDEX], expected_timezone,
-            "「{admin2}」的時區應為 {expected_timezone}"
+            .filter(|row| row[NAME_INDEX] == kecamatan)
+            .collect();
+        assert!(
+            !matched.is_empty(),
+            "應存在 kecamatan 為「{kecamatan}」的列"
         );
+        for row in matched {
+            assert_eq!(
+                row[TIMEZONE_INDEX], expected_timezone,
+                "「{kecamatan}」的時區應為 {expected_timezone}"
+            );
+        }
     }
 }

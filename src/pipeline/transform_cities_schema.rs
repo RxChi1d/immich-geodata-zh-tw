@@ -1,7 +1,7 @@
 use crate::cli::RunOptions;
 use crate::pipeline::fixtures::{Fixture, load_fixtures};
 use crate::pipeline::geodata::{
-    admin1_mapping, normalize_admin_fields, read_geodata, sort_for_cities,
+    GeodataRecord, admin1_mapping, normalize_admin_fields, read_geodata, sort_for_cities,
 };
 use crate::pipeline::polars_table::write_cities_rows;
 use crate::pipeline::table::format_coordinate;
@@ -89,8 +89,18 @@ pub fn build_city_rows_from_geodata(
     sort_for_cities(&mut records);
 
     let profile = country_profile(country_code)?;
+    let city_level = profile.city_level;
     let mut rows = Vec::new();
-    for (index, record) in records.iter().enumerate() {
+    let mut skipped_without_city = 0_usize;
+    for record in records.iter() {
+        // Reason: 選定層級沒有值的列不能收——`name` 為空時 Immich 顯示不出城市，
+        // 而退回上一層會讓同一國混用兩種層級（見 city-level-criteria 條件 3）。
+        // 印尼實測 115 列屬此類，全為 BIG 圖資的「Area Tidak Terdefinisi」未定義區。
+        let city_name = city_level.name_of(record);
+        if city_name.is_empty() {
+            skipped_without_city += 1;
+            continue;
+        }
         let admin1_code = admin1_code_by_name
             .get(&record.admin_1)
             .cloned()
@@ -99,15 +109,19 @@ pub fn build_city_rows_from_geodata(
         //         已是 handler 最終省名（s2t + 補省正規化後）；indonesia_timezone
         //         以「最終省名 → WADMPR 原文 → 時區」解析，原文為權威 key。
         let timezone = profile.timezone_for_admin1(&record.admin_1)?;
+        // Reason: ID 用「已產出列數」而非記錄索引。呼叫端以
+        // `max_id = base_id + rows.len() - 1` 推進下一國的起始 ID
+        // （`cities500_load::replace_country_cities`），若這裡用記錄索引，
+        // 被跳過的列會讓實際 ID 超出保留區間而與下一國撞號。
         rows.push(vec![
-            (base_geoname_id + index as i64).to_string(),
-            record.admin_2.clone(),
-            record.admin_2.clone(),
+            (base_geoname_id + rows.len() as i64).to_string(),
+            city_name.to_string(),
+            city_name.to_string(),
             String::new(),
             format_city_coordinate(&record.latitude, coordinate_format)?,
             format_city_coordinate(&record.longitude, coordinate_format)?,
             "A".to_string(),
-            "ADM2".to_string(),
+            city_level.feature_code().to_string(),
             country_code.to_string(),
             String::new(),
             admin1_code,
@@ -120,6 +134,12 @@ pub fn build_city_rows_from_geodata(
             timezone.to_string(),
             modification_date.to_string(),
         ]);
+    }
+    if skipped_without_city > 0 {
+        println!(
+            "stage=transform_cities_schema country={country_code} city_level={city_level:?} \
+             skipped_without_city={skipped_without_city}"
+        );
     }
     Ok(rows)
 }
@@ -144,11 +164,45 @@ fn format_city_coordinate(
     }
 }
 
+/// city（Immich 顯示的城市名）取自哪一個行政層級。
+///
+/// Reason: 層級的選擇條件見 `docs/zh-tw/city-level-criteria.md`。不設預設值——
+/// 新增國家必須在 `country_profile` 明示，否則會默默沿用別國的層級，而
+/// Immich 只讀 `name`／`admin1`／國碼，選錯之後沒有任何階段能補救。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CityLevel {
+    /// 第二級行政區：臺灣鄉鎮市區、日本市区町村、南韓 시군구、泰國 อำเภอ。
+    Admin2,
+    /// 第三級行政區：印尼 kecamatan。
+    Admin3,
+}
+
+impl CityLevel {
+    /// 取該層級的名稱；空字串代表這一列在此層級沒有行政區。
+    fn name_of<'a>(&self, record: &'a GeodataRecord) -> &'a str {
+        match self {
+            Self::Admin2 => &record.admin_2,
+            Self::Admin3 => &record.admin_3,
+        }
+    }
+
+    /// GeoNames feature code，須落在 `polars_cities::ADMIN_CODES` 白名單內，
+    /// 否則該列會在 cities500 收點階段被丟掉。
+    fn feature_code(&self) -> &'static str {
+        match self {
+            Self::Admin2 => "ADM2",
+            Self::Admin3 => "ADM3",
+        }
+    }
+}
+
 // Reason: 不衍生 PartialEq/Eq——欄位含函式指標，指標相等性無實質意義
 //         （編譯器警告），且 CountryProfile 不需要比較。
 #[derive(Debug, Clone, Copy)]
 pub struct CountryProfile {
     pub country_name: &'static str,
+    /// city 取自哪一個行政層級。
+    pub city_level: CityLevel,
     /// 國家預設時區（單一時區國家）。
     ///
     /// 多時區國家（印尼）以 `timezone_for_admin1` 依省解析；解析失敗
@@ -185,26 +239,36 @@ pub fn country_profile(country_code: &str) -> Result<CountryProfile, String> {
     match country_code {
         "TW" => Ok(CountryProfile {
             country_name: "臺灣",
+            city_level: CityLevel::Admin2,
             timezone: "Asia/Taipei",
             timezone_resolver: None,
         }),
         "JP" => Ok(CountryProfile {
             country_name: "日本",
+            city_level: CityLevel::Admin2,
             timezone: "Asia/Tokyo",
             timezone_resolver: None,
         }),
         "KR" => Ok(CountryProfile {
             country_name: "南韓",
+            city_level: CityLevel::Admin2,
             timezone: "Asia/Seoul",
             timezone_resolver: None,
         }),
         "TH" => Ok(CountryProfile {
             country_name: "泰國",
+            city_level: CityLevel::Admin2,
             timezone: "Asia/Bangkok",
             timezone_resolver: None,
         }),
         "ID" => Ok(CountryProfile {
             country_name: "印尼",
+            // Reason: kabupaten/kota 平均 3,705 km²，三格無法定位座標——烏布顯示
+            //         「巴釐省・吉亞尼亞爾縣」，而那不是任何人用來指稱該地的名字。
+            //         kecamatan 通過辨識性、密度（中位數 11 點、單點單位 0%）與
+            //         一致性；權威中文名不可得（Wikidata 約 5%、NAER 2.6%），
+            //         已裁決接受印尼文原文，詳見 docs/zh-tw/city-level-criteria.md。
+            city_level: CityLevel::Admin3,
             // Reason: 印尼跨 WIB/WITA/WIT 三時區，per-province 解析見
             //         indonesia_timezone；後備預設取最多省份的 WIB。
             timezone: "Asia/Jakarta",
@@ -242,6 +306,72 @@ mod tests {
             format_city_coordinate("24.00000000", CoordinateFormat::Compact).unwrap(),
             "24.0"
         );
+    }
+
+    /// 各國的 city 層級必須是明示的，且與 `docs/zh-tw/city-level-criteria.md`
+    /// 第 3 節的實測表一致。
+    #[test]
+    fn registered_city_levels_match_documented_decision() {
+        for country in ["TW", "JP", "KR", "TH"] {
+            assert_eq!(
+                country_profile(country).unwrap().city_level,
+                CityLevel::Admin2,
+                "{country} 的 city 應取第二級行政區"
+            );
+        }
+        assert_eq!(
+            country_profile("ID").unwrap().city_level,
+            CityLevel::Admin3,
+            "印尼的 city 應取 kecamatan（第三級）"
+        );
+    }
+
+    #[test]
+    fn city_level_feature_code_stays_in_admin_whitelist() {
+        // Reason: feature code 不在 polars_cities::ADMIN_CODES 白名單內時，
+        // handler 產生的列會在 cities500 收點階段被整批丟掉而沒有錯誤訊息。
+        for (level, expected) in [(CityLevel::Admin2, "ADM2"), (CityLevel::Admin3, "ADM3")] {
+            assert_eq!(level.feature_code(), expected);
+            let mut row = vec![String::new(); crate::pipeline::table::CITIES_COLUMNS.len()];
+            row[6] = "A".to_string();
+            row[7] = level.feature_code().to_string();
+            row[8] = "ID".to_string();
+            assert!(
+                crate::pipeline::polars_cities::is_admitted_city_row(&row),
+                "{expected} 應在 cities500 收點白名單內"
+            );
+        }
+    }
+
+    /// 選定層級沒有值的列要跳過，且產出的 geoname_id 必須連續。
+    ///
+    /// Reason: 呼叫端以 `max_id = base_id + rows.len() - 1` 推進下一國的起始
+    /// ID。若這裡改用記錄索引編號，被跳過的列會讓實際 ID 超出保留區間，
+    /// 與下一個國家撞號——而 geoname_id 撞號沒有任何守衛會擋。
+    #[test]
+    fn rows_missing_city_level_value_are_skipped_with_contiguous_ids() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("id_geodata.csv");
+        std::fs::write(
+            &input,
+            "latitude,longitude,country,admin_1,admin_2,admin_3,admin_4\n\
+             1.0,101.0,ID,巴釐省,巴東縣,,Area Tidak Terdefinisi\n\
+             2.0,102.0,ID,巴釐省,巴東縣,Kuta,Legian\n\
+             3.0,103.0,ID,巴釐省,吉亞尼亞爾縣,Ubud,Ubud\n",
+        )
+        .unwrap();
+
+        let rows =
+            build_city_rows_from_geodata(&input, "ID", 500, "2026-06-06", CoordinateFormat::Fixed)
+                .unwrap();
+
+        // sort_for_cities 依 (admin_1, admin_2) 排序，「吉亞尼亞爾縣」排在
+        // 「巴東縣」之前，所以 Ubud 先於 Kuta。
+        let names: Vec<&str> = rows.iter().map(|row| row[1].as_str()).collect();
+        assert_eq!(names, vec!["Ubud", "Kuta"], "空 admin_3 的列應被跳過");
+        let ids: Vec<&str> = rows.iter().map(|row| row[0].as_str()).collect();
+        assert_eq!(ids, vec!["500", "501"], "ID 必須連續，不留被跳過列的空號");
+        assert!(rows.iter().all(|row| row[7] == "ADM3"));
     }
 
     #[test]
