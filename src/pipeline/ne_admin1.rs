@@ -15,6 +15,7 @@
 //! 對接還有一個好處：上游把行政區「名稱」寫錯不影響對接結果。
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::fs;
 use std::path::Path;
 
@@ -22,6 +23,8 @@ use geo::algorithm::bounding_rect::BoundingRect;
 use geo::algorithm::closest_point::ClosestPoint;
 use geo::algorithm::contains::Contains;
 use geo::{Closest, Coord, Distance, Haversine, LineString, MultiPolygon, Point, Polygon, Rect};
+use serde::Deserialize;
+use serde::de::{self, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde_json::Value;
 
 /// 點位查詢結果。
@@ -68,24 +71,24 @@ impl NeAdmin1Index {
     /// `admin1CodesASCII` 沒有對應列。若當成有效 `gn_id` 收下，後續對接會
     /// 查不到代碼而無聲產生零個映射，比在此略過更難診斷。
     pub fn from_geojson_str(content: &str) -> Result<Self, String> {
-        let root: Value = serde_json::from_str(content)
+        let collection: FeatureCollection = serde_json::from_str(content)
             .map_err(|error| format!("NE admin-1 GeoJSON 解析失敗：{error}"))?;
-        let features = root
-            .get("features")
-            .and_then(Value::as_array)
+        let features = collection
+            .features
             .ok_or_else(|| "NE admin-1 GeoJSON 缺少 features 陣列".to_string())?;
 
         let mut polygons_by_id: BTreeMap<i64, Vec<Polygon<f64>>> = BTreeMap::new();
         for feature in features {
             let Some(gn_id) = feature
-                .get("properties")
-                .and_then(|properties| properties.get("gn_id"))
+                .properties
+                .and_then(|properties| properties.gn_id)
+                .as_ref()
                 .and_then(Value::as_i64)
                 .filter(|value| *value > 0)
             else {
                 continue;
             };
-            let Some(geometry) = feature.get("geometry") else {
+            let Some(geometry) = feature.geometry else {
                 continue;
             };
             let polygons = polygons_from_geometry(geometry)?;
@@ -173,65 +176,231 @@ fn ring_distance_km(ring: &LineString<f64>, point: &Point<f64>) -> Option<f64> {
     }
 }
 
-fn polygons_from_geometry(geometry: &Value) -> Result<Vec<Polygon<f64>>, String> {
-    let geometry_type = geometry
-        .get("type")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    let coordinates = match geometry.get("coordinates") {
-        Some(value) => value,
-        None => return Ok(Vec::new()),
-    };
-    match geometry_type {
-        "Polygon" => Ok(vec![polygon_from_rings(coordinates)?]),
-        "MultiPolygon" => coordinates
-            .as_array()
-            .ok_or_else(|| "GeoJSON MultiPolygon coordinates 格式錯誤".to_string())?
-            .iter()
-            .map(polygon_from_rings)
-            .collect(),
+/// GeoJSON 的 `FeatureCollection` 外殼。
+///
+/// Reason: `features` 以 `Option` 接住，缺欄位時才能回傳專案自訂的中文訊息，
+/// 而不是 serde 的 `missing field \`features\``。
+#[derive(Deserialize)]
+struct FeatureCollection {
+    #[serde(default)]
+    features: Option<Vec<Feature>>,
+}
+
+#[derive(Deserialize)]
+struct Feature {
+    #[serde(default)]
+    properties: Option<Properties>,
+    #[serde(default)]
+    geometry: Option<Geometry>,
+}
+
+/// NE feature 的屬性；除 `gn_id` 外一律略過。
+///
+/// Reason: `gn_id` 以 `Value` 而非 `i64` 接住，才能保留舊版
+/// `Value::as_i64()` 的寬容度——上游把它寫成 `null`、浮點數或字串時都只是
+/// 「取不到值」而略過該 feature，不會讓整份檔案解析失敗。全檔僅 4,596 個，
+/// 這裡用 `Value` 的記憶體成本可忽略。
+#[derive(Deserialize)]
+struct Properties {
+    #[serde(default)]
+    gn_id: Option<Value>,
+}
+
+/// 面狀幾何。非 Polygon／MultiPolygon 一律歸為 `Unsupported`。
+enum Geometry {
+    Polygon(Vec<Ring>),
+    MultiPolygon(Vec<Vec<Ring>>),
+    Unsupported,
+}
+
+/// 多邊形的一個環，解析時直接寫入 `LineString`。
+///
+/// Reason: 中介不留 `Vec<Position>`，省掉一份與最終幾何等大的複本。
+struct Ring(LineString<f64>);
+
+fn polygons_from_geometry(geometry: Geometry) -> Result<Vec<Polygon<f64>>, String> {
+    match geometry {
+        Geometry::Polygon(rings) => Ok(vec![polygon_from_rings(rings)?]),
+        Geometry::MultiPolygon(polygons) => polygons.into_iter().map(polygon_from_rings).collect(),
         // Reason: NE admin-1 只含面狀幾何，其餘型別（含 null geometry）略過即可，
         // 不需視為錯誤中止整份檔案的載入。
-        _ => Ok(Vec::new()),
+        Geometry::Unsupported => Ok(Vec::new()),
     }
 }
 
-fn polygon_from_rings(value: &Value) -> Result<Polygon<f64>, String> {
-    let rings = value
-        .as_array()
-        .ok_or_else(|| "GeoJSON Polygon coordinates 格式錯誤".to_string())?;
-    let mut parsed = rings.iter().map(ring_from_value);
-    let exterior = parsed
+fn polygon_from_rings(rings: Vec<Ring>) -> Result<Polygon<f64>, String> {
+    let mut rings = rings.into_iter();
+    let exterior = rings
         .next()
-        .transpose()?
         .ok_or_else(|| "GeoJSON Polygon 缺少外環".to_string())?;
-    let interiors = parsed.collect::<Result<Vec<_>, _>>()?;
-    Ok(Polygon::new(exterior, interiors))
+    let interiors = rings.map(|ring| ring.0).collect();
+    Ok(Polygon::new(exterior.0, interiors))
 }
 
-fn ring_from_value(value: &Value) -> Result<LineString<f64>, String> {
-    let points = value
-        .as_array()
-        .ok_or_else(|| "GeoJSON Polygon ring 格式錯誤".to_string())?;
-    let coords = points
-        .iter()
-        .map(|point| {
-            let pair = point
-                .as_array()
-                .ok_or_else(|| "GeoJSON 座標點格式錯誤".to_string())?;
-            let longitude = pair
-                .first()
-                .and_then(Value::as_f64)
-                .ok_or_else(|| "GeoJSON 座標點缺少經度".to_string())?;
-            let latitude = pair
-                .get(1)
-                .and_then(Value::as_f64)
-                .ok_or_else(|| "GeoJSON 座標點缺少緯度".to_string())?;
-            Ok(Coord {
-                x: longitude,
-                y: latitude,
-            })
-        })
-        .collect::<Result<Vec<_>, String>>()?;
-    Ok(LineString::new(coords))
+impl<'de> Deserialize<'de> for Geometry {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_map(GeometryVisitor)
+    }
+}
+
+struct GeometryVisitor;
+
+impl<'de> Visitor<'de> for GeometryVisitor {
+    type Value = Geometry;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("GeoJSON geometry 物件")
+    }
+
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+        let mut kind: Option<String> = None;
+        let mut geometry = Geometry::Unsupported;
+        let mut deferred: Option<Value> = None;
+
+        while let Some(key) = map.next_key::<String>()? {
+            match key.as_str() {
+                "type" => kind = map.next_value()?,
+                "coordinates" => match kind.as_deref() {
+                    Some("Polygon") => geometry = Geometry::Polygon(map.next_value()?),
+                    Some("MultiPolygon") => geometry = Geometry::MultiPolygon(map.next_value()?),
+                    Some(_) => {
+                        map.next_value::<IgnoredAny>()?;
+                    }
+                    // Reason: GeoJSON 不保證 "type" 排在 "coordinates" 之前。NE 的
+                    // 輸出一律 type 在前，這條路徑實務上不會走到；保留它是為了
+                    // 上游改變欄位順序時只讓「那一個 feature」退回泛型 Value，
+                    // 而不是整份檔案解析失敗。
+                    None => deferred = Some(map.next_value()?),
+                },
+                _ => {
+                    map.next_value::<IgnoredAny>()?;
+                }
+            }
+        }
+
+        if let Some(value) = deferred {
+            geometry = match kind.as_deref() {
+                Some("Polygon") => {
+                    Geometry::Polygon(serde_json::from_value(value).map_err(de::Error::custom)?)
+                }
+                Some("MultiPolygon") => Geometry::MultiPolygon(
+                    serde_json::from_value(value).map_err(de::Error::custom)?,
+                ),
+                _ => Geometry::Unsupported,
+            };
+        }
+        Ok(geometry)
+    }
+}
+
+impl<'de> Deserialize<'de> for Ring {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_seq(RingVisitor)
+    }
+}
+
+struct RingVisitor;
+
+impl<'de> Visitor<'de> for RingVisitor {
+    type Value = Ring;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("GeoJSON 座標點陣列")
+    }
+
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+        let mut coords: Vec<Coord<f64>> = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+        while let Some(coord) = seq.next_element::<Position>()? {
+            coords.push(coord.0);
+        }
+        Ok(Ring(LineString::new(coords)))
+    }
+}
+
+/// 單一座標點。
+struct Position(Coord<f64>);
+
+impl<'de> Deserialize<'de> for Position {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_seq(PositionVisitor)
+    }
+}
+
+struct PositionVisitor;
+
+impl<'de> Visitor<'de> for PositionVisitor {
+    type Value = Position;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("GeoJSON 座標點 [經度, 緯度]")
+    }
+
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+        let longitude: f64 = seq
+            .next_element()?
+            .ok_or_else(|| de::Error::custom("GeoJSON 座標點缺少經度"))?;
+        let latitude: f64 = seq
+            .next_element()?
+            .ok_or_else(|| de::Error::custom("GeoJSON 座標點缺少緯度"))?;
+        // Reason: GeoJSON 允許第三個高程值。丟棄多餘元素以維持與舊版
+        // `pair.first()`／`pair.get(1)` 相同的寬容度。
+        while seq.next_element::<IgnoredAny>()?.is_some() {}
+        Ok(Position(Coord {
+            x: longitude,
+            y: latitude,
+        }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 幾何指紋：把每個 region 的 gn_id、外環／內環頂點依序餵進 SHA-256。
+    ///
+    /// Reason: `regions` 是私有欄位，等價驗證只能在模組內做。指紋涵蓋順序、
+    /// 環的巢狀結構與每個 f64 的位元組，解析方式若改變輸出必然改指紋。
+    fn geometry_digest(index: &NeAdmin1Index) -> String {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        for (gn_id, region) in &index.regions {
+            hasher.update(gn_id.to_le_bytes());
+            for polygon in &region.geometry {
+                for ring in std::iter::once(polygon.exterior()).chain(polygon.interiors()) {
+                    hasher.update((ring.0.len() as u64).to_le_bytes());
+                    for coord in &ring.0 {
+                        hasher.update(coord.x.to_le_bytes());
+                        hasher.update(coord.y.to_le_bytes());
+                    }
+                }
+            }
+        }
+        hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
+    }
+
+    /// 真實 NE admin-1 圖資的幾何指紋，取自改用型別化解析「之前」的
+    /// `serde_json::Value` 版本。
+    ///
+    /// Reason: 這次改動只換解析方式、不動輸出，指紋是唯一能證明這件事的
+    /// 驗收條件。解析路徑再被調整時，此值不得改變；真要改，得先說明為何
+    /// 輸出應該變。
+    const REAL_DATA_DIGEST: &str =
+        "fa336e6ac3deabd33daa145ee0d9fe0a33f63ebea8f106efae4792806893e2de";
+    const REAL_DATA_REGIONS: usize = 4394;
+
+    #[test]
+    #[ignore = "需要真實 NE admin-1 圖資，預設不在 repo 內"]
+    fn real_geojson_parses_to_unchanged_geometry() {
+        let path = Path::new("geoname_data/ne_10m_admin_1_states_provinces.geojson");
+        if !path.exists() {
+            panic!("請先以 prepare 階段下載 {}", path.display());
+        }
+        let index = NeAdmin1Index::load(path).expect("載入 NE admin-1 圖資");
+        assert_eq!(index.len(), REAL_DATA_REGIONS);
+        assert_eq!(geometry_digest(&index), REAL_DATA_DIGEST);
+    }
 }
