@@ -371,15 +371,36 @@ Reason: metadata 來自 Nominatim 的 `city`／`county`，在聚落標記稀疏�
 lookup。
 
 ### 模組化設計原則
-- **單一檔案不得超過 500 行程式碼**
+- **單一檔案的 production 程式碼不得超過 500 行**——同檔的
+  `#[cfg(test)]` 測試模組不計入。
 - **每個模組都有清楚的職責分工**
 - **Rust public function 需有清楚 rustdoc 或註解**
+
+Reason: 行數上限的目的是控制單一職責的複雜度，而 `#[cfg(test)]` 在正式
+建置時整段剔除，不進二進位檔也不增加 production 的閱讀負擔。把測試計入
+會逼出「為了行數而拆」的重構，那會讓呼叫關係變散，與上限想達成的目的相反。
 
 ### 測試要求
 - **為所有 Rust production 新功能撰寫 `cargo test` 測試**
 - **至少包含：正常情境、邊界情況、失敗情況**
-- **測試應位於 `/tests` 資料夾中**
 - **使用 fixtures 提供測試資料**
+- **新增的測試要先確認它真的會失敗**——移除修正或刻意破壞被測邏輯後
+  應轉紅。綠燈不是覆蓋的證據。
+
+#### 測試放置位置
+
+依「是否需要存取私有項」與「檔案是否已過大」分三層，前兩層符合 Rust 官方
+慣例（The Rust Book, Test Organization）：
+
+| 情境 | 位置 | 範例 |
+| :--- | :--- | :--- |
+| 需存取私有函式、私有欄位 | 同檔的 `#[cfg(test)] mod tests` | `src/pipeline/ne_admin1.rs` |
+| 同上，但該檔 production 已接近 500 行 | 同層 `{模組}_tests.rs`，以 `mod {模組}_tests;` 掛回 | `src/wikidata/translator_tests.rs` |
+| 只走公開 API | `tests/` | `tests/ne_admin1_locate.rs` |
+
+Reason: `tests/` 底下的檔案各自編成獨立 crate，只看得見 `pub` 項。需要驗證
+內部狀態的測試（例如以私有欄位計算幾何指紋）放不進去，硬要放就得為測試把
+欄位改成公開，等於為了測試放寬封裝。
 
 ### 錯誤處理
 - **所有檔案操作都要有適當的錯誤處理**
