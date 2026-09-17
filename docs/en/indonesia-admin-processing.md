@@ -23,7 +23,7 @@ BIG boundary data is official, publicly available Indonesian geospatial data. Th
 ## Administrative Levels
 
 > [!NOTE]
-> `admin_3` and `admin_4` exist only in this project's intermediate CSV, where they preserve the source administrative levels for tracing and debugging; they are never written to the cities500 file Immich consumes. The finest level Immich displays is `admin_2`. Representative point density depends on the granularity of the source features read during extract (desa for Indonesia, with multipart features split per part), not on these two columns.
+> The "city" Immich displays comes from `admin_3` (Kecamatan, district), not `admin_2`. For the rationale and the four criteria behind that choice, see [City Level Selection Criteria](city-level-criteria.md) — a kabupaten averages 3,705 km² and 536,000 people per name, so the three fields cannot locate a coordinate (Ubud would display as "Gianyar Regency"). `admin_4` (Desa) exists only in this project's intermediate CSV, where it preserves the source level for tracing and debugging. Representative point density depends on the granularity of the source features read during extract (desa for Indonesia, with multipart features split per part), not on the displayed level.
 
 The BIG desa attributes provide the following administrative levels:
 
@@ -39,10 +39,26 @@ This project extracts from the desa-level boundary data (village polygons increa
 | `country` | Fixed value | `印尼` |
 | `admin_1` | Wikidata / `WADMPR` | Province in Traditional Chinese; falls back to the official BIG Indonesian name when no Chinese exists |
 | `admin_2` | Wikidata / `WADMKK` | Regency / city in Traditional Chinese; falls back to the official BIG Indonesian name when no Chinese exists |
-| `admin_3` | `WADMKC` | District (Kecamatan), official Indonesian name |
+| `admin_3` | Lookup table / `WADMKC` | District (Kecamatan) in Traditional Chinese; falls back to the BIG original when absent. **This is the city name Immich displays** |
 | `admin_4` | `WADMKD` | Village (Desa / Kelurahan), official Indonesian name |
 
-As with the TH / KR handlers, `admin_1` / `admin_2` carry translated Traditional Chinese while `admin_3` and below keep the original Indonesian.
+As with the TH / KR handlers, `admin_1` / `admin_2` go through the Wikidata translator; `admin_3` uses a vendored lookup table instead (see below); `admin_4` is not translated and keeps the original Indonesian.
+
+**`admin_3` is the city name Immich displays.** Its translations come from
+`data/vendor/indonesia/kecamatan_zh.csv` (NAER → Wikidata → OSM, 286 kecamatan), falling
+back to the BIG Indonesian original when absent. Nationwide coverage is 286/6,907 units
+(4.1%) and 5,433/107,961 representative points (5.0%), concentrated where people take
+photos — 39/44 kecamatan in Jakarta, 15/57 in Bali, 43/173 in West Kalimantan. Sources and
+inclusion rules are documented in that table's README.
+
+The cost of changing level is recorded in section 4 of
+[City Level Selection Criteria](city-level-criteria.md): distinct Indonesian city names
+went from 514 to 6,908, the pruning rate fell from 71.5% to 23.2%, and the global output
+gained 53,359 rows.
+
+Rows with an empty `admin_3` (115 in this batch, all "Area Tidak Terdefinisi" undefined
+areas) are skipped in the `transform_cities_schema` stage and reported as a count; they do
+not fall back to `admin_2`, because that would mix two levels within one country.
 
 Translation lookup for `admin_2` runs in three stages: first query the (province, regency/city) pair; if that misses, fall back to a global same-name table (a given `WADMKK` is listed only when every province agrees on its translation, and inconsistent ones are dropped to avoid mismatched names); only then fall back to the BIG original.
 
@@ -53,6 +69,15 @@ Translation lookup for `admin_2` runs in three stages: first query the (province
 ## Naming Strategy
 
 The Indonesia handler reuses the Wikidata translator pipeline from the Thailand / South Korea handlers: **Admin 1 and Admin 2 both go through standard P131 chain validation, with instance-of (P31) class filtering of candidates**; when no reliable Chinese exists, names fall back to the official BIG Indonesian. Naming is decided in two tiers: first decide whether to trust the Wikidata result, then decide which language label to use.
+
+> [!NOTE]
+> **Admin 3 does not go through this pipeline.** It is resolved against
+> `data/vendor/indonesia/kecamatan_zh.csv` (by name plus coordinate disambiguation),
+> because Chinese labels for kecamatan usually hang on a same-named settlement entity that
+> this section's `P31` class whitelist would reject — `乌布` sits on `Q210654` with
+> `P31=town`, while the kecamatan entity `Q3274172` has no Chinese label. The table's
+> sources, priority order and inclusion rules are documented in
+> `data/vendor/indonesia/README.md`.
 
 ### Tier 1: Whether to Trust the Wikidata Result (P131 Parent Validation)
 
@@ -219,7 +244,15 @@ The transform stage only sees the handler's final province name (the Wikidata Tr
 ## Notes
 
 - Indonesian Admin 1 / Admin 2 use Wikidata Traditional Chinese translations, and both levels must pass P131 parent validation (Admin 1 against Indonesia `Q252`, Admin 2 against the QID of its province). On validation failure, or when Wikidata offers no reliable Chinese result, names fall back to the official BIG Indonesian.
-- Indonesian Admin 3 (district) and Admin 4 (village) keep the official BIG Indonesian, avoiding the mismatches and unstable translations that affect large numbers of low-level place names on Wikidata.
+- Indonesian Admin 3 (district) and Admin 4 (village) keep the official BIG Indonesian by
+  default. Re-checked 2026-09-14: querying Wikidata by name (without restricting `P31`)
+  yields Chinese labels for 440/6,908 kecamatan names (6.4%), but those labels usually hang
+  on a same-named settlement entity (乌布 on `Q210654` with `P31=town`, 水明漾 on the
+  kelurahan `Q1026424`), and relaxing the class filter introduces mismatches with
+  languages, ethnic groups and the parent division (`Adonara → 阿多纳拉语`,
+  `Bandung → 萬隆縣`), which must be filtered through P131 validation. Admin 3 is now the
+  city name Immich displays; the evaluation of wiring up translations is in section 4 of
+  [City Level Selection Criteria](city-level-criteria.md).
 - The original BIG vector boundary data is out of scope for this project's distribution; only the reverse-geocoding-optimized derivative metadata is distributed.
 - Every coordinate decision, hit-rate measurement, and search-language experiment fixes the random seed at `seed=42`, so the results are reproducible.
 - For the commands to reproduce the extraction locally, see [Local Data Processing](development.md#2-extract-raw-geographic-data).
