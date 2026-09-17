@@ -203,8 +203,19 @@ impl<C: WikidataApi> WikidataTranslator<C> {
         let unique = dedupe_keep_order(titles.iter().cloned());
         let mut extracts = HashMap::with_capacity(unique.len());
         for batch in unique.chunks(KOWIKI_EXTRACT_BATCH_SIZE) {
-            let Ok(body) = self.client.kowiki_extracts_json(batch) else {
-                continue;
+            // Reason: 不靜默跳過。韓文維基整段取不到時，所有 admin2 會回退成
+            // Wikidata 的中文 label（正是漢字覆寫要取代的那批髒資料），輸出看起來
+            // 完全正常。至少要在日誌留下批次失敗的訊號，否則只能靠事後比對地名
+            // 才會發現整批漢字沒套用。
+            let body = match self.client.kowiki_extracts_json(batch) {
+                Ok(body) => body,
+                Err(error) => {
+                    println!(
+                        "stage=wikidata phase=hanja kowiki_fetch_failed titles={} error={error}",
+                        batch.len()
+                    );
+                    continue;
+                }
             };
             for (title, extract) in parse_kowiki_extracts(&body)? {
                 extracts.insert(title, extract);

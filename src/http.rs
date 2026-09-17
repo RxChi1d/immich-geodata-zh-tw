@@ -22,6 +22,14 @@ pub enum HttpFailure {
     RateLimited {
         body: String,
     },
+    /// 404：伺服器明確表示這個資源不存在。
+    ///
+    /// Reason: 與 `Other` 分開，因為呼叫端對它的處置不同。LocationIQ 對無法逆
+    /// 地理編碼的座標（外海、無定義區域）回 404 而非空結果，那是單點的屬性，
+    /// 不是流程出錯；併進 `Other` 會讓一個查不到的座標中止整條 release。
+    NotFound {
+        body: String,
+    },
     Other(String),
 }
 
@@ -33,6 +41,9 @@ impl fmt::Display for HttpFailure {
         match self {
             Self::RateLimited { body } => {
                 write!(formatter, "HTTP 請求被限速 status=429 body={body}")
+            }
+            Self::NotFound { body } => {
+                write!(formatter, "HTTP 請求找不到資源 status=404 body={body}")
             }
             Self::Other(message) => write!(formatter, "{message}"),
         }
@@ -233,6 +244,15 @@ impl HttpClient {
                         if status == StatusCode::TOO_MANY_REQUESTS {
                             let body = response.text().unwrap_or_default();
                             return Err(HttpFailure::RateLimited {
+                                body: truncate_body(&body),
+                            });
+                        }
+                        // Reason: 404 要讓呼叫端可辨識。訊息刻意不含 url——這個
+                        // 變體會原樣傳到 LocationIQ 呼叫端，而那裡的 url 帶
+                        // API key，繞過遮蔽就等於洩漏。
+                        if status == StatusCode::NOT_FOUND {
+                            let body = response.text().unwrap_or_default();
+                            return Err(HttpFailure::NotFound {
                                 body: truncate_body(&body),
                             });
                         }

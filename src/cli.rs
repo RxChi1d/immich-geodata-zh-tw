@@ -373,16 +373,19 @@ fn run_translate_production(options: &ProductionOptions) -> Result<(), String> {
 fn run_prune_production(options: &ProductionOptions) -> Result<(), String> {
     use crate::pipeline::prune::{multipass, stage};
 
-    let cities_file = options
+    // Reason: 直接取 translate 的產物路徑，不再先試 `output/output/`。
+    // production 的 translate 寫的是 `output_folder` 根目錄（見
+    // `translate::run_production` 的 `output_dir`），巢狀路徑永遠不存在；
+    // 真的存在時只會是上一輪的殘留檔，剪枝會改寫它而 pack 仍打包未剪枝的本體，
+    // 整條流程不會有任何錯誤訊息。
+    let cities_file = options.output_folder.join("cities500_translated.txt");
+    // Reason: label 必須用 **release 實際打包的** admin1 表。pack 複製的是
+    // `admin1CodesASCII_translated.txt`（見 `pack::run_production`），
+    // 而 `_optimized` 是翻譯前的版本。兩者的「代碼 → 名稱」映射不同時，
+    // 剪枝證明所依據的標籤分割就不是 Immich 顯示的那一個。
+    let admin1_file = options
         .output_folder
-        .join("output")
-        .join("cities500_translated.txt");
-    let cities_file = if cities_file.exists() {
-        cities_file
-    } else {
-        options.output_folder.join("cities500_translated.txt")
-    };
-    let admin1_file = options.output_folder.join("admin1CodesASCII_optimized.txt");
+        .join("admin1CodesASCII_translated.txt");
     if !cities_file.exists() {
         return Err(format!(
             "剪枝：找不到 translate 產物 {}",
@@ -623,6 +626,14 @@ fn parse_production_options(args: &[String]) -> Result<ProductionOptions, String
             }
             "--locationiq-api-key" => {
                 options.api_key = Some(required_value(args, index, "--locationiq-api-key")?);
+                index += 2;
+            }
+            // Reason: 預設是相對路徑 ./data/locationiq/address_fields.json，
+            // 在 repo 根目錄以外執行就找不到。release binary 以獨立 tarball 發布，
+            // 沒有這個旗標的話，其他輸入路徑都可覆寫、唯獨欄位設定不行。
+            "--locationiq-address-fields" => {
+                options.locationiq_address_fields =
+                    PathBuf::from(required_value(args, index, "--locationiq-address-fields")?);
                 index += 2;
             }
             "--locationiq-allow-partial" => {
@@ -1093,6 +1104,23 @@ mod tests {
         assert_eq!(
             locationiq_address_fields_path(&options),
             PathBuf::from("./data/locationiq/address_fields.json")
+        );
+    }
+
+    /// `--locationiq-address-fields` 覆寫預設路徑，且不受 `--locationiq-folder` 影響。
+    #[test]
+    fn address_fields_path_can_be_overridden_by_flag() {
+        let options = parse_production_options(&[
+            "--locationiq-folder".to_string(),
+            "./meta_data".to_string(),
+            "--locationiq-address-fields".to_string(),
+            "/opt/geodata/address_fields.json".to_string(),
+        ])
+        .unwrap();
+
+        assert_eq!(
+            locationiq_address_fields_path(&options),
+            PathBuf::from("/opt/geodata/address_fields.json")
         );
     }
 

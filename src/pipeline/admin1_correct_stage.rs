@@ -86,10 +86,16 @@ fn run_country(
     let samples = samples_for(country_code, metadata_admin1);
     let mapping = learn_admin1_mapping(&samples, index, gn_id_to_code);
 
+    // Reason: 一併要求欄位寬度足以容納 admin2。`admin_row` 與回寫端都以索引直接
+    // 取用第 10／11 欄，只檢查國碼（第 8 欄）的話，欄位不足的列會讓 translate
+    // 以 index out of bounds panic，而不是留下可讀的錯誤。
     let positions: Vec<usize> = cities_rows
         .iter()
         .enumerate()
-        .filter(|(_, row)| row.get(COLUMN_COUNTRY_CODE).map(String::as_str) == Some(country_code))
+        .filter(|(_, row)| {
+            row.get(COLUMN_COUNTRY_CODE).map(String::as_str) == Some(country_code)
+                && row.len() > COLUMN_ADMIN2
+        })
         .map(|(position, _)| position)
         .collect();
     let points: Vec<CityPoint> = positions
