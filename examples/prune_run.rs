@@ -38,7 +38,7 @@ fn main() {
     );
 
     let mut dump: Vec<String> = Vec::new();
-    let (deleted, _) = multipass::run_with_dump(&g, &cfg, &mut dump, |p| {
+    let (deleted, _) = multipass::run_with_dump(&g, &cfg, Some(&mut dump), |p| {
         println!(
             "pass {}: 候選 {:>7} 證出 {:>7} 刪 {:>6} 累計 {:>7} ({:.2}%) {:.0}s",
             p.pass,

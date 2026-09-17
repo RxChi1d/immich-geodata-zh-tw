@@ -178,7 +178,10 @@ pub fn build_locationiq_url(latitude: &str, longitude: &str, api_key: &str) -> R
 /// 辨識額度用完，且它的訊息不含 URL。
 fn redact_locationiq_failure(url: &str, failure: HttpFailure) -> HttpFailure {
     match failure {
-        HttpFailure::RateLimited { .. } => failure,
+        // Reason: 這兩個變體都必須原樣往上傳，呼叫端要靠變體本身分辨處置方式
+        // （限速＝額度用完、404＝這個座標查不到）。包成 Other 會讓分辨失效。
+        // 它們的訊息本來就不含 URL，沒有遮蔽需求。
+        HttpFailure::RateLimited { .. } | HttpFailure::NotFound { .. } => failure,
         other => {
             let redacted = redact_locationiq_key(url);
             HttpFailure::Other(format!(
@@ -206,7 +209,14 @@ fn redact_locationiq_key(url: &str) -> String {
             parsed.query_pairs_mut().clear().extend_pairs(pairs);
             parsed.to_string()
         }
-        Err(_) => url.replace("key=", "key=***"),
+        // Reason: 舊寫法 `url.replace("key=", "key=***")` 只是在 `key=` 後面插入
+        // 星號，金鑰原樣留在後面（`key=***pk.secret`），等於沒有遮蔽。`key` 是
+        // build_locationiq_url 附加的最後一個參數，截到它為止即可保留診斷資訊
+        // 又不外洩金鑰。
+        Err(_) => match url.split_once("key=") {
+            Some((head, _)) => format!("{head}key=***"),
+            None => url.to_string(),
+        },
     }
 }
 
@@ -218,10 +228,17 @@ impl ReverseGeocoder for LocationiqHttpClient {
     ) -> Result<Option<LocationiqAddress>, HttpFailure> {
         let url =
             build_locationiq_url(latitude, longitude, &self.api_key).map_err(HttpFailure::Other)?;
-        let body = self
-            .http
-            .get_text_detailed(url.as_str())
-            .map_err(|error| redact_locationiq_failure(url.as_str(), error))?;
+        let body = match self.http.get_text_detailed(url.as_str()) {
+            Ok(body) => body,
+            // Reason: LocationIQ 對無法逆地理編碼的座標（外海、無定義區域）回
+            // 404 `Unable to geocode`，那是這一個座標的屬性，不是流程出錯。
+            // 併進錯誤會讓單一查不到的座標中止整條 release——而
+            // `--locationiq-allow-partial` 只容忍限速，擋不住它。回 `Ok(None)`
+            // 讓呼叫端跳過該點；該座標不會寫進 metadata，故下一輪仍會重試，
+            // 暫時性的 404 不會被永久記成「查過了」。
+            Err(HttpFailure::NotFound { .. }) => return Ok(None),
+            Err(error) => return Err(redact_locationiq_failure(url.as_str(), error)),
+        };
         parse_locationiq_address(&body)
             .map(Some)
             .map_err(HttpFailure::Other)
@@ -355,6 +372,7 @@ pub fn run_production_with_client<C: ReverseGeocoder>(
     let progress = ProgressReporter::new("locationiq", total);
     progress.start();
     let mut processed = 0_u64;
+    let mut not_found = 0_u64;
     let mut batch = Vec::new();
 
     for city in cities {
@@ -382,8 +400,9 @@ pub fn run_production_with_client<C: ReverseGeocoder>(
                 }
             }
             Ok(None) => {
+                not_found += 1;
                 println!(
-                    "locationiq_skip country={} geoname_id={} latitude={} longitude={} reason=no_response",
+                    "locationiq_skip country={} geoname_id={} latitude={} longitude={} reason=not_found",
                     options.country_code, city[0], latitude, longitude
                 );
             }
@@ -443,8 +462,11 @@ pub fn run_production_with_client<C: ReverseGeocoder>(
         save_metadata_rows(&options.output_file, &rows)?;
     }
     progress.finish();
+    // Reason: `not_found` 進摘要行而不是設成失敗條件。這些座標不寫進 metadata，
+    // 每輪都會重查；待查清空後剩下的正好全是查不到的點，任何「全是 404 就失敗」
+    // 的規則都會在那一刻起每週紅燈。數字留在日誌供人判讀即可。
     println!(
-        "stage=locationiq mode=production country={} output={} rows={}",
+        "stage=locationiq mode=production country={} output={} rows={} not_found={not_found}",
         options.country_code,
         options.output_file.display(),
         rows.len()
@@ -698,6 +720,20 @@ mod tests {
         assert!(message.contains("key=***"), "應保留遮蔽後的 URL：{message}");
     }
 
+    /// `Url::parse` 失敗的退路也必須真的遮掉金鑰。
+    ///
+    /// Reason: 舊寫法 `replace("key=", "key=***")` 只是插入星號，金鑰原樣留在
+    /// 後面（`key=***pk.secret123`），看起來有遮蔽但完全沒有。
+    #[test]
+    fn redact_key_on_unparseable_url_does_not_leak() {
+        let redacted = redact_locationiq_key("not a url ?lat=1&key=pk.secret123");
+        assert!(
+            !redacted.contains("pk.secret123"),
+            "金鑰不得出現：{redacted}"
+        );
+        assert!(redacted.contains("key=***"), "應留下遮蔽標記：{redacted}");
+    }
+
     /// 限速錯誤必須原樣往上傳，否則呼叫端無法辨識額度用完。
     #[test]
     fn locationiq_failure_passes_rate_limited_through() {
@@ -710,6 +746,57 @@ mod tests {
         );
 
         assert!(matches!(failure, HttpFailure::RateLimited { .. }));
+    }
+
+    /// 404 必須原樣往上傳，否則 `reverse` 的跳過對應永遠不會觸發。
+    ///
+    /// Reason: 這是整條 404 處置最容易被改壞的一環——只要 404 在這裡塌成
+    /// `Other`，`reverse` 的 `Err(NotFound) => Ok(None)` 就再也配不到，一個查不到
+    /// 的座標又會中止整條 release，而且沒有任何編譯錯誤提示。
+    #[test]
+    fn locationiq_failure_passes_not_found_through() {
+        let url = build_locationiq_url("25.0", "121.5", "pk.secret123").unwrap();
+        let failure = redact_locationiq_failure(
+            url.as_str(),
+            HttpFailure::NotFound {
+                body: r#"{"error":"Unable to geocode"}"#.to_string(),
+            },
+        );
+
+        assert!(matches!(failure, HttpFailure::NotFound { .. }));
+        assert!(
+            !failure.to_string().contains("pk.secret123"),
+            "金鑰不得出現：{failure}"
+        );
+    }
+
+    /// 查不到的座標只跳過該點，不中止整輪，且不寫進 metadata（下輪會重試）。
+    #[test]
+    fn production_locationiq_skips_point_without_response() {
+        let temp = TestDir::new("not-found-skip");
+        let cities = two_city_fixture(&temp);
+        let fields = address_fields_file(&temp, "US", "\"city\"");
+        let output = temp.path.join("US.csv");
+        let mut client = StubClient {
+            responses: vec![Ok(None), stub_success()],
+        };
+
+        let outcome = run_production_with_client(
+            &rate_limit_options(cities, output.clone(), fields, false),
+            &mut client,
+        )
+        .unwrap();
+
+        assert_eq!(outcome, LocationiqOutcome::Completed);
+        let saved = fs::read_to_string(output).unwrap();
+        assert!(
+            !saved.contains("40.0,-74.0"),
+            "查不到的座標不得寫進 metadata，否則下一輪不會重試：{saved}"
+        );
+        assert!(
+            saved.contains("41.0,-73.0"),
+            "同一輪後續的查詢必須照常寫入：{saved}"
+        );
     }
 
     /// 兩列 US 測試資料，第二列用來觸發指定的失敗。

@@ -28,8 +28,6 @@ pub fn h_box() -> f64 {
 /// 一列 cities500 的識別資訊。
 pub struct Geo {
     pub gid: Vec<i64>,
-    pub lat: Vec<f64>,
-    pub lon: Vec<f64>,
     pub country: Vec<String>,
     /// label = (country_code, admin1_name, name) 映射成的連續整數。
     pub label: Vec<u32>,
@@ -50,11 +48,8 @@ impl Geo {
     /// Reason: 多趟剪枝每趟都要在「當下保留集合」上重建圖。欄位若漏抄一個，
     /// 索引語意就會分岔，而且不會拋例外，只會安靜給出錯的鄰居。
     pub fn subset(&self, rows: &[u32]) -> Self {
-        let pick = |v: &Vec<f64>| rows.iter().map(|&i| v[i as usize]).collect::<Vec<_>>();
         Self {
             gid: rows.iter().map(|&i| self.gid[i as usize]).collect(),
-            lat: pick(&self.lat),
-            lon: pick(&self.lon),
             country: rows
                 .iter()
                 .map(|&i| self.country[i as usize].clone())
@@ -79,7 +74,7 @@ impl Geo {
 
         let (mut gid, mut lat, mut lon, mut country) = (vec![], vec![], vec![], vec![]);
         let mut raw_labels: Vec<(String, String, String)> = vec![];
-        for line in BufReader::new(File::open(cities)?).lines() {
+        for (index, line) in BufReader::new(File::open(cities)?).lines().enumerate() {
             let line = line?;
             let f: Vec<&str> = line.split('\t').collect();
             if f.len() < 11 {
@@ -90,9 +85,28 @@ impl Geo {
             if (f[7] == "PPLX" && f[8] != "AU") || f[7] == "PPLH" {
                 continue;
             }
-            gid.push(f[0].parse::<i64>().expect("geoname_id 必須是整數"));
-            lat.push(f[4].parse::<f64>().expect("latitude 必須是浮點數"));
-            lon.push(f[5].parse::<f64>().expect("longitude 必須是浮點數"));
+            // Reason: 不用 expect。這段每週在自動發布的 release 裡跑，欄位是外部
+            // 資料而非內部不變量；panic 只會留下一串 backtrace，Err 才能帶著檔名
+            // 與行號往上傳給 pipeline（multipass.rs 對 Delaunay 也是同一個原則）。
+            let parse = |value: &str, field: &str| -> std::io::Result<f64> {
+                value.parse::<f64>().map_err(|error| {
+                    std::io::Error::other(format!(
+                        "{} 第 {} 行的 {field} 無法解析：{value}（{error}）",
+                        cities.display(),
+                        index + 1
+                    ))
+                })
+            };
+            gid.push(f[0].parse::<i64>().map_err(|error| {
+                std::io::Error::other(format!(
+                    "{} 第 {} 行的 geoname_id 無法解析：{}（{error}）",
+                    cities.display(),
+                    index + 1,
+                    f[0]
+                ))
+            })?);
+            lat.push(parse(f[4], "latitude")?);
+            lon.push(parse(f[5], "longitude")?);
             country.push(f[8].to_string());
             let admin1_name = a1
                 .get(&format!("{}.{}", f[8], f[10]))
@@ -125,8 +139,6 @@ impl Geo {
 
         Ok(Self {
             gid,
-            lat,
-            lon,
             country,
             label,
             n_labels,

@@ -27,6 +27,7 @@ The documentation is grouped by purpose. For installation steps and common quest
 
 | Document | Contents |
 | :--- | :--- |
+| [City Level Selection Criteria](city-level-criteria.md) | Which administrative level belongs in the "city" Immich displays: the four criteria of recognizability, density, consistency and Chinese availability, per-country measurements, and the checklist for adding a country |
 | [Point Pruning](point-pruning.md) | How redundant place points are removed before release without changing any query result: the criteria, recursive subdivision, multi-pass deletion and verification |
 
 ## Development

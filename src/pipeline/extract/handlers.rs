@@ -298,17 +298,9 @@ fn korea_feature_row(
     let (longitude, latitude) = point_geometry(&feature.geometry)?;
     let components = korea_admin_components(feature);
 
-    // Reason: Wikidata 對同名行政區的 label 帶消歧後綴（真實案例：光州的
-    //         「東區 (光州)」「西區 (光州)」），那是 Wikidata 的內部格式，
-    //         任何情況下都不該輸出給使用者。原本此處以 `sidonm == "광주광역시"`
-    //         白名單限定，2026-07-01 光州併入전남광주통합특별시後條件永不成立、
-    //         剝除靜默失效——這種「改制即失效」的白名單不該再出現，故改為
-    //         KR admin2 一律套用。韓國行政區的正式中文名不含括號，無誤傷風險。
-    let admin2 = strip_trailing_parenthetical(&korea_admin2(
-        &components.sidonm,
-        &components.sggnm,
-        translations,
-    ));
+    // Reason: 消歧括號的剝除已移進 korea_admin2，必須排在層級檢查之前——
+    //         「東區 (光州)」以 `)` 結尾，先檢查層級會判定不符而回退韓文原名。
+    let admin2 = korea_admin2(&components.sidonm, &components.sggnm, translations);
 
     Ok(ExtractRow::from_point(
         latitude,
@@ -414,6 +406,13 @@ fn korea_admin2(sidonm: &str, sggnm: &str, translations: &WikidataTranslations) 
         .and_then(|by_name| by_name.get(sggnm))
         .or_else(|| translations.fallback_by_name.get(sggnm))
         .cloned()
+        // Reason: Wikidata 對同名行政區的 label 帶消歧後綴（真實案例：光州的
+        //         「東區 (光州)」「西區 (光州)」），那是 Wikidata 的內部格式，
+        //         任何情況下都不該輸出給使用者。剝除必須排在下面兩道過濾**之前**：
+        //         「東區 (光州)」以 `)` 結尾，層級檢查會判定不符而整筆回退成韓文
+        //         原名——原本在呼叫端（korea_feature_row）剝除時就是這個順序，
+        //         凡是帶消歧後綴的 admin2 都會輸出韓文。
+        .map(|value| strip_trailing_parenthetical(&value))
         // Reason: KR 期望純中文輸出；非中文形態（純拉丁、中英夾雜）的
         //         「翻譯」一律視為無效（如 stale cache 殘留），回退韓文原文。
         .filter(|value| is_valid_chinese_translation(value))
@@ -527,6 +526,26 @@ mod tests {
         //         名稱驗證防禦。
         let mixed = translations_with_admin1("새특별자치도", "新特別Jachi道");
         assert_eq!(korea_admin1("새특별자치도", &mixed), "새특별자치도");
+    }
+
+    /// 帶消歧括號的 label 要先剝除再驗層級，否則整筆會回退成韓文原名。
+    ///
+    /// Reason: 層級檢查（시→市／군→郡／구→區）比對的是字串結尾。
+    /// 「東區 (光州)」結尾是 `)`，若剝除排在檢查之後，這一筆會被判定層級不符
+    /// 而輸出「동구」——而消歧後綴正是 Wikidata 對同名行政區的常態格式。
+    #[test]
+    fn korea_admin2_strips_disambiguation_before_checking_level() {
+        for label in ["東區 (光州)", "東區（光州廣域市）"] {
+            let translations = translations_with_admin2("전남광주통합특별시", "동구", label);
+            assert_eq!(
+                korea_admin2("전남광주통합특별시", "동구", &translations),
+                "東區",
+                "帶消歧括號的 {label} 應剝除後採用，而非回退韓文"
+            );
+        }
+        // 層級檢查本身仍須生效：剝除後層級不符照樣回退。
+        let stale = translations_with_admin2("경기도", "여주시", "驪州郡 (京畿道)");
+        assert_eq!(korea_admin2("경기도", "여주시", &stale), "여주시");
     }
 
     #[test]

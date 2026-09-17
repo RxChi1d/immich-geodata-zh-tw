@@ -78,11 +78,14 @@ fn real_malaysia_run_applies_eight_verified_corrections() {
 
     let fixes = std::fs::read_to_string(root.join("locationiq/MY_admin1_fixes.csv"))
         .expect("應寫出 MY_admin1_fixes.csv");
+    // Reason: 數字對齊 repo 內已提交的 data/locationiq/MY_admin1_fixes.csv。
+    // 原本的 19／8 是 #80 當時的值，#78 把 MY 的收點條件從人口門檻改為類別白名單
+    // 之後（772 → 19,903 點）就過期了；這個 gate 帶 #[ignore]，CI 不會抓到。
     let rows = fixes.lines().count() - 1;
-    assert_eq!(rows, 19, "候選列數應為 19，實際 {rows}");
+    assert_eq!(rows, 246, "候選列數應為 246，實際 {rows}");
     assert_eq!(
         fixes.matches(",accepted,").count(),
-        8,
-        "採納列數應為 8：\n{fixes}"
+        95,
+        "採納列數應為 95：\n{fixes}"
     );
 }

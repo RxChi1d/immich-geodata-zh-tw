@@ -88,8 +88,9 @@ pub fn run(
     cfg: &Config,
     on_pass: impl FnMut(&PassLog),
 ) -> Result<(Vec<bool>, Vec<PassLog>), String> {
-    let mut sink = Vec::new();
-    run_with_dump(g, cfg, &mut sink, on_pass)
+    // Reason: 傳 None 而非一個立刻丟掉的 Vec。production 的第一趟候選是數十萬筆，
+    // 每筆配一個 String 只為了馬上釋放，等於白配上百 MB。
+    run_with_dump(g, cfg, None, on_pass)
 }
 
 /// 同 [`run`]，但把每趟逐候選的證明結果寫進 `dump`，供與原型逐項對照。
@@ -98,7 +99,7 @@ pub fn run(
 pub fn run_with_dump(
     g: &Geo,
     cfg: &Config,
-    dump: &mut Vec<String>,
+    mut dump: Option<&mut Vec<String>>,
     mut on_pass: impl FnMut(&PassLog),
 ) -> Result<(Vec<bool>, Vec<PassLog>), String> {
     let n = g.n();
@@ -173,11 +174,13 @@ pub fn run_with_dump(
             cand.iter().map(|&c| prove_one_candidate(c)).collect()
         };
 
-        for (&c, r) in cand.iter().zip(&results) {
-            dump.push(format!(
-                "{}\t{}\t{}\t{}\t{}",
-                pass, gg.gid[c as usize], r.ok as u8, r.cells_used, r.max_depth
-            ));
+        if let Some(dump) = dump.as_deref_mut() {
+            for (&c, r) in cand.iter().zip(&results) {
+                dump.push(format!(
+                    "{}\t{}\t{}\t{}\t{}",
+                    pass, gg.gid[c as usize], r.ok as u8, r.cells_used, r.max_depth
+                ));
+            }
         }
 
         // 獨立集選取。必須循序且固定順序——平行化會讓「誰被刪、誰被 pin」
