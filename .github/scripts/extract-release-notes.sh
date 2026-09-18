@@ -109,6 +109,14 @@ else
     -e 's/^### Fixed$/## 🐛 Fixed/' \
     -e 's/^### Security$/## 🔒 Security/' \
     <<< "${section}")"
+  # 升級提醒轉換為 GitHub Alert callout：CHANGELOG.md 保留純文字格式（任何
+  # 管道讀取都不會顯示怪字元），只有保證只在 github.com 檢視的 Release
+  # notes 套用 GFM 專屬的 [!IMPORTANT] 語法。
+  body="$(awk '
+    $0 == "**升級提醒**：" { print "> [!IMPORTANT]"; in_notice=1; next }
+    in_notice && /^- / { sub(/^- /, ""); print "> " $0; next }
+    { in_notice=0; print }
+  ' <<< "${body}")"
 fi
 
 cat <<EOF
