@@ -205,8 +205,15 @@ src/pipeline/
 ├── admin1_load.rs          # admin1 replacement
 ├── cities500_load.rs       # cities500 merge / handler replacement
 ├── locationiq.rs           # LocationIQ metadata 產生與續跑
-├── translate.rs            # 繁中翻譯、NAER 官方譯名（信心分級）、OpenCC 與 alternate names
-└── pack.rs                 # release tree、zip 與 tar.gz 打包
+├── locationiq/address.rs   # 回應地址結構與各國城市名欄位設定
+├── locationiq/client.rs    # URL 組裝、節流與 API key 遮蔽
+├── translate.rs            # 翻譯階段編排
+├── translate/rows.rs       # cities500／admin1 列結構與逐列翻譯規則
+├── translate/dataframe.rs  # Polars DataFrame 與 Rust 值的相互轉換
+├── translate/alternate_names.rs  # alternateNamesV2 讀取、篩選與轉列
+├── translate/opencc.rs     # 簡繁轉換器與中文字串判別
+├── pack.rs                 # release tree 組裝
+└── pack/archive.rs         # manifest、zip 與 tar.gz 輸出
 ```
 
 各國 Handler 仍保留相同 ETL 概念，但以 Rust enum/static dispatch 與型別化
@@ -363,7 +370,7 @@ cargo test
 #### metadata 是補位，不是覆蓋
 
 `translate_cities_rows` 的城市名優先序為 **GeoNames 中文別名 → LocationIQ
-metadata → alternatenames 內的中文**（`src/pipeline/translate.rs`）。
+metadata → alternatenames 內的中文**（`src/pipeline/translate/rows.rs`）。
 
 Reason: metadata 來自 Nominatim 的 `city`／`county`，在聚落標記稀疏處會退回轄區。
 若讓 metadata 優先，精確的城市名會被塌成上一層（蕉賴 → 吉隆坡）。此優先序只影響

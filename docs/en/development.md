@@ -215,7 +215,7 @@ cargo run --release -- release \
 ```
 
 > [!NOTE]
-> - `cargo run -- help` lists only the basic usage; for the full set of options, see `parse_production_options` in `src/cli.rs`.
+> - `cargo run -- help` lists only the basic usage; for the full set of options, see `parse_production_options` in `src/cli/args.rs`.
 > - `--country-code` accepts multiple country codes separated by spaces.
 > - Taiwan, Japan, South Korea, Thailand, and Indonesia (TW/JP/KR/TH/ID) are produced by official boundary data handlers and must not be processed through LocationIQ; this flow only generates metadata for other countries.
 
