@@ -228,7 +228,7 @@ cargo run --release -- release \
 ```
 
 > [!NOTE]
-> - `cargo run -- help` 只列出基本用法；完整選項請見 `src/cli.rs` 的 `parse_production_options`。
+> - `cargo run -- help` 只列出基本用法；完整選項請見 `src/cli/args.rs` 的 `parse_production_options`。
 > - `--country-code` 可指定多個國家代碼，以空格分隔。
 > - 臺灣、日本、南韓、泰國、印尼（TW/JP/KR/TH/ID）已改由官方圖資 handler 產生，不應以 LocationIQ 處理；此流程僅用於為其他國家產生 metadata。
 

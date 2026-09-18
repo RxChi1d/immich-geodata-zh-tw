@@ -94,7 +94,7 @@ fn parse_zhwiki_converted_title_prefers_converted_value() {
     let body = r#"{"query":{"converted":[{"from":"重庆市","to":"重慶市"}]}}"#;
 
     assert_eq!(
-        super::translator::parse_zhwiki_converted_title(body).unwrap(),
+        super::translator_parse::parse_zhwiki_converted_title(body).unwrap(),
         "重慶市"
     );
 }
