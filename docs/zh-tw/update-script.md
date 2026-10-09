@@ -79,13 +79,15 @@ bash update_data.sh --install --archive /path/to/release.tar.gz
 
   | `i18n-iso-countries` | `geodata/countryInfo.txt` | 行為 |
   | :--- | :--- | :--- |
-  | 有 | 無（Immich < 3.3.0） | 安裝 geodata 與語系檔 |
-  | 無 | 有（Immich ≥ 3.3.0） | 只安裝 geodata，國名由 `countryInfo.txt` 提供 |
-  | 有 | 有（過渡期映像） | 兩者都安裝 |
+  | 有 | 無 | 安裝 geodata 與語系檔 |
+  | 無 | 有 | 只安裝 geodata |
+  | 有 | 有 | 兩者都安裝 |
   | 無 | 無 | 報錯並中止，不修改任何檔案 |
 
+  Immich 3.3.0 起讀取 `countryInfo.txt`，之前的版本讀取 `i18n-iso-countries`。部分舊版映像（例如 v3.2.4）兩者都有。
+
   `countryInfo.txt` 是否存在以安裝前的系統檔案為準。目標需要它而下載內容沒有（版本過舊的 release）時同樣中止，避免整個換掉 geodata 後 Immich 找不到檔案。
-- 目標原本沒有 `countryInfo.txt`（Immich < 3.3.0）時，安裝後不會留下我們的副本，避免它被誤認為「新版」的標記；之後若 `i18n-iso-countries` 偵測失敗，腳本會報錯而不是靜默略過。
+- 目標原本沒有 `countryInfo.txt` 時，安裝後會移除我們的副本。保留它會讓之後的執行誤判目標已有這個檔案。
 - 語系檔逐檔替換，上游有而本專案沒有提供的語系檔會保留。
 - 安裝後會驗證資料確實寫入 Immich 會讀取的位置，包含決定國家名稱顯示的 `en.json`；看到 `驗證通過` 或 `安裝結果驗證通過` 即為成功。
 - 安裝流程是冪等的，資料已是最新時重複執行不會有副作用。

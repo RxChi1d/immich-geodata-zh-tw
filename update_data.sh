@@ -515,9 +515,8 @@ main() {
     echo "更新 geodata..."
     rm -rf "$SYSTEM_GEODATA_PATH"
     cp -a "$STAGED_GEODATA" "$SYSTEM_GEODATA_PATH"
-    # Reason: countryInfo.txt 的存在是「Immich >= 3.3.0」的判斷依據。目標原本沒有它
-    # （Immich < 3.3.0）時不能留下我們的副本，否則之後只要 i18n 偵測失敗（例如
-    # macOS 加速器升版後路徑變了），下一次執行會誤判為新版而靜默略過 i18n。
+    # Reason: 目標原本沒有 countryInfo.txt 時不留下我們的副本，否則 i18n 偵測日後
+    # 失敗（例如 macOS 加速器升版後路徑變了），下次執行會誤判目標已有此檔案而靜默略過。
     if [ "$HAS_COUNTRY_INFO" != true ]; then
       rm -f "$SYSTEM_GEODATA_PATH/countryInfo.txt"
     fi
