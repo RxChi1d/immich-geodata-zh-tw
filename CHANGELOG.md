@@ -11,6 +11,12 @@
 
 ## [未發佈版本]
 
+### Fixed
+- **Immich v3.3.0 相容**：整合式部署的 `update_data.sh --install` 在 Immich v3.3.0 起不再因找不到 `i18n-iso-countries` 而啟動失敗。Immich v3.3.0 改由 `geodata/countryInfo.txt` 提供國名，release 新增已換成繁體中文國名的 `countryInfo.txt`，腳本依實際存在的目標決定安裝內容（Immich v3.3.0 以前行為不變）
+
+### Deprecated
+- **`i18n-iso-countries`**：僅供 Immich v3.3.0 以前使用，release 暫時保留，待不再支援舊版時移除
+
 ---
 
 ## [3.3.0] - 2026-09-18

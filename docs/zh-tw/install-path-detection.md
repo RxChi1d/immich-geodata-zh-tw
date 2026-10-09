@@ -7,9 +7,11 @@
 
 腳本安裝兩份資料：
 
-- **geodata**：反向地理編碼使用的地名資料。
-- **i18n-iso-countries 的 `langs/`**：國名翻譯。Immich 以
+- **geodata**：反向地理編碼使用的地名資料。Immich ≥ 3.3.0 的國名也在這裡，
+  由 `geodata/countryInfo.txt` 的第 5 欄提供（本專案已換成繁體中文）。
+- **i18n-iso-countries 的 `langs/`**：國名翻譯，僅 Immich < 3.3.0 使用。Immich 以
   `getName(countryCode, 'en')` 取得國名，因此在地化改寫的是 `langs/en.json`。
+  v3.3.0 起 Immich 已移除這個套件，腳本找不到時會略過這一份。
 
 ## 偵測規則
 
@@ -59,6 +61,13 @@ geodata: join(buildFolder, 'geodata'),
 的兩個名稱，兩者相互比對的結果恆為相同，無法反映複製是否實際發生。
 
 檢查涵蓋整個 `langs/`，因此包含決定國名顯示的 `en.json`。
+
+## 國名資料來源的判斷
+
+`i18n-iso-countries` 與 `geodata/countryInfo.txt` 各自獨立偵測，存在才安裝；
+兩者都不存在時直接報錯，而不是假設是新版而略過。Immich 若再次調整結構，
+entrypoint 會立即失敗，不會悄悄退回英文國名。`countryInfo.txt` 以安裝前的
+系統檔案為準，行為對照表見[更新腳本](update-script.md)的「安裝行為」。
 
 ## 設計沿革
 

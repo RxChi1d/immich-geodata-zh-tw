@@ -29,6 +29,7 @@
   - admin1CodesASCII.txt (一級行政區資料)
   - admin2Codes.txt (二級行政區資料)
   - alternateNamesV2.zip (替代地名資料)
+  - countryInfo.txt (國家資料；Immich v3.3.0 起用於國名，第 5 欄已取代為繁體中文)
 - **授權連結**: https://creativecommons.org/licenses/by/4.0/
 - **資料來源**: https://www.geonames.org/
 

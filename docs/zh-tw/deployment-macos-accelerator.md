@@ -26,7 +26,7 @@ i18n-iso-countries: /Users/you/.immich-accelerator/server/3.1.0/node_modules/i18
 ```
 
 - `geodata`：加速器會建立 `/build` 的 synthetic link，因此路徑與容器一致，不需額外設定。
-- `i18n-iso-countries`：位於依 Immich 版本區分的 server 目錄下，請確認輸出的版本號與目前執行的 Immich 相符。
+- `i18n-iso-countries`：位於依 Immich 版本區分的 server 目錄下，請確認輸出的版本號與目前執行的 Immich 相符。Immich ≥ 3.3.0 已移除此套件，輸出會顯示「未安裝」並另列 `countryInfo.txt` 的路徑，屬正常現象。
 
 ## 重啟服務
 
