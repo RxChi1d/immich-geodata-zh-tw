@@ -11,11 +11,17 @@
 
 ## [未發佈版本]
 
-### Fixed
-- **Immich v3.3.0 相容**：整合式部署的 `update_data.sh --install` 在 Immich v3.3.0 起不再因找不到 `i18n-iso-countries` 而啟動失敗。Immich v3.3.0 改由 `geodata/countryInfo.txt` 提供國名，release 新增已換成繁體中文國名的 `countryInfo.txt`，腳本依實際存在的目標決定安裝內容（Immich v3.3.0 以前行為不變）
+---
+
+## [3.3.1] - 2026-10-09
+
+本版本修正 Immich v3.3.0 的相容性問題。
 
 ### Deprecated
-- **`i18n-iso-countries`**：僅供 Immich v3.3.0 以前使用，release 暫時保留，待不再支援舊版時移除
+- **`i18n-iso-countries`**：僅供 Immich v3.3.0 以前使用。release 暫時保留，待不再支援舊版時移除。
+
+### Fixed
+- **相容 Immich v3.3.0**：整合式部署的 `update_data.sh` 不再因找不到 `i18n-iso-countries` 而啟動失敗。Immich v3.3.0 起改由 `geodata/countryInfo.txt` 讀取國名，release 因此新增已換成繁體中文國名的 `countryInfo.txt`，腳本也會依實際存在的檔案決定安裝內容。遇到啟動失敗的使用者重新啟動容器即可；Immich v3.3.0 以前的行為不變。
 
 ---
 
@@ -336,7 +342,8 @@
 
 特定變更的詳細資訊請參閱 [提交歷史](https://github.com/RxChi1d/immich-geodata-zh-tw/commits/main) 或 [發佈頁面](https://github.com/RxChi1d/immich-geodata-zh-tw/releases)。
 
-[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v3.3.0...HEAD
+[未發佈版本]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v3.3.1...HEAD
+[3.3.1]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v3.3.0...v3.3.1
 [3.3.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/RxChi1d/immich-geodata-zh-tw/compare/v3.0.0...v3.1.0
