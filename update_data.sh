@@ -1,6 +1,8 @@
 #!/bin/bash
 
 # 這個腳本用於下載和安裝最新的 geodata 和 i18n-iso-countries 資料夾
+# Immich >= 3.3.0 不再使用 i18n-iso-countries，改讀 geodata/countryInfo.txt 取得國名；
+# 腳本依實際存在的目標決定要安裝哪些部分，見 resolve_system_paths
 # 下載的檔案會被解壓縮到指定的目錄 (DOWNLOAD_DIR)
 # 如果指定了 --install 參數，則會將檔案安裝到 Immich 的系統目錄
 #
@@ -137,17 +139,29 @@ resolve_system_paths() {
   # 決定 geodata 位置，直接讀同一個變數就不會有另一套設定要同步。
   SYSTEM_GEODATA_PATH="${IMMICH_BUILD_DATA:-/build}/geodata"
 
-  SYSTEM_I18N_PATH="$(detect_i18n_path)" || {
-    echo "錯誤：找不到已安裝的 i18n-iso-countries 套件。" >&2
+  # 兩個國名來源各自獨立偵測，存在才安裝：
+  #   - i18n-iso-countries：Immich < 3.3.0 讀取
+  #   - geodata/countryInfo.txt：Immich >= 3.3.0 讀取，以安裝前的系統檔案為準
+  # 刻意不以「找不到 i18n 就當作新版」兜底：兩者都不存在代表 Immich 又改了結構，
+  # 此時直接報錯，比靜默略過後國名悄悄退回英文容易察覺。
+  # Reason: 必須在 --install 替換 geodata 目錄之前判斷；替換後的 countryInfo.txt 是我們
+  # 自己裝進去的，已無法證明 Immich 會讀它。
+  SYSTEM_I18N_PATH="$(detect_i18n_path)" || SYSTEM_I18N_PATH=""
+  HAS_COUNTRY_INFO=false
+  [ -f "$SYSTEM_GEODATA_PATH/countryInfo.txt" ] && HAS_COUNTRY_INFO=true
+
+  if [ -z "$SYSTEM_I18N_PATH" ] && [ "$HAS_COUNTRY_INFO" != true ]; then
+    echo "錯誤：找不到 Immich 的國名資料來源，無法判斷安裝目標。" >&2
     echo "已檢查的位置：" >&2
-    collect_server_roots | sed 's|^|  - |;s|$|/node_modules/i18n-iso-countries|' >&2
+    echo "  - $SYSTEM_GEODATA_PATH/countryInfo.txt (Immich >= 3.3.0)" >&2
+    collect_server_roots | sed 's|^|  - |;s|$|/node_modules/i18n-iso-countries (Immich < 3.3.0)|' >&2
     if [ -n "$IMMICH_SERVER_ROOT" ]; then
-      echo "已設定 IMMICH_SERVER_ROOT=$IMMICH_SERVER_ROOT，僅在該範圍內搜尋。請確認路徑是否正確。" >&2
+      echo "已設定 IMMICH_SERVER_ROOT=$IMMICH_SERVER_ROOT，僅在該範圍內搜尋 i18n-iso-countries。請確認路徑是否正確。" >&2
     else
-      echo "請確認此腳本在 Immich 環境中執行，或設定 IMMICH_SERVER_ROOT 指向 Immich server 根目錄。" >&2
+      echo "請確認此腳本在 Immich 環境中執行，或設定 IMMICH_SERVER_ROOT 指向 Immich server 根目錄、IMMICH_BUILD_DATA 指向 build data 目錄。" >&2
     fi
     exit 1
-  }
+  fi
 }
 # --- 系統路徑偵測結束 ---
 
@@ -193,26 +207,37 @@ resolve_package_by_node() {
 
 verify_installation() {
   local resolved server_root method name failed=0 src
-  server_root="$(dirname "$(dirname "$SYSTEM_I18N_PATH")")"
 
-  if resolved="$(resolve_package_by_node "$server_root")" && [ -n "$resolved" ]; then
-    method="node 模組解析"
-  elif resolved="$(resolve_package_by_walking_up "$server_root")"; then
-    method="模組解析規則 (未使用 node)"
-  else
-    echo "錯誤：無法解析 i18n-iso-countries 的載入位置，無法驗證安裝結果。" >&2
-    exit 1
+  if [ -n "$SYSTEM_I18N_PATH" ]; then
+    server_root="$(dirname "$(dirname "$SYSTEM_I18N_PATH")")"
+
+    if resolved="$(resolve_package_by_node "$server_root")" && [ -n "$resolved" ]; then
+      method="node 模組解析"
+    elif resolved="$(resolve_package_by_walking_up "$server_root")"; then
+      method="模組解析規則 (未使用 node)"
+    else
+      echo "錯誤：無法解析 i18n-iso-countries 的載入位置，無法驗證安裝結果。" >&2
+      exit 1
+    fi
+
+    # 逐檔比對下載內容與解析結果。Immich 以 getName(code, 'en') 取國名，
+    # 在地化實際是靠改寫 langs/en.json，所以驗證必須涵蓋整個 payload 而非單一語系檔。
+    for src in "$STAGED_LANGS"/*.json; do
+      name="$(basename "$src")"
+      if ! cmp -s "$src" "$resolved/langs/$name"; then
+        echo "錯誤：$name 與下載內容不一致 ($resolved/langs/$name)" >&2
+        failed=1
+      fi
+    done
+    echo "驗證通過 ($method)：$resolved 的內容與下載資料一致。"
   fi
 
-  # 逐檔比對下載內容與解析結果。Immich 以 getName(code, 'en') 取國名，
-  # 在地化實際是靠改寫 langs/en.json，所以驗證必須涵蓋整個 payload 而非單一語系檔。
-  for src in "$STAGED_LANGS"/*.json; do
-    name="$(basename "$src")"
-    if ! cmp -s "$src" "$resolved/langs/$name"; then
-      echo "錯誤：$name 與下載內容不一致 ($resolved/langs/$name)" >&2
-      failed=1
-    fi
-  done
+  # Immich >= 3.3.0 以 countryInfo.txt 取國名；目標原本有它才比對（下載內容必有，見前置檢查）。
+  if [ "$HAS_COUNTRY_INFO" = true ] &&
+    ! cmp -s "$STAGED_GEODATA/countryInfo.txt" "$SYSTEM_GEODATA_PATH/countryInfo.txt"; then
+    echo "錯誤：countryInfo.txt 與下載內容不一致 ($SYSTEM_GEODATA_PATH/countryInfo.txt)" >&2
+    failed=1
+  fi
 
   if ! cmp -s "$STAGED_GEODATA/geodata-date.txt" "$SYSTEM_GEODATA_PATH/geodata-date.txt"; then
     echo "錯誤：geodata 內容與下載內容不一致 ($SYSTEM_GEODATA_PATH)" >&2
@@ -225,7 +250,7 @@ verify_installation() {
     exit 1
   fi
 
-  echo "驗證通過 ($method)：$resolved 的內容與下載資料一致。"
+  echo "安裝結果驗證通過。"
 }
 # --- 安裝結果驗證結束 ---
 
@@ -312,7 +337,8 @@ main() {
 
   if [ "$PRINT_PATHS_MODE" = true ]; then
     echo "geodata: $SYSTEM_GEODATA_PATH"
-    echo "i18n-iso-countries: $SYSTEM_I18N_PATH"
+    echo "i18n-iso-countries: ${SYSTEM_I18N_PATH:-(未安裝，Immich >= 3.3.0 不使用)}"
+    echo "countryInfo.txt: $([ "$HAS_COUNTRY_INFO" = true ] && echo "$SYSTEM_GEODATA_PATH/countryInfo.txt" || echo "(不存在，Immich < 3.3.0 不使用)")"
     exit 0
   fi
 
@@ -420,7 +446,7 @@ main() {
   if [ "$INSTALL_MODE" = true ]; then
     echo "執行安裝步驟 (--install)..."
     echo "geodata 目標: $SYSTEM_GEODATA_PATH"
-    echo "i18n 目標: $SYSTEM_I18N_PATH"
+    echo "i18n 目標: ${SYSTEM_I18N_PATH:-(略過，Immich >= 3.3.0 不使用)}"
 
     STAGED_GEODATA="$DOWNLOAD_DIR/geodata"
     STAGED_LANGS="$DOWNLOAD_DIR/i18n-iso-countries/langs"
@@ -431,17 +457,26 @@ main() {
       echo "錯誤：下載內容缺少 geodata 資料夾，中止安裝。" >&2
       exit 1
     fi
-    if [ ! -d "$STAGED_LANGS" ]; then
-      echo "錯誤：下載內容缺少 i18n-iso-countries/langs 資料夾，中止安裝。" >&2
-      exit 1
+    if [ -n "$SYSTEM_I18N_PATH" ]; then
+      if [ ! -d "$STAGED_LANGS" ]; then
+        echo "錯誤：下載內容缺少 i18n-iso-countries/langs 資料夾，中止安裝。" >&2
+        exit 1
+      fi
+      # glob 沒有命中時會以字面值進入迴圈，所以先確認至少有一個檔案
+      if [ "$(find "$STAGED_LANGS" -maxdepth 1 -type f -name '*.json' | wc -l)" -eq 0 ]; then
+        echo "錯誤：下載內容的 langs 目錄沒有任何 json 檔，中止安裝。" >&2
+        exit 1
+      fi
+      if [ ! -d "$SYSTEM_I18N_PATH/langs" ]; then
+        echo "錯誤：$SYSTEM_I18N_PATH/langs 不存在，安裝位置可能有誤，中止安裝。" >&2
+        exit 1
+      fi
     fi
-    # glob 沒有命中時會以字面值進入迴圈，所以先確認至少有一個檔案
-    if [ "$(find "$STAGED_LANGS" -maxdepth 1 -type f -name '*.json' | wc -l)" -eq 0 ]; then
-      echo "錯誤：下載內容的 langs 目錄沒有任何 json 檔，中止安裝。" >&2
-      exit 1
-    fi
-    if [ ! -d "$SYSTEM_I18N_PATH/langs" ]; then
-      echo "錯誤：$SYSTEM_I18N_PATH/langs 不存在，安裝位置可能有誤，中止安裝。" >&2
+    # 目標是 Immich >= 3.3.0 時，安裝會整個換掉 geodata 目錄；下載內容若沒有
+    # countryInfo.txt（舊版 release），換完 Immich 會因找不到檔案而無法反向地理編碼。
+    if [ "$HAS_COUNTRY_INFO" = true ] && [ ! -f "$STAGED_GEODATA/countryInfo.txt" ]; then
+      echo "錯誤：目標 Immich 需要 geodata/countryInfo.txt，但下載內容沒有（release 版本過舊），中止安裝。" >&2
+      echo "請改用含 geodata/countryInfo.txt 的 release（不指定 --tag 即取最新版）。" >&2
       exit 1
     fi
 
@@ -459,9 +494,11 @@ main() {
     fi
     # 只備份 langs：套件目錄本身在 pnpm 版面下是 symlink，備份整個套件沒有意義，
     # 而我們也只會改寫 langs。
-    rm -rf "$SYSTEM_I18N_PATH/langs.bak"
-    cp -a "$SYSTEM_I18N_PATH/langs" "$SYSTEM_I18N_PATH/langs.bak"
-    LANGS_BACKED_UP=true
+    if [ -n "$SYSTEM_I18N_PATH" ]; then
+      rm -rf "$SYSTEM_I18N_PATH/langs.bak"
+      cp -a "$SYSTEM_I18N_PATH/langs" "$SYSTEM_I18N_PATH/langs.bak"
+      LANGS_BACKED_UP=true
+    fi
     echo "備份完成。"
 
     INSTALL_IN_PROGRESS=true
@@ -478,6 +515,12 @@ main() {
     echo "更新 geodata..."
     rm -rf "$SYSTEM_GEODATA_PATH"
     cp -a "$STAGED_GEODATA" "$SYSTEM_GEODATA_PATH"
+    # Reason: countryInfo.txt 的存在是「Immich >= 3.3.0」的判斷依據。目標原本沒有它
+    # （Immich < 3.3.0）時不能留下我們的副本，否則之後只要 i18n 偵測失敗（例如
+    # macOS 加速器升版後路徑變了），下一次執行會誤判為新版而靜默略過 i18n。
+    if [ "$HAS_COUNTRY_INFO" != true ]; then
+      rm -f "$SYSTEM_GEODATA_PATH/countryInfo.txt"
+    fi
     normalize_owner "$SYSTEM_GEODATA_PATH"
 
     # 逐檔以「複製到暫存檔再 rename」取代 overlay copy：
@@ -485,16 +528,18 @@ main() {
     #   2. 產生新的 inode，不會改動 pnpm store 中可能被硬連結共用的檔案
     #   3. 單檔替換是原子的，不會留下寫到一半的 json
     #   4. 保留上游有、payload 沒有的語系檔
-    echo "更新 i18n-iso-countries langs..."
-    for staged_lang in "$STAGED_LANGS"/*.json; do
-      lang_name="$(basename "$staged_lang")"
-      # 以 mktemp 產生暫存檔名。固定或可預測的暫存路徑一樣會被事先放置的 symlink
-      # 攔截，等於換個檔名把剛修掉的寫穿問題再開一次。
-      lang_tmp="$(mktemp "$SYSTEM_I18N_PATH/langs/.$lang_name.tmp.XXXXXX")"
-      cp -a "$staged_lang" "$lang_tmp"
-      mv -f "$lang_tmp" "$SYSTEM_I18N_PATH/langs/$lang_name"
-    done
-    normalize_owner "$SYSTEM_I18N_PATH/langs"
+    if [ -n "$SYSTEM_I18N_PATH" ]; then
+      echo "更新 i18n-iso-countries langs..."
+      for staged_lang in "$STAGED_LANGS"/*.json; do
+        lang_name="$(basename "$staged_lang")"
+        # 以 mktemp 產生暫存檔名。固定或可預測的暫存路徑一樣會被事先放置的 symlink
+        # 攔截，等於換個檔名把剛修掉的寫穿問題再開一次。
+        lang_tmp="$(mktemp "$SYSTEM_I18N_PATH/langs/.$lang_name.tmp.XXXXXX")"
+        cp -a "$staged_lang" "$lang_tmp"
+        mv -f "$lang_tmp" "$SYSTEM_I18N_PATH/langs/$lang_name"
+      done
+      normalize_owner "$SYSTEM_I18N_PATH/langs"
+    fi
     echo "系統檔案更新完成。"
 
     verify_installation

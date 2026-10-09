@@ -127,6 +127,11 @@
    > [!NOTE]
    > 舊版 Immich（1.136.0 以前）請將第二行改為 `/mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs:ro`。
 
+   > [!NOTE]
+   > Immich v3.3.0 起改讀 `geodata/countryInfo.txt` 取得國名，容器內不再有 `i18n-iso-countries`，
+   > 因此不需要第二行掛載（掛載點不存在時 Docker 會自動建立空目錄，保留也不影響運作）。
+   > v3.3.0 以前請維持兩行都掛載。
+
 2. **下載資料**
 
    先取得更新腳本：
@@ -184,6 +189,9 @@ Immich 沒有跑在 Docker 容器裡時（macOS 原生 worker、LXC、裸機）�
    | :--- | :--- | :--- |
    | `i18n-iso-countries` | 掃描系統得到，應位於 Immich 的安裝目錄下；路徑含版本號時（macOS 加速器）需與目前執行的 Immich 版本相同 | 以 `IMMICH_SERVER_ROOT` 指定 Immich server 根目錄（其下應有 `node_modules/`） |
    | `geodata` | 沿用 Immich 自己的 `IMMICH_BUILD_DATA` 設定，預設為 `/build` | Immich 有自訂這個變數時（LXC、裸機常見），這裡要一併帶上 |
+
+   > [!NOTE]
+   > Immich v3.3.0 起已移除 `i18n-iso-countries`，輸出會顯示「未安裝」並另列 `countryInfo.txt` 的路徑，屬正常現象。
 
    ```bash
    IMMICH_SERVER_ROOT=/path/to/immich IMMICH_BUILD_DATA=/var/lib/immich \

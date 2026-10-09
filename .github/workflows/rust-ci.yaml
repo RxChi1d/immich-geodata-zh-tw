@@ -10,6 +10,8 @@ on:
       - 'src/**'
       - 'tests/**'
       - 'fixtures/**'
+      - 'update_data.sh'
+      - 'data/vendor/**'
       - '.github/workflows/rust-ci.yaml'
   # Reason: No paths filter here. A path-filtered workflow never reports a
   # status on unrelated PRs, which would leave a required check pending
@@ -46,7 +48,7 @@ jobs:
 
           changed="$(git diff --name-only HEAD^1 HEAD -- \
             Cargo.toml Cargo.lock 'src/*' 'tests/*' 'fixtures/*' \
-            .github/workflows/rust-ci.yaml)"
+            update_data.sh 'data/vendor/*' .github/workflows/rust-ci.yaml)"
 
           if [ -n "$changed" ]; then
             echo "Rust-relevant files changed:"
@@ -88,6 +90,13 @@ jobs:
 
       - name: Test
         run: cargo test
+
+      # Reason: update_data.sh 是使用者容器 entrypoint 直接執行的腳本，出錯會讓
+      # Immich 啟動失敗。這兩支測試離線、數秒內完成，沒有理由只靠本機手動執行。
+      - name: Update script tests
+        run: |
+          bash tests/update_data_install.sh
+          bash tests/update_data_paths.sh
 
       # Reason: 煙測不需要最佳化編譯，沿用 dev profile 可重用 test 步驟的建置產物
       - name: Fixture release smoke

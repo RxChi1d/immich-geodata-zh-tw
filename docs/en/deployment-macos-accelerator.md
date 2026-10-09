@@ -26,7 +26,7 @@ i18n-iso-countries: /Users/you/.immich-accelerator/server/3.1.0/node_modules/i18
 ```
 
 - `geodata`: The accelerator creates a synthetic link for `/build`, so the path matches the container and needs no extra configuration.
-- `i18n-iso-countries`: This lives under a server directory named after the Immich version. Check that the version in the output matches the Immich version you are running.
+- `i18n-iso-countries`: This lives under a server directory named after the Immich version. Check that the version in the output matches the Immich version you are running. Immich ≥ 3.3.0 removed this package; the output then shows it as not installed and lists the path of `countryInfo.txt` instead, which is expected.
 
 ## Restarting the Service
 

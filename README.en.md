@@ -127,6 +127,11 @@ Download the data yourself and mount it into the container. This suits environme
    > [!NOTE]
    > On Immich older than 1.136.0, change the second line to `/mnt/user/appdata/immich/i18n-iso-countries/langs:/usr/src/app/node_modules/i18n-iso-countries/langs:ro`.
 
+   > [!NOTE]
+   > Since v3.3.0, Immich reads country names from `geodata/countryInfo.txt` and the container no longer ships
+   > `i18n-iso-countries`, so the second mount is not needed (if the mount point is missing, Docker creates an
+   > empty directory, which is harmless). Keep both mounts for versions before v3.3.0.
+
 2. **Download the data**
 
    Get the update script:
@@ -184,6 +189,9 @@ Run the commands on **the machine that runs the Immich microservices worker**, b
    | :--- | :--- | :--- |
    | `i18n-iso-countries` | Found by scanning the system; it should sit under the Immich install directory. When the path contains a version number (macOS accelerator), that version must match the Immich you are running | Set `IMMICH_SERVER_ROOT` to the Immich server root (the directory containing `node_modules/`) |
    | `geodata` | Follows Immich's own `IMMICH_BUILD_DATA` setting, which defaults to `/build` | If Immich overrides that variable — common on LXC and bare metal — pass it here too |
+
+   > [!NOTE]
+   > Immich v3.3.0 removed `i18n-iso-countries`; the output then shows it as not installed and lists the path of `countryInfo.txt` instead, which is expected.
 
    ```bash
    IMMICH_SERVER_ROOT=/path/to/immich IMMICH_BUILD_DATA=/var/lib/immich \

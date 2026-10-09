@@ -74,7 +74,18 @@ bash update_data.sh --install --archive /path/to/release.tar.gz
 
 ## Install Behavior
 
-- The script backs up the existing `geodata` and `i18n-iso-countries/langs` before installing. If anything fails while overwriting, it restores the pre-install state, so you never end up with half-installed data.
+- The script backs up the existing `geodata` and (when installed) `i18n-iso-countries/langs` before installing. If anything fails while overwriting, it restores the pre-install state, so you never end up with half-installed data.
+- The country-name source is decided by what actually exists on the target, not by the Immich version:
+
+  | `i18n-iso-countries` | `geodata/countryInfo.txt` | Behavior |
+  | :--- | :--- | :--- |
+  | present | absent (Immich < 3.3.0) | Installs geodata and the language files |
+  | absent | present (Immich ≥ 3.3.0) | Installs geodata only; country names come from `countryInfo.txt` |
+  | present | present (transitional image) | Installs both |
+  | absent | absent | Fails without modifying anything |
+
+  Whether `countryInfo.txt` exists is judged from the system file before installing. The install also aborts when the target needs it but the downloaded release does not contain it (an outdated release), because replacing the whole geodata directory would leave Immich without the file.
+- When the target had no `countryInfo.txt` (Immich < 3.3.0), the install does not leave our copy behind, so it cannot be mistaken for the "newer Immich" marker later; if `i18n-iso-countries` detection fails afterwards, the script errors instead of silently skipping.
 - Language files are replaced one by one. Language files that exist upstream but are not provided by this project are kept.
 - After installing, the script verifies that the data really landed where Immich reads it, including `en.json`, which controls how country names are displayed. The script prints its messages in Traditional Chinese: `驗證通過` ("verification passed") means it succeeded.
 - The install flow is idempotent. Running it again when the data is already current has no side effects.

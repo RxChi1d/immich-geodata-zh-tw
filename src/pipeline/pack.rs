@@ -7,6 +7,7 @@ use crate::pipeline::fixtures::{Fixture, load_fixtures};
 use crate::pipeline::translate;
 
 mod archive;
+mod country_info;
 
 use archive::{release_entries, write_release_manifest, write_tar_gz, write_zip};
 
@@ -167,6 +168,17 @@ pub fn run_production(options: &ProductionPackOptions) -> Result<(), String> {
                 .join("i18n-iso-countries"),
             &release.join("i18n-iso-countries"),
         )?;
+        // Reason: Immich >= 3.3.0 改讀 geodata/countryInfo.txt 取得國名；
+        // i18n-iso-countries 僅供 < 3.3.0 使用，過渡期兩者並存。
+        let vendor = options.project_dir.join("data").join("vendor");
+        country_info::write_country_info(
+            &vendor.join("geonames").join("countryInfo.txt"),
+            &vendor
+                .join("i18n-iso-countries")
+                .join("langs")
+                .join("en.json"),
+            &geodata.join("countryInfo.txt"),
+        )?;
         fs::write(
             geodata.join("geodata-date.txt"),
             options.release_date.as_bytes(),
@@ -290,4 +302,45 @@ fn copy_dir(source: &Path, destination: &Path) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 守住 run_production 確實把翻譯後的 countryInfo.txt 放進 release：
+    /// Immich >= 3.3.0 缺這個檔案時反向地理編碼會整個失敗。
+    #[test]
+    fn production_release_contains_localized_country_info() {
+        let root = std::env::temp_dir().join(format!("pack_country_info_{}", std::process::id()));
+        let (data, output) = (root.join("data"), root.join("output"));
+        fs::create_dir_all(&data).unwrap();
+        fs::create_dir_all(&output).unwrap();
+        for (dir, name) in [
+            (&data, "ne_10m_admin_0_countries.geojson"),
+            (&data, "admin2Codes.txt"),
+            (&output, "admin1CodesASCII_translated.txt"),
+            (&output, "cities500_translated.txt"),
+        ] {
+            fs::write(dir.join(name), "x").unwrap();
+        }
+
+        run_production(&ProductionPackOptions {
+            output_dir: output.clone(),
+            data_dir: data,
+            project_dir: PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+            release_date: "2026-10-09".to_string(),
+            profile: false,
+        })
+        .unwrap();
+
+        let country_info =
+            fs::read_to_string(output.join("release/geodata/countryInfo.txt")).unwrap();
+        assert!(country_info.contains("TW\tTWN\t158\tTW\t臺灣\t"));
+        assert!(country_info.contains("\r\n"));
+        let manifest = fs::read_to_string(output.join("release-tree.manifest")).unwrap();
+        assert!(manifest.contains("geodata/countryInfo.txt"), "{manifest}");
+        assert!(output.join("release.tar.gz").exists());
+        fs::remove_dir_all(&root).unwrap();
+    }
 }

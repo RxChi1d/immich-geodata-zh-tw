@@ -9,10 +9,13 @@
 
 The script installs two sets of files:
 
-- **geodata**: the place-name data used for reverse geocoding.
-- **`langs/` of i18n-iso-countries**: country name translations. Immich resolves
-  country names with `getName(countryCode, 'en')`, so the localization rewrites
-  `langs/en.json`.
+- **geodata**: the place-name data used for reverse geocoding. For Immich ≥ 3.3.0 the
+  country names live here too, in column 5 of `geodata/countryInfo.txt` (replaced
+  with Traditional Chinese by this project).
+- **`langs/` of i18n-iso-countries**: country name translations, used only by
+  Immich < 3.3.0. Immich resolves country names with `getName(countryCode, 'en')`,
+  so the localization rewrites `langs/en.json`. Immich removed this package in
+  v3.3.0; the script skips this part when it cannot find it.
 
 ## Detection rules
 
@@ -76,6 +79,15 @@ comparing them always matches and says nothing about whether the copy happened.
 
 The check covers all of `langs/`, including `en.json`, which determines the
 displayed country names.
+
+## Detecting the country-name source
+
+`i18n-iso-countries` and `geodata/countryInfo.txt` are detected independently and
+each is installed only if it exists. If neither exists the script fails instead of
+assuming a newer Immich and skipping, so a future structural change in Immich makes
+the entrypoint fail immediately rather than silently falling back to English country
+names. `countryInfo.txt` is judged from the system file before installing; see
+"Install behavior" in [the update script](update-script.md) for the behavior table.
 
 ## Design history
 
