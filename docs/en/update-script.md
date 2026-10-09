@@ -79,13 +79,15 @@ bash update_data.sh --install --archive /path/to/release.tar.gz
 
   | `i18n-iso-countries` | `geodata/countryInfo.txt` | Behavior |
   | :--- | :--- | :--- |
-  | present | absent (Immich < 3.3.0) | Installs geodata and the language files |
-  | absent | present (Immich ≥ 3.3.0) | Installs geodata only; country names come from `countryInfo.txt` |
-  | present | present (transitional image) | Installs both |
+  | present | absent | Installs geodata and the language files |
+  | absent | present | Installs geodata only |
+  | present | present | Installs both |
   | absent | absent | Fails without modifying anything |
 
+  Immich 3.3.0 and later reads `countryInfo.txt`. Earlier versions read `i18n-iso-countries`. Some older images, such as v3.2.4, contain both.
+
   Whether `countryInfo.txt` exists is judged from the system file before installing. The install also aborts when the target needs it but the downloaded release does not contain it (an outdated release), because replacing the whole geodata directory would leave Immich without the file.
-- When the target had no `countryInfo.txt` (Immich < 3.3.0), the install does not leave our copy behind, so it cannot be mistaken for the "newer Immich" marker later; if `i18n-iso-countries` detection fails afterwards, the script errors instead of silently skipping.
+- If the target had no `countryInfo.txt`, the script removes our copy after installing. Keeping it would make later runs assume the target already has the file.
 - Language files are replaced one by one. Language files that exist upstream but are not provided by this project are kept.
 - After installing, the script verifies that the data really landed where Immich reads it, including `en.json`, which controls how country names are displayed. The script prints its messages in Traditional Chinese: `驗證通過` ("verification passed") means it succeeded.
 - The install flow is idempotent. Running it again when the data is already current has no side effects.
